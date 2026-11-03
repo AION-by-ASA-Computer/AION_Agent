@@ -58,10 +58,13 @@ def set_sql_qm_turn_context(
     proj = (
         project_slug or os.getenv("AION_SQL_QM_DEFAULT_PROJECT") or "default"
     ).strip() or "default"
+    from src.runtime.project_access_delegation import project_user
+
     _store(
         SqlQmTurnContext(
             tenant_id=tid,
-            user_id=user_id,
+            # Accesso al progetto delegato per questa conversazione (bot condivisi).
+            user_id=project_user(session_id, user_id, proj),
             profile_slug=profile_slug,
             project_slug=proj,
             session_id=session_id,

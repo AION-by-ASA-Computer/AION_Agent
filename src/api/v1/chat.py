@@ -604,6 +604,29 @@ async def chat_stop(
     return {"ok": True, "conversation_id": cid, "session_id": cid}
 
 
+async def _reject_read_only_conversation(conversation_id: str) -> None:
+    """Le chat avviate da Telegram si continuano solo da Telegram (sola lettura qui)."""
+    from src.data.engine import get_async_session_maker
+    from src.data.models import Conversation
+
+    async with get_async_session_maker()() as session:
+        row = await session.get(Conversation, conversation_id)
+    if row is None:
+        return
+    try:
+        source = (json.loads(row.metadata_json or "{}") or {}).get("source")
+    except (TypeError, ValueError):
+        return
+    if source == "telegram":
+        raise HTTPException(
+            409,
+            detail={
+                "code": "telegram_read_only",
+                "message": "Telegram conversations are read-only outside Telegram",
+            },
+        )
+
+
 @router.post(
     "/chat/stream",
     response_class=EventStreamResponse,
@@ -620,6 +643,7 @@ async def chat_stream(
         body_user_id=body.user_id,
         x_aion_user_id=x_aion_user_id,
     )
+    await _reject_read_only_conversation(body.conversation_id)
     body.profile = await enforce_profile_access(auth.user_row_id, body.profile)
 
     from src.runtime.agent_mode_resolve import resolve_agent_mode

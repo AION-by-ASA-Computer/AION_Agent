@@ -7,6 +7,7 @@ import {
   HeartPulse,
   LayoutDashboard,
   MessageCircle,
+  Send,
   Server,
   Settings,
   ShieldCheck,
@@ -53,6 +54,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     labelKey: "admin_nav.groups.operations",
     items: [
       { id: "schedules", href: "/schedules", icon: Clock, labelKey: "admin_nav.schedules" },
+      { id: "telegram", href: "/telegram", icon: Send, labelKey: "admin_nav.telegram" },
     ],
   },
   {

@@ -59,6 +59,7 @@ from ..agent_pipeline import AgentPipeline
 from ..main import get_agent, set_event_loop
 from .auth_login import ChatAuthIdentity, require_admin_role
 from .settings_api import router as settings_router
+from .admin_telegram import router as admin_telegram_router
 from .ltm_admin import router as ltm_admin_router
 from .admin_profile_memory import router as admin_profile_memory_router
 from .cron_admin import router as cron_admin_router
@@ -287,6 +288,7 @@ router = APIRouter(
 
 
 router.include_router(settings_router)
+router.include_router(admin_telegram_router)
 router.include_router(ltm_admin_router)
 router.include_router(admin_profile_memory_router)
 router.include_router(cron_admin_router)
@@ -4236,6 +4238,14 @@ async def delete_user(user_id: str):
         UserProfileAccess,
         UserSsoIdentity,
     )
+
+    try:
+        # Prima della cancellazione: i token dei suoi assistenti Telegram vanno revocati.
+        from ..channels.telegram import on_user_deleted
+
+        await on_user_deleted(user_id)
+    except Exception as e:
+        logger.warning("telegram: pulizia dell'utente %s fallita: %s", user_id, e)
 
     async with get_async_session_maker()() as session:
         u = await session.get(User, user_id)

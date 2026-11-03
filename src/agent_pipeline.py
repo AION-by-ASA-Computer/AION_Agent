@@ -1579,13 +1579,19 @@ class AgentPipeline:
                 if (
                     _explicit_sql_project or conv_proj
                 ) and profile_has_memory_capability_by_slug(_qm_profile_slug):
+                    from src.runtime.project_access_delegation import (
+                        project_user,
+                    )
+
                     _acc_err = await verify_user_project_access(
                         project_slug=_qm_project,
                         tenant_id=(
                             _os_qm.getenv("AION_DEFAULT_TENANT_ID") or "default"
                         ).strip()
                         or "default",
-                        user_id=self.user_id,
+                        user_id=project_user(
+                            self.session_id, self.user_id, _qm_project
+                        ),
                         profile_slug=_qm_profile_slug,
                     )
                     if _acc_err:
