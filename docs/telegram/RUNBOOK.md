@@ -159,7 +159,7 @@ Regole:
   l'utente su Telegram). L'effetto è immediato: il collegamento viene riletto a ogni messaggio.
 - **Utente eliminato.** Se l'admin elimina un utente AION, collegamento e codici spariscono (FK `ON DELETE CASCADE`).
 - **Audit.** Ogni azione (codice creato, collegato, scollegato) è registrata in `tg_audit`.
-- **Tabelle.** `tg_links`, `tg_pairing_codes` e `tg_audit` vengono create dalla migrazione `a9b0c1d029`
+- **Tabelle.** `tg_links`, `tg_pairing_codes` e `tg_audit` vengono create dalla migrazione `t0g1l2k029`
   sulle installazioni esistenti, oppure all'avvio del canale sui DB nuovi.
 
 ## Ruoli: bot manager e assistenti personali
@@ -434,7 +434,7 @@ In `/newbot`, dopo il nome, si sceglie la **modalità** (cambiabile poi da `/myb
 
 Prerequisito: `docker compose up -d --build backend chat-ui`; account Telegram già collegato (Fase 2).
 
-1. [ ] Nei log del backend: `gateway avviato`, nessun errore di migrazione (`b0c1d2e030`).
+1. [ ] Nei log del backend: `gateway avviato`, nessun errore di migrazione (`t1s2e3s030`).
 2. [ ] Toccando `/` nel bot il menu mostra new, profile, project, stop, start, help, me, unlink, whoami.
 3. [ ] Scrivi una domanda lunga (es. "spiegami in 10 punti come funziona un database relazionale"):
        compare "Sto pensando…"/"sta scrivendo…", il testo cresce progressivamente, poi resta il messaggio finale formattato.
