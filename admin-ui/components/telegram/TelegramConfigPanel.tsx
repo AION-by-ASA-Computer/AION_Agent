@@ -190,6 +190,16 @@ export function TelegramConfigPanel({
     void loadStatus();
   }, [loadSettings, loadStatus]);
 
+  // Profiles available as the suggested/default one, for the select in Policies.
+  // A failed fetch leaves the list empty: the select then still shows the saved value.
+  const [profiles, setProfiles] = useState<{ slug: string; name: string; description?: string }[]>([]);
+  useEffect(() => {
+    apiFetch(`${apiBase()}/admin/profiles`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+      .then((d) => Array.isArray(d) && setProfiles(d.filter((p) => p?.slug)))
+      .catch(() => {});
+  }, []);
+
   const set = useCallback((key: string, value: string) => setSettings((p) => ({ ...p, [key]: value })), []);
   const on = (key: string, fallback = false) => (settings[key] === undefined ? fallback : settings[key] === "1");
   const tog = (key: string) => (v: boolean) => set(key, v ? "1" : "0");
@@ -466,10 +476,21 @@ export function TelegramConfigPanel({
         <Group title={t(`${c}.assistants`)} description={t(`${c}.assistants_hint`)}>
           <FieldGrid>
             <Field label={t(`${c}.default_profile`)} hint={t(`${c}.default_profile_hint`)}>
-              <TextInput
+              <Select
                 value={txt("default_profile", "generic_assistant")}
-                mono
-                onChange={(v) => set("default_profile", v.trim())}
+                onChange={(v) => set("default_profile", v)}
+                placeholder={t(`${c}.default_profile`)}
+                options={(() => {
+                  const cur = txt("default_profile", "generic_assistant");
+                  const opts = profiles.map((p) => ({
+                    value: p.slug,
+                    label: p.name || p.slug,
+                    description: p.description || undefined,
+                  }));
+                  // Keep a saved value that no longer matches an existing profile selectable.
+                  if (cur && !opts.some((o) => o.value === cur)) opts.unshift({ value: cur, label: cur, description: undefined });
+                  return opts;
+                })()}
               />
             </Field>
             <Field label={t(`${c}.max_bots`)}>
