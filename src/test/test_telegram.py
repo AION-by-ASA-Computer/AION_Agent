@@ -1468,12 +1468,12 @@ def test_settings_reload_publishes_db_values(tg_db, monkeypatch):
     )
 
     monkeypatch.setattr(tg_config, "_current", TelegramSettings())
-    _run(save_settings({"max_running_bots": 7, "blocked_profiles": " hr , legal "}))
+    _run(save_settings({"max_running_bots": 7, "allowed_profiles": " hr , legal "}))
     tg_config.set_current_settings(TelegramSettings())  # e.g. a fresh process
     reloaded = _run(reload_telegram_settings())
     assert tg_config.get_telegram_settings() is reloaded
     assert reloaded.max_running_bots == 7
-    assert reloaded.blocked_profile_set == {"hr", "legal"}
+    assert reloaded.allowed_profile_set == {"hr", "legal"}
 
     # Encryption key changed: the stored configuration can no longer be read.
     monkeypatch.setenv("AION_CREDENTIAL_ENCRYPTION_KEY", "22" * 32)
@@ -1492,24 +1492,90 @@ def test_test_token_never_uses_real_env_token(admin_client):
     )
 
 
-def test_channel_policy_blocks_profiles_and_projects(monkeypatch):
+def test_channel_policy_allows_only_listed_profiles_and_projects(monkeypatch):
+    """Strict channel allowlist: a profile/project not listed in ``allowed_*`` is
+    refused with ``ChannelPolicyError`` (an empty list allows nothing), while a
+    listed one passes the channel gate and reaches the per-user access checks."""
     from src.channels.telegram import adapter as adapter_mod
     from src.channels.telegram.adapter import AionAdapter, ChannelPolicyError
 
-    settings = _settings(blocked_profiles="Posta", blocked_projects="hr")
+    settings = _settings(allowed_profiles="Posta", allowed_projects="hr")
     monkeypatch.setattr(adapter_mod, "_policy", lambda: settings)
     user = AionUserRef(row_id="u1", identifier="user-u1")
-    with pytest.raises(ChannelPolicyError):
-        _run(AionAdapter().check_project(user, "HR", "rag"))
 
+    # Projects: not listed -> refused; listed (case-insensitive) -> policy passes.
+    with pytest.raises(ChannelPolicyError):
+        _run(AionAdapter().check_project(user, "finance", "rag"))
+    from src.runtime import query_memory_hooks
+
+    monkeypatch.setattr(
+        query_memory_hooks, "profile_has_memory_capability_by_slug", lambda slug: False
+    )
+    assert _run(AionAdapter().check_project(user, "HR", "rag")) is None
+
+    # Profiles: not listed -> refused; listed -> handed to enforce_profile_access.
     from src.agent_profile import profile_manager
+    from src.api import profile_access
 
     class P:
         slug = "posta"
 
+    class Other:
+        slug = "rag"
+
+    monkeypatch.setattr(profile_manager, "resolve_profile", lambda name: Other())
+    with pytest.raises(ChannelPolicyError):
+        _run(AionAdapter().resolve_profile(user, "rag"))
+
+    async def allow_all(row_id, name):
+        return name
+
+    monkeypatch.setattr(profile_access, "enforce_profile_access", allow_all)
     monkeypatch.setattr(profile_manager, "resolve_profile", lambda name: P())
+    assert _run(AionAdapter().resolve_profile(user, "posta")) == "posta"
+
+    # Empty allowlist: nothing is usable on Telegram.
+    empty = _settings()
+    monkeypatch.setattr(adapter_mod, "_policy", lambda: empty)
     with pytest.raises(ChannelPolicyError):
         _run(AionAdapter().resolve_profile(user, "posta"))
+    with pytest.raises(ChannelPolicyError):
+        _run(AionAdapter().check_project(user, "hr", "rag"))
+
+
+def test_channel_catalogs_list_only_allowed_entries(monkeypatch):
+    """``list_profiles`` / ``list_projects`` (the /newbot, /profile, /project menus)
+    show only the slugs in the channel allowlist, on top of the per-user access."""
+    from src.channels.telegram import adapter as adapter_mod
+    from src.channels.telegram.adapter import AionAdapter
+    from src.agent_profile import profile_manager
+    from src.api import profile_access
+    from src.memory.sql_query_memory.service import sql_query_memory
+
+    settings = _settings(allowed_profiles="rag", allowed_projects="hr")
+    monkeypatch.setattr(adapter_mod, "_policy", lambda: settings)
+    monkeypatch.setattr(
+        profile_manager,
+        "list_profiles",
+        lambda: [{"slug": "rag", "name": "RAG"}, {"slug": "posta", "name": "Posta"}],
+    )
+
+    async def no_restriction(row_id):
+        return []
+
+    monkeypatch.setattr(profile_access, "allowed_profile_slugs", no_restriction)
+
+    class Row:
+        def __init__(self, slug):
+            self.slug, self.display_name = slug, slug.upper()
+
+    async def projects(**kw):
+        return [Row("hr"), Row("finance")]
+
+    monkeypatch.setattr(sql_query_memory, "list_projects", projects)
+    user = AionUserRef(row_id="u1", identifier="user-u1")
+    assert [p.slug for p in _run(AionAdapter().list_profiles(user))] == ["rag"]
+    assert [p.slug for p in _run(AionAdapter().list_projects(user, "rag"))] == ["hr"]
 
 
 # ======================================================================

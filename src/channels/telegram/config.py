@@ -77,22 +77,24 @@ class TelegramSettings(BaseModel):
     # Periodic assistant check (name/username, error recovery, bots deleted from
     # @BotFather), in minutes. 0 = disabled.
     reconcile_interval_min: int = Field(30, ge=0)
-    # Channel policy: comma-separated slugs not usable from Telegram (hidden from
-    # /newbot, /mybots, /profile, /project and rejected).
-    blocked_profiles: str = ""
-    blocked_projects: str = ""
+    # Channel policy (strict allowlist): comma-separated slugs that may be used from
+    # Telegram. Anything else is hidden from /newbot, /mybots, /profile, /project and
+    # rejected; an empty list allows nothing, so profiles and projects created later
+    # must be enabled explicitly by the admin. "No project" is always possible.
+    allowed_profiles: str = ""
+    allowed_projects: str = ""
 
     @staticmethod
     def _slugs(raw: str) -> frozenset:
         return frozenset(x.strip().lower() for x in (raw or "").split(",") if x.strip())
 
     @property
-    def blocked_profile_set(self) -> frozenset:
-        return self._slugs(self.blocked_profiles)
+    def allowed_profile_set(self) -> frozenset:
+        return self._slugs(self.allowed_profiles)
 
     @property
-    def blocked_project_set(self) -> frozenset:
-        return self._slugs(self.blocked_projects)
+    def allowed_project_set(self) -> frozenset:
+        return self._slugs(self.allowed_projects)
 
     @field_validator("manager_token", "proxy_url", mode="before")
     @classmethod
@@ -110,7 +112,7 @@ class TelegramSettings(BaseModel):
 
         return parse_thinking_level(v)
 
-    @field_validator("default_profile", "blocked_profiles", "blocked_projects")
+    @field_validator("default_profile", "allowed_profiles", "allowed_projects")
     @classmethod
     def _strip(cls, v: str) -> str:
         return v.strip()

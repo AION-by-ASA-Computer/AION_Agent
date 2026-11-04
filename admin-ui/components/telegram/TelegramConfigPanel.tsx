@@ -49,7 +49,7 @@ export type ConfigSection = "connection" | "policies" | "chat";
 /** Which form fields live in which tab, to flag the tabs holding unsaved edits. */
 const SECTION_KEYS: Record<ConfigSection, string[]> = {
   connection: ["enabled", "manager_token", "proxy_url"],
-  policies: ["default_profile", "max_bots_per_user", "blocked_profiles", "blocked_projects", "max_running_bots", "manager_chat"],
+  policies: ["default_profile", "max_bots_per_user", "allowed_profiles", "allowed_projects", "max_running_bots", "manager_chat"],
   chat: [
     "max_concurrent_jobs",
     "turn_timeout_sec",
@@ -108,6 +108,100 @@ const isPositive = (v: string | undefined) => {
   return !isNaN(n) && n > 0;
 };
 const isNonNegative = (v: string | undefined) => !v || /^\d+$/.test(v.trim());
+
+/** CSV of slugs (as stored by the backend) → normalised, de-duplicated list. */
+const parseSlugs = (csv: string) => [...new Set(csv.split(",").map((x) => x.trim().toLowerCase()).filter(Boolean))];
+/** Slug list → CSV, sorted so the same selection always yields the same value (stable dirty diff). */
+const joinSlugs = (slugs: string[]) => [...new Set(slugs)].sort().join(",");
+
+/** One selectable entry of a {@link SlugChecklist}. */
+type SlugOption = { slug: string; label: string; description?: string };
+
+/**
+ * Checkbox list backing a CSV allowlist field (`allowed_profiles` / `allowed_projects`).
+ * The backend applies it as a strict allowlist, so nothing checked means nothing usable on
+ * Telegram. Saved slugs that no longer match an option stay listed (checked, by slug) so the
+ * admin can still see and remove them. Not wrapped in `Field`: that renders a `<label>`, which
+ * cannot contain the per-row labels of the checkboxes.
+ *
+ * @param value    the current CSV value of the field.
+ * @param onChange receives the new CSV (sorted) on every toggle.
+ * @param empty    text shown when there are no options at all.
+ */
+function SlugChecklist({
+  t,
+  label,
+  hint,
+  empty,
+  options,
+  value,
+  onChange,
+}: {
+  t: T;
+  label: string;
+  hint: string;
+  empty: string;
+  options: SlugOption[];
+  value: string;
+  onChange: (csv: string) => void;
+}) {
+  const selected = parseSlugs(value);
+  const known = new Set(options.map((o) => o.slug.toLowerCase()));
+  const rows: SlugOption[] = [
+    ...options,
+    ...selected.filter((slug) => !known.has(slug)).map((slug) => ({ slug, label: slug })),
+  ];
+  const toggle = (slug: string) => {
+    const s = slug.toLowerCase();
+    onChange(joinSlugs(selected.includes(s) ? selected.filter((x) => x !== s) : [...selected, s]));
+  };
+
+  return (
+    <div className="flex min-w-0 flex-col gap-1.5 md:col-span-2">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium">{label}</span>
+        <span className="flex items-center gap-3 text-xs text-muted-foreground">
+          <span>{t(`${c}.allowed_count`, { count: selected.length })}</span>
+          {options.length > 0 && (
+            <button
+              type="button"
+              onClick={() => onChange(joinSlugs([...selected, ...options.map((o) => o.slug.toLowerCase())]))}
+              className="focus-ring rounded-md font-medium underline underline-offset-4 hover:text-foreground"
+            >
+              {t(`${c}.select_all`)}
+            </button>
+          )}
+          {selected.length > 0 && (
+            <button type="button" onClick={() => onChange("")} className="focus-ring rounded-md font-medium underline underline-offset-4 hover:text-foreground">
+              {t(`${c}.select_none`)}
+            </button>
+          )}
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="rounded-xl border border-border/60 px-3 py-4 text-center text-sm text-muted-foreground">{empty}</p>
+      ) : (
+        <ul className="flex max-h-[18rem] flex-col gap-0.5 overflow-y-auto rounded-xl border border-border/60 p-1">
+          {rows.map((o) => {
+            const on = selected.includes(o.slug.toLowerCase());
+            return (
+              <li key={o.slug}>
+                <label className={cn("flex cursor-pointer items-start gap-3 rounded-lg px-3 py-2 transition-colors", on ? "bg-secondary" : "hover:bg-secondary/60")}>
+                  <input type="checkbox" checked={on} onChange={() => toggle(o.slug)} className="focus-ring mt-1 h-4 w-4 shrink-0 accent-foreground" />
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{o.label}</span>
+                    {o.description && <span className="mt-0.5 block text-xs text-muted-foreground">{o.description}</span>}
+                  </span>
+                </label>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <p className="text-xs text-muted-foreground">{hint}</p>
+    </div>
+  );
+}
 
 /** `GET /admin/telegram/status`: runtime view of the gateway, independent of unsaved edits. */
 type Status = {
@@ -197,6 +291,16 @@ export function TelegramConfigPanel({
     apiFetch(`${apiBase()}/admin/profiles`)
       .then((r) => (r.ok ? r.json() : Promise.reject(r)))
       .then((d) => Array.isArray(d) && setProfiles(d.filter((p) => p?.slug)))
+      .catch(() => {});
+  }, []);
+
+  // SQL QueryMemory projects of the tenant, for the projects allowlist (empty when the
+  // feature is disabled or the fetch fails: saved slugs are still shown by the checklist).
+  const [projects, setProjects] = useState<{ slug: string; display_name?: string; profile_slug?: string | null }[]>([]);
+  useEffect(() => {
+    apiFetch(`${apiBase()}/admin/query-memory/projects`)
+      .then((r) => (r.ok ? r.json() : Promise.reject(r)))
+      .then((d) => Array.isArray(d) && setProjects(d.filter((p) => p?.slug)))
       .catch(() => {});
   }, []);
 
@@ -496,15 +600,44 @@ export function TelegramConfigPanel({
             <Field label={t(`${c}.max_bots`)}>
               <TextInput type="number" inputMode="numeric" value={txt("max_bots_per_user", "3")} onChange={(v) => set("max_bots_per_user", v)} />
             </Field>
-            <Field label={t(`${c}.blocked_profiles`)} hint={t(`${c}.blocked_profiles_hint`)}>
-              <TextInput value={txt("blocked_profiles")} mono onChange={(v) => set("blocked_profiles", v)} placeholder="email_agent, admin_tools" />
-            </Field>
-            <Field label={t(`${c}.blocked_projects`)} hint={t(`${c}.blocked_projects_hint`)}>
-              <TextInput value={txt("blocked_projects")} mono onChange={(v) => set("blocked_projects", v)} placeholder="hr, finance" />
-            </Field>
             <Field label={t(`${c}.max_running`)} hint={t(`${c}.max_running_hint`)}>
               <TextInput type="number" inputMode="numeric" value={txt("max_running_bots", "200")} onChange={(v) => set("max_running_bots", v)} />
             </Field>
+            {/* Strict allowlists: the backend refuses anything not checked here. Warn when no
+                profile is allowed (no assistant can be created) or when the suggested profile
+                is not allowed (it would never be offered in /newbot). */}
+            {(() => {
+              const allowed = parseSlugs(txt("allowed_profiles"));
+              const def = txt("default_profile", "generic_assistant").toLowerCase();
+              const msg = allowed.length === 0 ? "none_allowed" : def && !allowed.includes(def) ? "default_not_allowed" : null;
+              return msg ? (
+                <div className="md:col-span-2">
+                  <Note tone="warn">{t(`${c}.${msg}`)}</Note>
+                </div>
+              ) : null;
+            })()}
+            <SlugChecklist
+              t={t}
+              label={t(`${c}.allowed_profiles`)}
+              hint={t(`${c}.allowed_profiles_hint`)}
+              empty={t(`${c}.no_profiles`)}
+              options={profiles.map((p) => ({ slug: p.slug, label: p.name || p.slug, description: p.description || undefined }))}
+              value={txt("allowed_profiles")}
+              onChange={(v) => set("allowed_profiles", v)}
+            />
+            <SlugChecklist
+              t={t}
+              label={t(`${c}.allowed_projects`)}
+              hint={t(`${c}.allowed_projects_hint`)}
+              empty={t(`${c}.no_projects`)}
+              options={projects.map((p) => ({
+                slug: p.slug,
+                label: p.display_name || p.slug,
+                description: p.profile_slug ? `${p.slug} · ${p.profile_slug}` : p.slug,
+              }))}
+              value={txt("allowed_projects")}
+              onChange={(v) => set("allowed_projects", v)}
+            />
           </FieldGrid>
           <div className="border-t border-border/50">
             <ToggleList>

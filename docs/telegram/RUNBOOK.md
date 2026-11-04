@@ -49,8 +49,8 @@ Nella tabella, la prima colonna è il nome del campo (quello usato dall'API e ne
 | `max_running_bots` | `200` | bot personali in ascolto contemporaneamente (rete di sicurezza; oltre il limite un bot non viene avviato e il log lo segnala) |
 | `reconcile_interval_min` | `30` | controllo periodico degli assistenti (vedi "Ciclo di vita"); `0` lo disattiva |
 | `max_bots_per_user` | `3` | bot personali per utente AION creati con `/newbot` (gli eliminati non contano) |
-| `blocked_profiles` | — | policy del canale: profili (slug separati da virgola) mai usabili da Telegram |
-| `blocked_projects` | — | policy del canale: progetti (slug separati da virgola) mai usabili da Telegram |
+| `allowed_profiles` | — | policy del canale (allowlist stretta): profili (slug separati da virgola) usabili da Telegram; vuoto = nessuno |
+| `allowed_projects` | — | policy del canale (allowlist stretta): progetti (slug separati da virgola) usabili da Telegram; vuoto = nessuno (resta sempre possibile "Nessun progetto") |
 | `AION_CREDENTIAL_ENCRYPTION_KEY` | — | chiave già usata da AION per le credenziali: cifra anche i token dei bot personali. Senza, in sviluppo si usa una chiave insicura; in produzione `/newbot` è disattivato. In Admin → Impostazioni compare mascherata (`***`) |
 
 Dipendenze: `aiogram[proxy]` in `requirements.txt` (`uv pip install -r requirements.txt`).
@@ -101,9 +101,12 @@ oppure `https://t.me/BotFather?startapp`), scegliere il bot e attivare **Bot Man
 - **Registro.** Le ultime operazioni del canale (`tg_audit`): collegamenti, creazioni, cambi di
   configurazione e modalità, sospensioni, eliminazioni, rotazioni di token, riassegnazioni, quote.
 - **Policy del canale** (Admin → Telegram → Configurazione → Assistenti personali):
-  `blocked_profiles` / `blocked_projects`. I profili e progetti indicati non
-  compaiono in `/newbot`, `/mybots`, `/profile`, `/project` e, se un assistente li ha già, ogni messaggio
-  viene rifiutato con "non disponibile su Telegram (policy dell'amministratore)".
+  `allowed_profiles` / `allowed_projects`, scelti da due elenchi a spunta. È un'allowlist stretta: solo i
+  profili e progetti selezionati compaiono in `/newbot`, `/mybots`, `/profile`, `/project`; con l'elenco
+  vuoto non è consentito nulla e i profili/progetti creati in seguito vanno abilitati esplicitamente. Se un
+  assistente usa già un profilo o progetto non consentito, ogni messaggio viene rifiutato con "non
+  disponibile su Telegram (policy dell'amministratore)". Il pannello avvisa se nessun profilo è
+  consentito o se il profilo suggerito (`default_profile`) non è tra quelli consentiti.
 - **Le chat Telegram sono sessioni AION normali.** Compaiono nella sidebar della Chat UI (con l'icona di
   Telegram) e si possono continuare da lì, come quelle WhatsApp; vedi "Chat con l'agente".
 
