@@ -26,11 +26,12 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
-from src.session_workspace import (
-    is_user_facing_generated_file,
-    save_upload,
-    session_root,
+from src.channels.session_turn import (
+    OutputSnapshot,
+    collect_new_outputs,
+    snapshot_outputs,
 )
+from src.session_workspace import save_upload, session_root
 from src.storage import get_storage_backend
 from src.tools.doc_auto_ingest import schedule_auto_ingest
 from src.tools.office_auto_convert import apply_legacy_word_conversion
@@ -90,16 +91,6 @@ _DOCUMENT_MIMES = frozenset(
         "application/vnd.ms-powerpoint",
         "application/vnd.openxmlformats-officedocument.presentationml.presentation",
     }
-)
-
-# Output folders scanned around a turn, and subtrees that never hold
-# deliverables: artifact version history, offloaded tool results and the
-# per-page text extracted by PDF auto-ingest.
-_OUTPUT_ROOTS = ("workspace", "derived")
-_SKIPPED_PREFIXES = (
-    "workspace/.versions/",
-    "derived/tool_results/",
-    "derived/docs/",
 )
 
 
@@ -284,39 +275,9 @@ async def ingest_inbound_media(
 # Outbound
 # ---------------------------------------------------------------------------
 
-OutputSnapshot = Dict[str, Tuple[int, int]]
-
-
-def snapshot_outputs(session_id: str) -> OutputSnapshot:
-    """``{relative_path: (mtime_ns, size)}`` of the files in the output folders."""
-    root = session_root(session_id)
-    out: OutputSnapshot = {}
-    for top in _OUTPUT_ROOTS:
-        base = root / top
-        if not base.is_dir():
-            continue
-        for path in base.rglob("*"):
-            if not path.is_file():
-                continue
-            rel = path.relative_to(root).as_posix()
-            if rel.startswith(_SKIPPED_PREFIXES):
-                continue
-            try:
-                st = path.stat()
-            except OSError:
-                continue
-            out[rel] = (st.st_mtime_ns, st.st_size)
-    return out
-
-
-def collect_new_outputs(before: OutputSnapshot, after: OutputSnapshot) -> List[str]:
-    """Deliverables created or modified during the turn, oldest first."""
-    changed = [
-        rel
-        for rel, stat in after.items()
-        if before.get(rel) != stat and is_user_facing_generated_file(rel)
-    ]
-    return sorted(changed, key=lambda rel: (after[rel][0], rel))
+# Detecting the files a turn produced is shared with the Telegram channel: it
+# lives in ``src.channels.session_turn`` and is re-exported here so existing
+# imports (``media.snapshot_outputs`` / ``media.collect_new_outputs``) keep working.
 
 
 def outbound_kind(mime: str, size: int) -> Optional[Tuple[str, str]]:
@@ -379,6 +340,7 @@ async def send_outputs(
 
 __all__ = [
     "MediaIngestError",
+    "OutputSnapshot",
     "MediaTooLarge",
     "UnsupportedMedia",
     "collect_new_outputs",

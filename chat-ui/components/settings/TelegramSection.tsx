@@ -1,19 +1,16 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { Bot, Check, Copy, ExternalLink, Link2, Loader2, MessageSquare, RefreshCw, Unlink } from "lucide-react";
+import { Bot, Check, Copy, ExternalLink, Link2, Loader2, RefreshCw, Unlink } from "lucide-react";
 
 import {
   TelegramApiError,
   createTelegramLink,
   getTelegramStatus,
   listTelegramBots,
-  listTelegramConversations,
   unlinkTelegram,
   type TelegramBot,
   type TelegramBotStatus,
-  type TelegramConversation,
   type TelegramPairingLink,
   type TelegramStatus,
 } from "@/lib/api/telegram";
@@ -322,7 +319,6 @@ export function TelegramSection({ onToast }: { onToast?: ToastFn }) {
 
       {data.link ? <TelegramBots userId={userId} token={token} managerBot={data.bot_username} /> : null}
 
-      <TelegramChats userId={userId} token={token} />
 
       {confirmUnlink ? (
         <Dialog
@@ -515,77 +511,6 @@ function TelegramBots({
                   {t("settings.telegram.bot_open")}
                 </a>
               ) : null}
-            </li>
-          ))}
-        </ul>
-      )}
-    </Group>
-  );
-}
-
-type ChatsState =
-  | { status: "loading" }
-  | { status: "error"; message: string }
-  | { status: "ready"; items: TelegramConversation[] };
-
-/** Chats started from Telegram: hidden from the sidebar, opened read-only. */
-function TelegramChats({ userId, token }: { userId: string; token: string | null }) {
-  const t = useT();
-  const [state, setState] = useState<ChatsState>({ status: "loading" });
-
-  useEffect(() => {
-    let cancelled = false;
-    listTelegramConversations(userId, token)
-      .then((items) => {
-        if (!cancelled) setState({ status: "ready", items });
-      })
-      .catch((err: unknown) => {
-        if (!cancelled) setState({ status: "error", message: errorMessage(err, t) });
-      });
-    return () => {
-      cancelled = true;
-    };
-    // `t` is a stable module-level function.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, token]);
-
-  return (
-    <Group title={t("settings.telegram.chats_title")} description={t("settings.telegram.chats_desc")}>
-      {state.status === "loading" ? (
-        <p className="flex items-center justify-center gap-2 px-5 py-8 text-sm text-muted-foreground" role="status">
-          <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-          {t("settings.telegram.loading")}
-        </p>
-      ) : state.status === "error" ? (
-        <div className="px-5 py-4">
-          <Note tone="error">{state.message}</Note>
-        </div>
-      ) : state.items.length === 0 ? (
-        <p className="px-5 py-8 text-center text-sm text-muted-foreground">{t("settings.telegram.chats_empty")}</p>
-      ) : (
-        <ul className="divide-y divide-border/40">
-          {state.items.map((c) => (
-            <li key={c.id}>
-              <Link
-                href={`/c/${c.id}`}
-                className="focus-ring flex items-center gap-3 px-5 py-3 transition-colors hover:bg-secondary/50"
-              >
-                <MessageSquare className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-sm font-medium">
-                    {c.title || c.preview || t("settings.telegram.chat_untitled")}
-                  </span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">
-                    {c.telegram_bot ? `@${c.telegram_bot}` : t("settings.telegram.chat_via_manager")}
-                    {c.telegram_chat ? ` · ${t("settings.telegram.chat_in_group", { chat: c.telegram_chat })}` : null}
-                    {" · "}
-                    {t("settings.telegram.chat_meta", {
-                      count: c.message_count,
-                      date: formatDate(c.updated_at || c.created_at, true),
-                    })}
-                  </span>
-                </span>
-              </Link>
             </li>
           ))}
         </ul>

@@ -3,7 +3,7 @@
 /**
  * "Quotas" section of the admin Telegram page: per-user cap on assistants for every
  * user who linked Telegram. An empty field falls back to the default quota
- * (`AION_TELEGRAM_MAX_BOTS_PER_USER`, edited in the Configuration section above).
+ * (`max_bots_per_user`, edited in the Configuration section above).
  * Backed by `GET /admin/telegram/quotas` and `PUT /admin/telegram/quotas/{user}`.
  */
 

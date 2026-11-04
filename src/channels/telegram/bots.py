@@ -36,9 +36,10 @@ from aiogram.types import (
     ReplyKeyboardRemove,
     User,
 )
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
+from src.channels.telegram import groups
 from src.channels.telegram.accounts import TelegramAccounts
 from src.channels.telegram.adapter import AionAdapter, ChatAccessError
 from src.channels.telegram.config import TelegramSettings
@@ -68,7 +69,7 @@ OWNER_CHANGED_REASON = "proprietario cambiato su Telegram"
 _USERNAME_MAX = 32
 NAME_MAX = 64
 
-# Menu dei bot condivisi nei gruppi.
+# Menu dei bot condivisi nei gruppi (registrato solo con ``groups.GROUPS_ENABLED``).
 GROUP_COMMANDS = [
     BotCommand(command="ask", description="Fai una domanda all'assistente"),
     BotCommand(command="new", description="Ricomincia la tua conversazione"),
@@ -96,7 +97,7 @@ class BotStatus(str, enum.Enum):
 
 class BotMode(str, enum.Enum):
     PERSONAL = "personal"  # solo il proprietario, solo in privato
-    SHARED = "shared"  # tutti gli utenti AION collegati, anche nei gruppi
+    SHARED = "shared"  # tutti gli utenti AION collegati (e i gruppi, se attivi)
 
 
 MODE_LABELS = {
@@ -858,14 +859,21 @@ class BotFactory:
         )
         project = escape(info.project_slug) if info.project_slug else "nessuno"
         mode = MODE_LABELS.get(info.mode, info.mode)
-        usage = (
-            "Chiunque abbia collegato il proprio account ad AION può scrivergli, "
-            "con i propri permessi. Solo tu puoi aggiungerlo ai gruppi: lì risponde "
-            "a /ask e a chi risponde a un suo messaggio; per le menzioni @ "
-            "rendilo amministratore del gruppo."
-            if info.shared
-            else "Aprilo e scrivigli una domanda: risponde solo a te."
-        )
+        if not info.shared:
+            usage = "Aprilo e scrivigli una domanda: risponde solo a te."
+        elif groups.GROUPS_ENABLED:
+            usage = (
+                "Chiunque abbia collegato il proprio account ad AION può scrivergli, "
+                "con i propri permessi. Solo tu puoi aggiungerlo ai gruppi: lì "
+                "risponde a /ask e a chi risponde a un suo messaggio; per le "
+                "menzioni @ rendilo amministratore del gruppo."
+            )
+        else:
+            # Groups disabled: a shared bot is reachable only in private chats.
+            usage = (
+                "Chiunque abbia collegato il proprio account ad AION può scrivergli "
+                "in chat privata, con i propri permessi."
+            )
         return (
             f"{head}\n\nModalità: <b>{mode}</b>\nProfilo: <b>{profile}</b>\n"
             f"Progetto: <b>{project}</b>\n\n{usage}\nGestiscilo da /mybots."
@@ -918,14 +926,23 @@ class BotFactory:
             else "AION"
         )
         if info.shared:
+            group_hint = (
+                " Nei gruppi menzionalo o rispondi a un suo messaggio."
+                if groups.GROUPS_ENABLED
+                else ""
+            )
             await child.set_my_description(
                 f"Assistente AION condiviso (profilo {profile}). Per usarlo collega "
-                "il tuo account Telegram ad AION. Nei gruppi menzionalo o rispondi "
-                "a un suo messaggio."
+                f"il tuo account Telegram ad AION.{group_hint}"
             )
-            await child.set_my_commands(
-                GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats()
-            )
+            # With groups disabled the group menu is removed, so bots provisioned
+            # while groups were on stop advertising /ask there.
+            if groups.GROUPS_ENABLED:
+                await child.set_my_commands(
+                    GROUP_COMMANDS, scope=BotCommandScopeAllGroupChats()
+                )
+            else:
+                await child.delete_my_commands(scope=BotCommandScopeAllGroupChats())
         else:
             await child.set_my_description(
                 f"Assistente personale AION (profilo {profile}). "

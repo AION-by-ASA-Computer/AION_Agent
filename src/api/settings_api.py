@@ -51,8 +51,8 @@ def _is_sensitive_env_key(key: str) -> bool:
         "OCR_API_KEY",
         "BRAVE_SEARCH_API",
         "TAVILY_API",
-        "TELEGRAM_MANAGER_TOKEN",
-        # Cifra credenziali MCP e token dei bot Telegram: mai restituita al client.
+        # Encrypts MCP credentials and the Telegram configuration/bot tokens:
+        # never returned to the client.
         "ENCRYPTION_KEY",
     )
     return any(n in ku for n in needles)
@@ -112,18 +112,17 @@ def _resolve_provider_type(env_dict: Dict[str, str]) -> str:
         return "openai"
 
 
-# Variabili che richiedono di riavviare il gateway Telegram quando cambiano.
-_TELEGRAM_KEYS_PREFIX = "AION_TELEGRAM_"
+# The Telegram configuration lives encrypted in the DB (Admin → Telegram), not in
+# the env; only the encryption key affects it, since the gateway must decrypt its
+# configuration and the assistants' tokens with it.
 _TELEGRAM_RELATED_KEYS = ("AION_CREDENTIAL_ENCRYPTION_KEY",)
 
 
 def _telegram_changed(before: Dict[str, str], after: Dict[str, str]) -> bool:
-    keys = {
-        k
-        for k in (*before, *after)
-        if k.startswith(_TELEGRAM_KEYS_PREFIX) or k in _TELEGRAM_RELATED_KEYS
-    }
-    return any((before.get(k) or "") != (after.get(k) or "") for k in keys)
+    """True when a key the Telegram gateway depends on changed value."""
+    return any(
+        (before.get(k) or "") != (after.get(k) or "") for k in _TELEGRAM_RELATED_KEYS
+    )
 
 
 class SettingsUpdate(BaseModel):
@@ -247,7 +246,8 @@ async def update_settings(update: SettingsUpdate):
             )
             asyncio.create_task(_deferred_exit())
         elif _telegram_changed(existing_env, merged):
-            # Fuori da Docker il processo resta su: il gateway riparte con i nuovi valori.
+            # Outside Docker the process stays up: restart the gateway so it reloads
+            # its encrypted configuration with the new key.
             from src.channels.telegram import restart_gateway
 
             asyncio.create_task(restart_gateway())

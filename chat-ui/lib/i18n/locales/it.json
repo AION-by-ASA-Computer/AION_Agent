@@ -329,7 +329,7 @@
     },
     "telegram": {
       "title": "Telegram",
-      "desc": "Collega il tuo account Telegram per usare AION dal telefono. Le chat fatte da Telegram restano separate da quelle della Chat UI.",
+      "desc": "Collega il tuo account Telegram per usare AION dal telefono. Le chat fatte da Telegram compaiono nella barra laterale e puoi continuarle anche dalla Chat UI.",
       "loading": "Caricamento stato Telegram…",
       "retry": "Riprova",
       "disabled": "L'integrazione Telegram non è attiva su questo server. Contatta l'amministratore.",
@@ -365,11 +365,6 @@
         "desc": "Da Telegram non potrai più usare AION finché non colleghi di nuovo l'account. Le chat già fatte restano salvate.",
         "confirm": "Scollega"
       },
-      "chats_title": "Chat Telegram",
-      "chats_desc": "Le conversazioni avviate da Telegram, separate da quelle della Chat UI.",
-      "chats_empty": "Nessuna chat avviata da Telegram. Scrivi a un tuo assistente per iniziarne una.",
-      "chat_untitled": "Chat Telegram",
-      "chat_meta": "{{count}} messaggi · {{date}}",
       "bots_title": "I tuoi assistenti",
       "bots_desc": "Assistenti personali creati dal bot {{bot}} con /newbot: ognuno ha il suo profilo e progetto, e risponde solo a te.",
       "bots_empty": "Nessun assistente. Quando vuoi, scrivi /newbot a {{bot}} per crearne uno.",
@@ -380,10 +375,8 @@
       "bot_status_active": "Attivo",
       "bot_status_suspended": "Sospeso",
       "bot_status_error": "Errore",
-      "chat_via_manager": "bot di gestione",
       "bot_mode_personal": "Personale",
       "bot_mode_shared": "Condiviso",
-      "chat_in_group": "gruppo {{chat}}",
       "toast": {
         "linked": "Account Telegram collegato",
         "unlinked": "Account Telegram scollegato"
@@ -434,7 +427,8 @@
       "logout": "Esci",
       "admin_panel": "Pannello admin"
     },
-    "from_whatsapp": "Conversazione da WhatsApp"
+    "from_whatsapp": "Conversazione da WhatsApp",
+    "from_telegram": "Avviata da Telegram"
   },
   "schedulesPage": {
     "title": "Automazioni",
@@ -952,8 +946,7 @@
       "label": "Progetto",
       "none": "Nessun progetto disponibile",
       "open_panel": "Apri pannello memoria"
-    },
-    "telegram_read_only": "Chat avviata da Telegram: qui è in sola lettura, continuala da Telegram."
+    }
   },
   "login": {
     "btn": "Entra",

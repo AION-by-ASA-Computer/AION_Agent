@@ -116,10 +116,6 @@ async def list_conversations_chat_ui(
         False,
         description="Include conversation branches (forked conversations) in the list",
     ),
-    exclude_telegram: bool = Query(
-        True,
-        description="Hide conversations started from Telegram (listed in Settings → Telegram)",
-    ),
     user_id: str = Depends(chat_user_id_scope(Scope.CONVERSATIONS_READ)),
 ):
     _require_unified()
@@ -131,13 +127,6 @@ async def list_conversations_chat_ui(
         include_threads = include_threads.default
     if hasattr(include_branches, "default"):
         include_branches = include_branches.default
-    if hasattr(exclude_telegram, "default"):
-        exclude_telegram = exclude_telegram.default
-    hidden_sources = set()
-    if exclude_scheduled:
-        hidden_sources.add("scheduled_job")
-    if exclude_telegram:
-        hidden_sources.add("telegram")
     tenant = (os.getenv("AION_DEFAULT_TENANT_ID") or "default").strip() or "default"
     async with get_async_session_maker()() as session:
         conds = [
@@ -153,7 +142,7 @@ async def list_conversations_chat_ui(
             select(Conversation)
             .where(*conds)
             .order_by(Conversation.updated_at.desc())
-            .limit(limit * 4 if hidden_sources else limit)
+            .limit(limit * 4 if exclude_scheduled else limit)
         )
         rows = (await session.execute(q)).scalars().all()
         thread_counts = await _thread_counts(
@@ -162,7 +151,7 @@ async def list_conversations_chat_ui(
     data = []
     for r in rows:
         meta = json.loads(r.metadata_json or "{}")
-        if meta.get("source") in hidden_sources:
+        if exclude_scheduled and meta.get("source") == "scheduled_job":
             continue
         data.append(
             {

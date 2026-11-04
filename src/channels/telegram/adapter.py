@@ -5,6 +5,12 @@ Firma in docs/telegram/AION_MAP.md § 16. Il turno replica la preparazione di
 ``src/runtime/cron_runner.py``: permessi su profilo e progetto, riga
 ``conversations`` con ``metadata.source = "telegram"``, impostazioni runtime
 dell'utente, poi ``get_agent`` + ``AgentPipeline.run_stream``.
+
+A Telegram chat is a real AION session, with the same turn logic as WhatsApp
+(``src/channels/session_turn.py``): titled conversation visible in the chat-ui
+sidebar, every upload of the session passed to the agent, the channel's thinking
+level mirrored into the conversation metadata, and the turn registered as a
+chat-ui background run so it can be followed live and continued from chat-ui.
 """
 
 from __future__ import annotations
@@ -17,6 +23,13 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import AsyncIterator, Literal, Optional, Union
 
+from src.channels.session_turn import (
+    background_run,
+    conversation_title,
+    resolve_channel_thinking,
+    session_attachments,
+    sync_thinking_metadata,
+)
 from src.data.engine import get_async_session_maker
 from src.data.models import Conversation, User
 from src.identity import sanitize_user_id
@@ -262,7 +275,13 @@ class AionAdapter:
         profile_slug: str,
         project_slug: Optional[str],
         extra_metadata: Optional[dict] = None,
+        first_text: str = "",
     ) -> str:
+        """New conversation for a Telegram chat (``metadata.source="telegram"``).
+
+        Titled from ``first_text`` like WhatsApp (fallback "Telegram"), so it is
+        recognisable in the chat-ui sidebar from the very first turn.
+        """
         from src.api.ownership import claim_session_owner_marker
         from src.data.ids import new_uuid7_str
 
@@ -278,7 +297,7 @@ class AionAdapter:
                     tenant_id=user.tenant_id,
                     user_id=user.identifier,
                     profile_slug=profile_slug,
-                    title=None,
+                    title=conversation_title(first_text) or "Telegram",
                     message_count=0,
                     metadata_json=json.dumps(meta),
                     updated_at=datetime.now(timezone.utc),
@@ -368,29 +387,48 @@ class AionAdapter:
         *,
         profile_slug: str,
         project_slug: Optional[str],
-        attachments: Optional[list] = None,
+        turn_attachments: Optional[list] = None,
         project_user: Optional[str] = None,
     ) -> AsyncIterator[ChatEvent]:
-        """``project_user``: utente AION i cui permessi valgono per il progetto
-        in questo turno (assistenti condivisi nei gruppi: il creatore)."""
+        """One agent turn in the conversation, yielded as channel events.
+
+        ``turn_attachments`` are the files received with this message; the
+        session's earlier uploads are added as historical attachments.
+        ``project_user``: AION user whose permissions apply to the project in this
+        turn (shared assistants: the creator).
+
+        Side effects: syncs the thinking level into the conversation metadata,
+        registers the turn in ``_background_runs`` + redis ``stream_active`` for
+        the whole stream (chat-ui follows it via ``/v1/chat/stream/reconnect``),
+        and the pipeline persists the user/assistant messages.
+        """
         from src.agent_pipeline import AgentPipeline
+        from src.api.v1.chat import _clamped_runtime
         from src.main import get_agent, set_event_loop
-        from src.runtime.reasoning_effort import resolve_turn_reasoning
+        from src.runtime.project_access_delegation import delegated
         from src.runtime.redis_client import redis_clear_stream_cancel
-        from src.runtime.runtime_settings import (
-            profile_step_cap,
-            resolve_turn_runtime_settings,
-        )
-        from src.settings import get_settings
 
         set_event_loop(asyncio.get_running_loop())
         # Un flag di stop rimasto da un turno precedente fermerebbe subito questo.
         await redis_clear_stream_cancel(conversation_id)
         llm_provider = await self.default_llm_provider(user.tenant_id)
-        metadata: dict = {"source": SOURCE}
+        metadata: dict = {"source": SOURCE, "channel": SOURCE}
         if llm_provider:
             # Come /v1/chat/stream: la pipeline lo legge da qui.
             metadata["llm_provider_name"] = llm_provider
+
+        # Same attachment split as chat-ui/WhatsApp: always a list for the turn
+        # (with ``None`` the pipeline would persist every historical upload as an
+        # attachment of this message), all session uploads in ``attachments``.
+        turn = list(turn_attachments or [])
+        attachments = await asyncio.to_thread(
+            session_attachments, conversation_id, turn
+        )
+        # Thinking level set for the channel in Admin → Telegram.
+        thinking_level = resolve_channel_thinking(_policy().default_thinking_level)
+        await sync_thinking_metadata(
+            conversation_id, thinking_level, channel="Telegram"
+        )
 
         agent, profile_name = await get_agent(
             profile_slug,
@@ -408,28 +446,29 @@ class AionAdapter:
             user_id=user.identifier,
             agent_mode="normal",
         )
-        runtime = await resolve_turn_runtime_settings(
-            None,
-            user.identifier,
-            profile_max_agent_steps=profile_step_cap(profile_name),
-            context_window=get_settings().context_window,
-        )
-        from src.runtime.project_access_delegation import delegated
+        runtime = await _clamped_runtime(None, user.identifier, profile_name)
 
-        with delegated(conversation_id, project_slug, project_user):
-            async for chunk in pipeline.run_stream(
-                text,
-                reasoning_effort=resolve_turn_reasoning(None, None),
-                message_source="user_input",
-                attachments=attachments or None,
-                turn_attachments=attachments or None,
-                sql_query_project=project_slug,
-                metadata=metadata,
-                runtime=runtime,
-            ):
-                event = map_pipeline_chunk(chunk) if isinstance(chunk, dict) else None
-                if event is not None:
-                    yield event
+        async with background_run(conversation_id, profile=profile_name) as live:
+            with delegated(conversation_id, project_slug, project_user):
+                async for chunk in pipeline.run_stream(
+                    text,
+                    reasoning_effort=thinking_level,
+                    message_source="user_input",
+                    attachments=attachments or None,
+                    turn_attachments=turn,
+                    user_message_id=live.user_message_id,
+                    assistant_message_id=live.assistant_message_id,
+                    sql_query_project=project_slug,
+                    metadata=metadata,
+                    runtime=runtime,
+                ):
+                    if not isinstance(chunk, dict):
+                        continue
+                    # Raw chunk first: chat-ui renders the pipeline format.
+                    await live.publish(chunk)
+                    event = map_pipeline_chunk(chunk)
+                    if event is not None:
+                        yield event
 
     async def cancel(self, conversation_id: str) -> None:
         """La pipeline controlla il flag ogni ~0,5 s e chiude il turno."""

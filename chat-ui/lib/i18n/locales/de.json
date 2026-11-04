@@ -329,7 +329,7 @@
     },
     "telegram": {
       "title": "Telegram",
-      "desc": "Verknüpfe dein Telegram-Konto, um AION vom Smartphone aus zu nutzen. Auf Telegram begonnene Chats bleiben von den Chats der Chat UI getrennt.",
+      "desc": "Verknüpfe dein Telegram-Konto, um AION vom Smartphone aus zu nutzen. Auf Telegram begonnene Chats erscheinen in der Seitenleiste und lassen sich auch in der Chat UI fortsetzen.",
       "loading": "Telegram-Status wird geladen…",
       "retry": "Erneut versuchen",
       "disabled": "Die Telegram-Integration ist auf diesem Server nicht aktiviert. Wende dich an deinen Administrator.",
@@ -365,11 +365,6 @@
         "desc": "Du kannst AION erst wieder über Telegram nutzen, wenn du das Konto erneut verknüpfst. Bestehende Chats bleiben gespeichert.",
         "confirm": "Trennen"
       },
-      "chats_title": "Telegram-Chats",
-      "chats_desc": "Auf Telegram begonnene Unterhaltungen, getrennt von den Chats der Chat UI.",
-      "chats_empty": "Noch keine Chats aus Telegram. Schreib einem deiner Assistenten, um einen zu beginnen.",
-      "chat_untitled": "Telegram-Chat",
-      "chat_meta": "{{count}} Nachrichten · {{date}}",
       "bots_title": "Deine Assistenten",
       "bots_desc": "Persönliche Assistenten, erstellt über {{bot}} mit /newbot: jeder hat sein eigenes Profil und Projekt und antwortet nur dir.",
       "bots_empty": "Noch keine Assistenten. Wenn du möchtest, sende /newbot an {{bot}}, um einen zu erstellen.",
@@ -380,10 +375,8 @@
       "bot_status_active": "Aktiv",
       "bot_status_suspended": "Pausiert",
       "bot_status_error": "Fehler",
-      "chat_via_manager": "Verwaltungsbot",
       "bot_mode_personal": "Persönlich",
       "bot_mode_shared": "Geteilt",
-      "chat_in_group": "Gruppe {{chat}}",
       "toast": {
         "linked": "Telegram-Konto verknüpft",
         "unlinked": "Telegram-Konto getrennt"
@@ -434,7 +427,8 @@
     "rename": "Umbenennen",
     "search_placeholder": "Unterhaltungen suchen…",
     "theme": "Design",
-    "from_whatsapp": "Unterhaltung aus WhatsApp"
+    "from_whatsapp": "Unterhaltung aus WhatsApp",
+    "from_telegram": "Auf Telegram begonnen"
   },
   "schedulesPage": {
     "title": "Automationen",
@@ -952,8 +946,7 @@
       "label": "Projekt",
       "none": "Keine Projekte verfügbar",
       "open_panel": "Gedächtnis-Panel öffnen"
-    },
-    "telegram_read_only": "Auf Telegram begonnener Chat: hier schreibgeschützt, setze ihn auf Telegram fort."
+    }
   },
   "login": {
     "btn": "Einloggen",

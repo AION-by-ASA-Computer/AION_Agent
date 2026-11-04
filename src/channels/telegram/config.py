@@ -1,63 +1,84 @@
-"""Settings del canale Telegram, lette da ``.env`` con prefisso ``AION_TELEGRAM_``.
+"""Telegram channel settings.
 
-Modulo volutamente privo di import di aiogram: con il flag spento AION non
-deve caricare nulla del canale.
+The configuration lives only in the DB (table ``tg_settings``, encrypted), edited
+from Admin → Telegram and loaded by ``settings_store``: the ``AION_TELEGRAM_*``
+env variables are **not** read, neither as initial values nor as fallback. Fields
+that were never saved use the defaults declared here.
+
+``get_telegram_settings()`` stays synchronous (it is called from handlers, the
+adapter and the API) and returns the in-process copy that ``settings_store``
+refreshes at gateway start and after every admin save. AION runs a single worker,
+so one in-process copy is the source of truth for the whole server.
+
+Module intentionally free of aiogram imports: with the channel off AION must not
+load anything of it.
 """
 
 from __future__ import annotations
 
-from functools import lru_cache
 from typing import Optional
 
-from pydantic import SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
 
-class TelegramSettings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_prefix="AION_TELEGRAM_",
-        env_file=".env",
-        extra="ignore",
-    )
+class TelegramSettings(BaseModel):
+    """Channel configuration; instances are immutable snapshots.
+
+    Integer bounds are enforced here (not only in the admin UI) so an invalid value
+    is rejected by ``PUT /admin/telegram/settings`` before reaching the DB.
+    """
+
+    # Unknown keys (e.g. a field removed in a later version, still in the stored
+    # JSON) are ignored instead of making the whole configuration unreadable.
+    model_config = ConfigDict(extra="ignore", frozen=True)
 
     enabled: bool = False
-    # Token del bot manager (@BotFather). SecretStr: mai in repr/log.
+    # Token of the manager bot (@BotFather). SecretStr: never in repr/logs.
     manager_token: Optional[SecretStr] = None
-    # Proxy HTTP(S)/SOCKS verso api.telegram.org (es. proxy aziendale).
+    # HTTP(S)/SOCKS proxy towards api.telegram.org (e.g. corporate proxy).
     proxy_url: Optional[str] = None
-    # Long polling: secondi di attesa lato Telegram per ogni getUpdates.
-    polling_timeout: int = 50
-    # Allo shutdown: attesa massima degli handler in corso prima di confermare l'offset.
-    shutdown_grace_sec: float = 10.0
-    # Validità dei link di collegamento generati da Impostazioni → Telegram.
-    pairing_code_ttl_min: int = 15
-    # Chat sul bot manager. Di default no: il manager gestisce account e assistenti,
-    # si chatta con gli assistenti personali. 1 = emergenza (es. managed bot non disponibili).
+    # Long polling: seconds Telegram waits on each getUpdates.
+    polling_timeout: int = Field(50, ge=1)
+    # On shutdown: max wait for running handlers before committing the offset.
+    # Not exposed in the admin UI.
+    shutdown_grace_sec: float = Field(10.0, ge=0)
+    # Validity of the link codes generated from Chat UI → Settings → Telegram.
+    pairing_code_ttl_min: int = Field(15, ge=1)
+    # Chat on the manager bot. Off by default: the manager handles accounts and
+    # assistants, users chat with their personal assistants. On = emergency
+    # (e.g. managed bots unavailable).
     manager_chat: bool = False
-    # Profilo proposto per primo nei nuovi assistenti (e della chat sul manager, se attiva).
+    # Profile proposed first for new assistants (and for the manager chat, if on).
     default_profile: str = "generic_assistant"
-    # Turni dell'agente in parallelo per tutti gli utenti Telegram (gli altri attendono in coda).
-    max_concurrent_jobs: int = 1
-    # Aggiornamento della risposta in streaming su Telegram (limite ~1 msg/s per chat).
-    stream_edit_interval_ms: int = 1000
-    # Durata massima di un turno dell'agente avviato da Telegram.
-    turn_timeout_sec: int = 900
-    # Mostra i tool chiamati dall'agente (in streaming e in fondo alla risposta).
+    # Agent turns running in parallel for all Telegram users (others wait in queue).
+    max_concurrent_jobs: int = Field(1, ge=1)
+    # Streaming edit interval on Telegram (limit ~1 msg/s per chat).
+    stream_edit_interval_ms: int = Field(1000, ge=1)
+    # Max duration of an agent turn started from Telegram.
+    turn_timeout_sec: int = Field(900, ge=1)
+    # Show the tools called by the agent (while streaming and below the answer).
     show_tools: bool = True
-    # Risposte nel formato rich di Telegram (tabelle vere, sezioni richiudibili);
-    # se il bot non lo supporta si torna da soli all'HTML.
+    # Answers in Telegram rich format (real tables, collapsible sections);
+    # falls back to HTML on its own when the bot does not support it.
     rich_messages: bool = True
-    # Ragionamento del modello in una sezione richiudibile (solo formato rich).
+    # Model reasoning in a collapsible section (rich format only).
     show_reasoning: bool = True
-    # Bot personali (/newbot) per utente AION, esclusi quelli eliminati.
-    max_bots_per_user: int = 3
-    # Bot personali in ascolto (long polling) contemporaneamente: rete di sicurezza.
-    max_running_bots: int = 200
-    # Controllo periodico degli assistenti (nome/username, ripresa dagli errori,
-    # bot cancellati da @BotFather). 0 = disattivato.
-    reconcile_interval_min: int = 30
-    # Policy del canale: slug separati da virgola non usabili da Telegram
-    # (non compaiono in /newbot, /mybots, /profile, /project e vengono rifiutati).
+    # Thinking level of the agent turns started from Telegram (off|min|medium|max),
+    # mirrored into the conversation metadata so the chat-ui composer matches.
+    # None = system default (AION_DEFAULT_REASONING_EFFORT), as on WhatsApp.
+    default_thinking_level: Optional[str] = None
+    # Files generated by the agent sent back to the chat per turn; the others
+    # are announced with a link to the conversation in the chat-ui.
+    max_outbound_files: int = Field(5, ge=0)
+    # Personal bots (/newbot) per AION user, deleted ones excluded.
+    max_bots_per_user: int = Field(3, ge=1)
+    # Personal bots listening (long polling) at the same time: safety net.
+    max_running_bots: int = Field(200, ge=1)
+    # Periodic assistant check (name/username, error recovery, bots deleted from
+    # @BotFather), in minutes. 0 = disabled.
+    reconcile_interval_min: int = Field(30, ge=0)
+    # Channel policy: comma-separated slugs not usable from Telegram (hidden from
+    # /newbot, /mybots, /profile, /project and rejected).
     blocked_profiles: str = ""
     blocked_projects: str = ""
 
@@ -80,13 +101,48 @@ class TelegramSettings(BaseSettings):
             return None
         return v
 
+    @field_validator("default_thinking_level", mode="before")
+    @classmethod
+    def _thinking_level(cls, v):
+        # Same normalisation/validation as the WhatsApp channel config: blank =
+        # system default, anything else must be off|min|medium|max (422 otherwise).
+        from src.channels.whatsapp.config_service import parse_thinking_level
+
+        return parse_thinking_level(v)
+
+    @field_validator("default_profile", "blocked_profiles", "blocked_projects")
+    @classmethod
+    def _strip(cls, v: str) -> str:
+        return v.strip()
+
     @property
     def manager_token_value(self) -> Optional[str]:
         if self.manager_token is None:
             return None
         return self.manager_token.get_secret_value().strip() or None
 
+    def to_storage(self) -> dict:
+        """Plain JSON-able dict (token in clear) for the encrypted DB blob only."""
+        data = self.model_dump()
+        data["manager_token"] = self.manager_token_value
+        return data
 
-@lru_cache
+
+# Fields shown and edited in Admin → Telegram (everything but internal tuning).
+ADMIN_FIELDS: tuple[str, ...] = tuple(
+    name for name in TelegramSettings.model_fields if name != "shutdown_grace_sec"
+)
+
+# In-process copy: code defaults until ``settings_store`` loads the DB row.
+_current: TelegramSettings = TelegramSettings()
+
+
 def get_telegram_settings() -> TelegramSettings:
-    return TelegramSettings()
+    """Current channel configuration (synchronous, no I/O)."""
+    return _current
+
+
+def set_current_settings(settings: TelegramSettings) -> None:
+    """Replace the in-process copy; called only by ``settings_store``."""
+    global _current
+    _current = settings

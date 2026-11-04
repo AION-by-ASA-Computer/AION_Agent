@@ -17,6 +17,22 @@ from sqlalchemy import delete, select
 from src.channels.telegram.models import TgGroupMessage
 from src.data.engine import get_async_session_maker
 
+# Shared assistants in Telegram groups are switched off for now; the code is
+# kept (not commented out) so it can be adapted and re-enabled later, and its
+# tests still run by patching this flag to True.
+# Why off: a Telegram chat must be a real AION session, like WhatsApp and the
+# chat-ui. In groups the context of the other participants is prepended to the
+# question (``group_prompt`` → ``TurnConfig.prompt_prefix``), so it ends up in the
+# user message stored in the session and shown in the chat-ui. Before turning
+# this back on, move that context into a system/context message of the turn.
+# With the flag off, a bot added to a group (or receiving a group update) says so
+# and leaves; the group bot menu is not registered.
+GROUPS_ENABLED = False
+GROUPS_DISABLED_TEXT = (
+    "👥 Gli assistenti AION nei gruppi non sono ancora disponibili: esco dal "
+    "gruppo. Scrivimi in chat privata."
+)
+
 KEEP_PER_CHAT = 50
 CONTEXT_ENTRIES = 8
 _QUESTION_CHARS = 600

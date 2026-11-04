@@ -1,10 +1,11 @@
-"""Admin → Telegram: stato del gateway, verifica del token, assistenti, audit, quote.
+"""Admin → Telegram: configurazione, stato del gateway, verifica del token,
+assistenti, audit, quote.
 
-Le variabili ``AION_TELEGRAM_*`` si salvano con ``POST /admin/settings`` come le
-altre. Qui: stato e prova del token (``getMe``) per Impostazioni → Telegram, e la
-pagina Admin → Telegram (tutti gli assistenti con le azioni dell'amministratore,
-registro delle operazioni, quote per utente). I token non vengono mai restituiti
-né scritti nei log.
+The channel configuration is stored encrypted in the DB (``settings_store``) and
+edited with ``GET/PUT /telegram/settings``: no ``.env`` variable is involved and a
+save restarts only the in-process gateway, never the API container. The other
+endpoints serve the Admin → Telegram page (all assistants with the admin actions,
+audit log, per-user quotas). Tokens are never returned nor written to logs.
 """
 
 from __future__ import annotations
@@ -14,8 +15,10 @@ import logging
 import re
 from typing import Optional
 
-from fastapi import APIRouter
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel, ConfigDict
+
+from src.api.auth_login import ChatAuthIdentity, require_admin_role
 
 from src.channels.telegram import runtime
 from src.channels.telegram.config import get_telegram_settings
@@ -50,6 +53,69 @@ async def telegram_status():
         "encryption_ok": encryption_error is None,
         "encryption_error": encryption_error,
     }
+
+
+# ---------- configurazione (DB, cifrata) ----------
+@router.get("/settings")
+async def get_telegram_config():
+    """Saved channel configuration; the manager token only as presence + hint."""
+    from src.channels.telegram.settings_store import admin_view
+
+    return await admin_view()
+
+
+class TelegramConfigUpdate(BaseModel):
+    """Partial update: only the fields the admin changed.
+
+    Omitted field = unchanged; explicit ``null`` = back to the code default
+    (``manager_token: null`` removes the token). A blank or masked token means
+    "keep the saved one". Field types are validated by ``TelegramSettings``.
+    """
+
+    model_config = ConfigDict(extra="allow")
+
+
+@router.put("/settings")
+async def update_telegram_config(
+    body: TelegramConfigUpdate,
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+):
+    """Save the configuration encrypted in the DB and apply it live.
+
+    Side effects: writes ``tg_settings`` + an audit row, refreshes the in-process
+    settings and, when something changed, restarts the gateway in background
+    (stop with grace period, then start with the new values).
+    """
+    from src.channels.telegram import restart_gateway
+    from src.channels.telegram.settings_store import (
+        SettingsValidationError,
+        save_settings,
+    )
+
+    changes = dict(body.model_extra or {})
+    if "manager_token" in changes:
+        token = changes["manager_token"]
+        if isinstance(token, str):
+            token = token.strip()
+            if _is_placeholder(token):
+                # Blank or the masked value shown by the UI: keep the saved token.
+                changes.pop("manager_token")
+            else:
+                changes["manager_token"] = token
+    try:
+        _, changed = await save_settings(changes, user_id=auth.user_row_id)
+    except SettingsValidationError as e:
+        raise HTTPException(
+            422, detail={"code": "invalid_setting", "field": e.field, "message": str(e)}
+        ) from e
+    except RuntimeError as e:
+        # Encryption key missing/invalid: never store the configuration in clear.
+        raise HTTPException(
+            409, detail={"code": "encryption_unavailable", "message": str(e)}
+        ) from e
+    if changed:
+        asyncio.create_task(restart_gateway())
+    return {"ok": True, "changed": changed, "restarting_gateway": bool(changed)}
 
 
 class TokenTest(BaseModel):
@@ -222,8 +288,6 @@ _BOT_ACTIONS = ("suspend", "resume", "delete", "reassign")
 
 @router.post("/bots/{bot_id}/{action}")
 async def admin_bot_action(bot_id: int, action: str):
-    from fastapi import HTTPException
-
     from src.channels.telegram import lifecycle_factory
     from src.channels.telegram.bots import BotStatus
 
@@ -330,14 +394,12 @@ async def admin_quotas():
 
 
 class QuotaUpdate(BaseModel):
-    # None = torna alla quota di default (AION_TELEGRAM_MAX_BOTS_PER_USER).
+    # None = torna alla quota di default (``max_bots_per_user`` in Admin → Telegram).
     max_bots: Optional[int] = None
 
 
 @router.put("/quotas/{user_id}")
 async def admin_set_quota(user_id: str, body: QuotaUpdate):
-    from fastapi import HTTPException
-
     if body.max_bots is not None and not 0 <= body.max_bots <= 100:
         raise HTTPException(422, detail={"code": "invalid_quota"})
     if not await _tables_ready():

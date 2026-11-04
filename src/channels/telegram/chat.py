@@ -29,6 +29,8 @@ from src.channels.telegram.adapter import (
     ToolCall,
     ToolResult,
 )
+from src.channels.session_turn import collect_new_outputs, snapshot_outputs
+from src.channels.telegram import outputs
 from src.channels.telegram.config import TelegramSettings
 from src.channels.telegram.queue import JobQueue
 from src.channels.telegram.redact import redact
@@ -443,9 +445,13 @@ class ChatService:
                     profile,
                     project,
                     metadata=config.metadata if config else None,
+                    first_text=text,
                 )
 
-                attachments = await self._save_files(cid, files)
+                turn_attachments = await self._save_files(cid, files)
+                # Output folders before the turn: what changes is what the agent
+                # generated, sent back to the chat once the answer is delivered.
+                outputs_before = await asyncio.to_thread(snapshot_outputs, cid)
                 renderer = ReplyRenderer(
                     bot,
                     target.chat_id,
@@ -474,7 +480,7 @@ class ChatService:
                             prompt,
                             profile,
                             project,
-                            attachments,
+                            turn_attachments,
                             config.project_user if config and project else None,
                         ),
                         timeout=self.settings.turn_timeout_sec,
@@ -486,6 +492,7 @@ class ChatService:
                 finally:
                     self._running.pop(target.key, None)
                     self._by_draft.pop(draft_key, None)
+                await self._send_outputs(bot, target, cid, outputs_before)
                 if answer and config and config.on_answer:
                     try:
                         await config.on_answer(answer)
@@ -522,8 +529,42 @@ class ChatService:
             if renderer is not None:
                 await renderer.close()
 
+    async def _send_outputs(
+        self, bot: Bot, target: ChatTarget, cid: str, before: dict
+    ) -> None:
+        """Send the files generated during the turn, like WhatsApp does.
+
+        Files beyond ``max_outbound_files`` (or rejected by Telegram) stay in
+        the session and are announced with a link to the conversation.
+        """
+        after = await asyncio.to_thread(snapshot_outputs, cid)
+        files = collect_new_outputs(before, after)
+        if not files:
+            return
+        _sent, left_out = await outputs.send_outputs(
+            bot,
+            chat_id=target.chat_id,
+            thread_id=target.thread_id,
+            session_id=cid,
+            files=files,
+            max_files=self.settings.max_outbound_files,
+        )
+        if left_out:
+            try:
+                await bot.send_message(
+                    target.chat_id,
+                    outputs.more_files_html(left_out, cid),
+                    message_thread_id=target.thread_id,
+                )
+            except Exception as e:  # noqa: BLE001 — the answer is already delivered
+                logger.warning("telegram: avviso file non inviato: %s", redact(e))
+
     async def _save_files(self, cid: str, files: Tuple[IncomingFile, ...]) -> list:
-        """Scarica gli allegati da Telegram e li salva nella conversazione."""
+        """Scarica gli allegati da Telegram e li salva nella conversazione.
+
+        Returns the ``AttachmentRef``-shaped dicts, passed to the turn as
+        ``turn_attachments`` (the files "new this turn").
+        """
         refs = []
         for f in files:
             if f.size is not None and f.size > MAX_FILE_BYTES:
@@ -545,13 +586,23 @@ class ChatService:
         project: Optional[str],
         *,
         metadata: Optional[dict] = None,
+        first_text: str = "",
     ) -> str:
+        """Active AION conversation of the chat, or a new one titled from ``first_text``.
+
+        ``tg_sessions`` maps the chat to its conversation (as WhatsApp's
+        ``active_conversation_id``); /new clears it and the next message lands here.
+        """
         if state.conversation_id and await self.adapter.sync_conversation(
             user, state.conversation_id, profile_slug=profile, project_slug=project
         ):
             return state.conversation_id
         cid = await self.adapter.create_conversation(
-            user, profile_slug=profile, project_slug=project, extra_metadata=metadata
+            user,
+            profile_slug=profile,
+            project_slug=project,
+            extra_metadata=metadata,
+            first_text=first_text,
         )
         await self.sessions.update(state.id, conversation_id=cid)
         return cid
@@ -564,7 +615,7 @@ class ChatService:
         text: str,
         profile: str,
         project: Optional[str],
-        attachments: Optional[list] = None,
+        turn_attachments: Optional[list] = None,
         project_user: Optional[str] = None,
     ) -> Optional[str]:
         """Risposta finale completa, None se interrotta o in errore."""
@@ -574,7 +625,9 @@ class ChatService:
         error: Optional[Error] = None
         tools = ToolActivity()
         show_tools = self.settings.show_tools
-        kwargs: dict = {"attachments": attachments} if attachments else {}
+        kwargs: dict = (
+            {"turn_attachments": turn_attachments} if turn_attachments else {}
+        )
         if project_user:
             kwargs["project_user"] = project_user
         async for event in self.adapter.chat_stream(
@@ -601,6 +654,10 @@ class ChatService:
                 error = event
         answer = (final if final else "".join(parts)).strip()
         footers = [tools.summary_html()] if show_tools and tools else []
+        # Same session in the chat-ui: link to continue there (as on WhatsApp).
+        continue_link = outputs.continue_link_html(cid)
+        if continue_link:
+            footers.append(continue_link)
         thinking = (
             reasoning_block("".join(reasoning))
             if self.settings.show_reasoning

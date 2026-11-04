@@ -48,7 +48,7 @@ from aiogram.types import (
     User,
     Voice,
 )
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import select
 
@@ -60,6 +60,7 @@ from src.channels.telegram.accounts import (
     TelegramAccounts,
 )
 from src.channels.telegram.adapter import (
+    AionAdapter,
     AionUserRef,
     ChatAccessError,
     Final,
@@ -223,6 +224,7 @@ class FakeAdapter:
         self.delay = delay
         self.turns = []  # (utente, testo, profilo, progetto, allegati, utente progetto)
         self.created = []
+        self.first_texts = []
         self.cancelled = []
         self.saved = []
 
@@ -255,10 +257,11 @@ class FakeAdapter:
             raise ChatAccessError(f"Progetto «{project}» non accessibile")
 
     async def create_conversation(
-        self, user, *, profile_slug, project_slug, extra_metadata=None
+        self, user, *, profile_slug, project_slug, extra_metadata=None, first_text=""
     ):
         cid = f"conv-{len(self.created) + 1}"
         self.created.append((cid, profile_slug, project_slug, extra_metadata))
+        self.first_texts.append(first_text)
         return cid
 
     async def sync_conversation(self, user, cid, *, profile_slug, project_slug):
@@ -276,11 +279,18 @@ class FakeAdapter:
         *,
         profile_slug,
         project_slug,
-        attachments=None,
+        turn_attachments=None,
         project_user=None,
     ):
         self.turns.append(
-            (user.row_id, text, profile_slug, project_slug, attachments, project_user)
+            (
+                user.row_id,
+                text,
+                profile_slug,
+                project_slug,
+                turn_attachments,
+                project_user,
+            )
         )
         for ev in self.events:
             if self.delay:
@@ -328,9 +338,7 @@ class FakeSupervisor:
 
 
 def _settings(**kw):
-    base = dict(
-        _env_file=None, enabled=True, stream_edit_interval_ms=300, max_concurrent_jobs=1
-    )
+    base = dict(enabled=True, stream_edit_interval_ms=300, max_concurrent_jobs=1)
     return TelegramSettings(**(base | kw))
 
 
@@ -372,7 +380,7 @@ def _factory(*, accounts=None, child_api=None, **settings):
         bots=TelegramBots(),
         accounts=accounts or FakeAccounts(),
         adapter=FakeAdapter(),
-        settings=TelegramSettings(_env_file=None, **settings),
+        settings=TelegramSettings(**settings),
         child_bot=child_bot,
     )
     factory.can_manage_bots = True
@@ -1034,6 +1042,15 @@ def test_supervisor_follows_status_and_stops_on_401(tg_db):
 # ======================================================================
 # Assistenti condivisi e gruppi
 # ======================================================================
+@pytest.fixture()
+def groups_on(monkeypatch):
+    """Groups are disabled in production (``groups.GROUPS_ENABLED``): the group
+    tests turn them on to keep the preserved code exercised."""
+    from src.channels.telegram import groups
+
+    monkeypatch.setattr(groups, "GROUPS_ENABLED", True)
+
+
 def _mention(text, username="@rag_bot"):
     return [
         MessageEntity(type="mention", offset=text.index(username), length=len(username))
@@ -1064,7 +1081,7 @@ def test_shared_assistant_uses_identity_of_who_writes(tg_db):
     )
 
 
-def test_group_answers_only_when_addressed_with_shared_context(tg_db):
+def test_group_answers_only_when_addressed_with_shared_context(tg_db, groups_on):
     async def scenario():
         h = ChildHarness()
         await _seed_bot(h.bots, mode="shared")
@@ -1095,7 +1112,7 @@ def test_group_answers_only_when_addressed_with_shared_context(tg_db):
     assert replies[0].reply_parameters is not None  # la risposta cita la domanda
 
 
-def test_only_owner_adds_shared_assistant_to_groups(tg_db):
+def test_only_owner_adds_shared_assistant_to_groups(tg_db, groups_on):
     async def scenario():
         h = ChildHarness()
         await _seed_bot(h.bots, mode="shared")
@@ -1115,7 +1132,24 @@ def test_only_owner_adds_shared_assistant_to_groups(tg_db):
     assert len(personal.api.of(LeaveChat)) == 1
 
 
-def test_group_uses_project_with_creator_permissions(tg_db):
+def test_groups_disabled_bot_leaves_and_never_answers(tg_db):
+    """With ``GROUPS_ENABLED`` off (default), a shared assistant added to a group
+    or addressed there says groups are unavailable, leaves, and runs no turn."""
+
+    async def scenario():
+        h = ChildHarness()
+        await _seed_bot(h.bots, mode="shared")
+        await h.added_by(U1_TG)
+        await h.group("/ask riassumi")
+        return h
+
+    h = _run(scenario())
+    assert h.adapter.turns == []
+    assert len(h.api.of(LeaveChat)) == 2
+    assert all("non sono ancora disponibili" in t for t in h.api.texts())
+
+
+def test_group_uses_project_with_creator_permissions(tg_db, groups_on):
     async def scenario():
         h = ChildHarness()
         await _seed_bot(h.bots, mode="shared", project="vendite")
@@ -1158,12 +1192,15 @@ def test_project_access_delegation_is_scoped_to_conversation_and_turn():
 # Amministrazione
 # ======================================================================
 def test_admin_settings_mask_secrets():
+    """Generic settings: the encryption key stays masked and still restarts the
+    gateway; ``AION_TELEGRAM_*`` keys no longer concern the channel (DB only)."""
     from src.api import settings_api
 
-    for key in ("AION_TELEGRAM_MANAGER_TOKEN", "AION_CREDENTIAL_ENCRYPTION_KEY"):
-        assert settings_api._mask_settings_for_get({key: "segreto"}) == {key: "***"}
+    key = "AION_CREDENTIAL_ENCRYPTION_KEY"
+    assert settings_api._mask_settings_for_get({key: "segreto"}) == {key: "***"}
     assert not settings_api._is_sensitive_env_key("AION_CHAT_MAX_TOKENS")
-    assert settings_api._telegram_changed(
+    assert settings_api._telegram_changed({key: "a" * 64}, {key: "b" * 64})
+    assert not settings_api._telegram_changed(
         {"AION_TELEGRAM_ENABLED": "1"}, {"AION_TELEGRAM_ENABLED": "0"}
     )
 
@@ -1172,8 +1209,6 @@ def test_admin_settings_mask_secrets():
 def admin_client(tg_db, monkeypatch):  # noqa: F811
     from src.api import admin_telegram
 
-    for key in [k for k in __import__("os").environ if k.startswith("AION_TELEGRAM_")]:
-        monkeypatch.delenv(key)
     settings = _settings(max_bots_per_user=3)
     monkeypatch.setattr(admin_telegram, "get_telegram_settings", lambda: settings)
     monkeypatch.setattr(tg_config, "get_telegram_settings", lambda: settings)
@@ -1258,6 +1293,193 @@ def test_admin_quota_per_user(admin_client):
     _run(factory.check_quota("u1"))  # di nuovo la quota predefinita
 
 
+# ----------------------------------------------------------------------
+# Configurazione del canale (tabella tg_settings, cifrata)
+# ----------------------------------------------------------------------
+MANAGER_TOKEN = "4242001:" + "Z" * 35
+
+
+@pytest.fixture()
+def settings_client(tg_db, monkeypatch):
+    """Admin API with the real settings store; gateway restarts are recorded, not run.
+
+    The in-process settings copy is reset to the code defaults and restored after
+    the test, so saves made here never leak into other tests.
+    """
+    import src.channels.telegram as tg_pkg
+    from src.api import admin_telegram
+    from src.api.auth_login import ChatAuthIdentity, require_admin_role
+
+    monkeypatch.setattr(tg_config, "_current", TelegramSettings())
+    restarts = []
+
+    async def fake_restart():
+        restarts.append(True)
+
+    monkeypatch.setattr(tg_pkg, "restart_gateway", fake_restart)
+    app = FastAPI()
+    app.include_router(admin_telegram.router, prefix="/admin")
+    app.dependency_overrides[require_admin_role] = lambda: ChatAuthIdentity(
+        user_row_id="u1", via="chat_token", roles=["admin"]
+    )
+    with TestClient(app) as c:
+        c.restarts = restarts
+        yield c
+
+
+def _inspect_db(fn):
+    """Run ``fn(conn)`` on a sync connection to the test DB (raw checks)."""
+    eng = sa.create_engine(
+        __import__("os").environ["AION_DB_URL"].replace("+aiosqlite", "")
+    )
+    try:
+        with eng.connect() as conn:
+            return fn(conn)
+    finally:
+        eng.dispose()
+
+
+def _stored_blob():
+    """Raw ``data_encrypted`` of the default tenant row (None if missing)."""
+    return _inspect_db(
+        lambda c: c.exec_driver_sql("SELECT data_encrypted FROM tg_settings").scalar()
+    )
+
+
+def test_settings_roundtrip_encrypted(settings_client):
+    """Saving stores one encrypted blob (no token or value in clear), applies the
+    values to the in-process copy, audits field names only and restarts the gateway."""
+    r = settings_client.put(
+        "/admin/telegram/settings",
+        json={"enabled": True, "manager_token": MANAGER_TOKEN, "max_bots_per_user": 5},
+    )
+    assert r.status_code == 200
+    assert r.json() == {
+        "ok": True,
+        "changed": ["enabled", "manager_token", "max_bots_per_user"],
+        "restarting_gateway": True,
+    }
+    blob = _stored_blob()
+    assert blob and MANAGER_TOKEN not in blob and "max_bots_per_user" not in blob
+    current = tg_config.get_telegram_settings()
+    assert current.enabled and current.max_bots_per_user == 5
+    assert current.manager_token_value == MANAGER_TOKEN
+    assert settings_client.restarts == [True]
+    [audit] = [
+        a
+        for a in settings_client.get("/admin/telegram/audit").json()["data"]
+        if a["action"] == "settings_updated"
+    ]
+    assert MANAGER_TOKEN not in json.dumps(audit)
+
+
+def test_settings_get_never_returns_token(settings_client):
+    """GET shows every editable field but the token, replaced by presence + hint."""
+    view = settings_client.get("/admin/telegram/settings").json()
+    assert view["configured"] is False and view["manager_token_present"] is False
+    assert view["settings"]["max_bots_per_user"] == 3  # code default
+    settings_client.put(
+        "/admin/telegram/settings", json={"manager_token": MANAGER_TOKEN}
+    )
+    view = settings_client.get("/admin/telegram/settings").json()
+    assert MANAGER_TOKEN not in json.dumps(view)
+    assert "manager_token" not in view["settings"]
+    assert "shutdown_grace_sec" not in view["settings"]
+    assert view["manager_token_present"] is True
+    assert view["manager_token_hint"] == "••••" + MANAGER_TOKEN[-4:]
+    assert view["configured"] is True and view["updated_at"]
+
+
+def test_settings_partial_update_and_token_handling(settings_client):
+    """Omitted fields stay as saved; a blank or masked token keeps the saved one;
+    ``null`` resets a field to its default (and removes the token)."""
+    url = "/admin/telegram/settings"
+    settings_client.put(
+        url, json={"manager_token": MANAGER_TOKEN, "turn_timeout_sec": 60}
+    )
+    r = settings_client.put(url, json={"show_tools": False, "manager_token": "***"})
+    assert r.json()["changed"] == ["show_tools"]
+    r = settings_client.put(url, json={"manager_token": "  "})
+    assert r.json() == {"ok": True, "changed": [], "restarting_gateway": False}
+    current = tg_config.get_telegram_settings()
+    assert current.manager_token_value == MANAGER_TOKEN
+    assert current.turn_timeout_sec == 60 and current.show_tools is False
+
+    r = settings_client.put(url, json={"manager_token": None, "turn_timeout_sec": None})
+    assert r.json()["changed"] == ["manager_token", "turn_timeout_sec"]
+    current = tg_config.get_telegram_settings()
+    assert current.manager_token_value is None and current.turn_timeout_sec == 900
+    assert current.show_tools is False
+
+
+def test_settings_rejects_invalid_values(settings_client):
+    """Out-of-range values, wrong types and unknown keys answer 422 with the field
+    and leave the stored configuration untouched."""
+    url = "/admin/telegram/settings"
+    for body, field in (
+        ({"max_bots_per_user": 0}, "max_bots_per_user"),
+        ({"polling_timeout": "abc"}, "polling_timeout"),
+        ({"shutdown_grace_sec": 1}, "shutdown_grace_sec"),  # not editable
+        ({"nope": 1}, "nope"),
+    ):
+        r = settings_client.put(url, json=body)
+        assert r.status_code == 422, body
+        assert r.json()["detail"]["code"] == "invalid_setting"
+        assert r.json()["detail"]["field"] == field
+    assert settings_client.get(url).json()["configured"] is False
+    assert settings_client.restarts == []
+
+
+def test_settings_ignore_env(tg_db, monkeypatch, caplog):
+    """``AION_TELEGRAM_*`` variables are neither initial values nor fallback: with
+    no saved row the channel stays off, and the names are logged as ignored."""
+    from src.channels.telegram import warn_ignored_env
+    from src.channels.telegram.settings_store import load_settings
+
+    monkeypatch.setenv("AION_TELEGRAM_ENABLED", "1")
+    monkeypatch.setenv("AION_TELEGRAM_MAX_BOTS_PER_USER", "9")
+    settings = _run(load_settings())
+    assert settings.enabled is False and settings.max_bots_per_user == 3
+    with caplog.at_level(logging.WARNING, logger="aion.telegram"):
+        warn_ignored_env()
+    assert "AION_TELEGRAM_ENABLED" in caplog.text and "=1" not in caplog.text
+
+
+def test_settings_defaults_without_table(tg_db, monkeypatch):
+    """A DB without ``tg_settings`` (channel never configured) yields the code
+    defaults without creating any table."""
+    from src.channels.telegram.settings_store import load_settings
+
+    async def drop():
+        async with init_engine().begin() as conn:
+            await conn.exec_driver_sql("DROP TABLE tg_settings")
+
+    _run(drop())
+    assert _run(load_settings()) == TelegramSettings()
+    assert not _inspect_db(lambda c: sa.inspect(c).has_table("tg_settings"))
+
+
+def test_settings_reload_publishes_db_values(tg_db, monkeypatch):
+    """``reload_telegram_settings`` (gateway start/restart) replaces the in-process
+    copy with the saved values; an undecryptable blob falls back to defaults."""
+    from src.channels.telegram.settings_store import (
+        reload_telegram_settings,
+        save_settings,
+    )
+
+    monkeypatch.setattr(tg_config, "_current", TelegramSettings())
+    _run(save_settings({"max_running_bots": 7, "blocked_profiles": " hr , legal "}))
+    tg_config.set_current_settings(TelegramSettings())  # e.g. a fresh process
+    reloaded = _run(reload_telegram_settings())
+    assert tg_config.get_telegram_settings() is reloaded
+    assert reloaded.max_running_bots == 7
+    assert reloaded.blocked_profile_set == {"hr", "legal"}
+
+    # Encryption key changed: the stored configuration can no longer be read.
+    monkeypatch.setenv("AION_CREDENTIAL_ENCRYPTION_KEY", "22" * 32)
+    assert _run(reload_telegram_settings()) == TelegramSettings()
+
+
 def test_test_token_never_uses_real_env_token(admin_client):
     assert admin_client.post(
         "/admin/telegram/test-token", json={"token": "***"}
@@ -1290,8 +1512,19 @@ def test_channel_policy_blocks_profiles_and_projects(monkeypatch):
         _run(AionAdapter().resolve_profile(user, "posta"))
 
 
-def test_telegram_chats_are_read_only_via_api(tg_db):
-    from src.api.v1.chat import _reject_read_only_conversation
+# ======================================================================
+# Telegram chats are real AION sessions (parity with WhatsApp / chat-ui)
+# ======================================================================
+@pytest.fixture()
+def session_dir(monkeypatch, tmp_path):
+    """Session workspaces (uploads, generated files) under ``tmp_path``."""
+    monkeypatch.setenv("AION_DATA_DIR", str(tmp_path / "data"))
+
+
+def test_telegram_conversations_are_listed_in_chat_ui_sidebar(tg_db):
+    """Telegram conversations are no longer hidden: ``GET /conversations`` of
+    the chat-ui lists them next to web chats, with ``metadata.source``."""
+    from src.api.chat_ui import list_conversations_chat_ui
 
     async def scenario():
         async with get_async_session_maker()() as s:
@@ -1307,14 +1540,232 @@ def test_telegram_chats_are_read_only_via_api(tg_db):
                     )
                 )
             await s.commit()
-        await _reject_read_only_conversation("web")
-        await _reject_read_only_conversation("nuova")
-        with pytest.raises(HTTPException) as exc:
-            await _reject_read_only_conversation("tg")
-        return exc.value
+        return await list_conversations_chat_ui(user_id="user-u1")
 
-    err = _run(scenario())
-    assert err.status_code == 409 and err.detail["code"] == "telegram_read_only"
+    rows = {r["id"]: r for r in _run(scenario())["data"]}
+    assert set(rows) == {"tg", "web"}
+    assert rows["tg"]["metadata"]["source"] == "telegram"
+
+
+def test_adapter_turn_is_a_live_chat_ui_session(tg_db, session_dir, monkeypatch):
+    """A Telegram turn behaves like a chat-ui/WhatsApp one: titled conversation,
+    thinking level from the channel config (metadata + ``reasoning_effort``),
+    historical uploads in ``attachments``, explicit message ids, and a
+    background run chat-ui can follow that is removed when the turn ends."""
+    import src.agent_pipeline as agent_pipeline
+    import src.api.v1.chat as chat_mod
+    import src.main as main_mod
+    from src.channels.telegram import adapter as adapter_mod
+    from src.session_workspace import session_root
+
+    monkeypatch.delenv("AION_DEFAULT_REASONING_EFFORT", raising=False)
+    monkeypatch.delenv("AION_THINKING_ENABLED", raising=False)
+    seen = {}
+
+    async def fake_get_agent(profile, **kwargs):
+        return object(), profile
+
+    class FakePipeline:
+        def __init__(self, **kwargs):
+            pass
+
+        async def run_stream(self, text, **kwargs):
+            seen["stream"] = (text, kwargs)
+            # While the turn streams, chat-ui can attach to it.
+            seen["run"] = chat_mod._background_runs[seen["cid"]]
+            yield {"type": "token", "content": "Ad aprile "}
+            yield {"type": "final", "text": "Ad aprile 12 ordini"}
+
+    async def fake_runtime(runtime, uid, profile_name):
+        return {}
+
+    async def no_provider(tenant_id):
+        return None
+
+    monkeypatch.setattr(main_mod, "get_agent", fake_get_agent)
+    monkeypatch.setattr(main_mod, "set_event_loop", lambda loop: None)
+    monkeypatch.setattr(agent_pipeline, "AgentPipeline", FakePipeline)
+    monkeypatch.setattr(chat_mod, "_clamped_runtime", fake_runtime)
+    monkeypatch.setattr(
+        adapter_mod, "_policy", lambda: _settings(default_thinking_level="max")
+    )
+
+    user = AionUserRef(row_id="u1", identifier="user-u1")
+    turn = [
+        {
+            "relative_path": "uploads/nuovo.png",
+            "original_name": "nuovo.png",
+            "mime": "image/png",
+        }
+    ]
+
+    async def scenario():
+        ad = AionAdapter()
+        ad.default_llm_provider = no_provider
+        cid = await ad.create_conversation(
+            user,
+            profile_slug="aion_std",
+            project_slug=None,
+            first_text="Quanto   abbiamo\nvenduto a marzo?",
+        )
+        seen["cid"] = cid
+        uploads = session_root(cid) / "uploads"
+        uploads.mkdir(parents=True, exist_ok=True)
+        (uploads / "vecchio.pdf").write_bytes(b"%PDF earlier turn")
+        (uploads / "nuovo.png").write_bytes(b"png this turn")
+        events = [
+            ev
+            async for ev in ad.chat_stream(
+                user,
+                cid,
+                "e ad aprile?",
+                profile_slug="aion_std",
+                project_slug=None,
+                turn_attachments=turn,
+            )
+        ]
+        async with get_async_session_maker()() as s:
+            conv = await s.get(Conversation, cid)
+        return cid, events, conv
+
+    cid, events, conv = _run(scenario())
+    meta = json.loads(conv.metadata_json)
+    assert conv.title == "Quanto abbiamo venduto a marzo?"
+    assert meta["source"] == "telegram"
+    assert meta["thinking_enabled"] is True and meta["reasoning_effort"] == "max"
+
+    text, kw = seen["stream"]
+    assert text == "e ad aprile?" and kw["reasoning_effort"] == "max"
+    assert kw["turn_attachments"] == turn
+    assert [a["relative_path"] for a in kw["attachments"]] == [
+        "uploads/nuovo.png",
+        "uploads/vecchio.pdf",
+    ]
+    assert kw["metadata"] == {"source": "telegram", "channel": "telegram"}
+    assert kw["user_message_id"] and kw["assistant_message_id"]
+    # Raw pipeline chunks were published to chat-ui followers, then the run closed.
+    run = seen["run"]
+    assert [json.loads(e["data"])["type"] for e in run.history] == ["token", "final"]
+    assert run.is_done and cid not in chat_mod._background_runs
+    assert any(isinstance(ev, Final) for ev in events)
+
+
+def test_adapter_turn_without_uploads_passes_empty_turn_list(
+    tg_db, session_dir, monkeypatch
+):
+    """No files: ``turn_attachments`` is an explicit empty list (``None`` would
+    make the pipeline re-persist every upload on this message) and thinking
+    falls back to the system default when the channel sets none."""
+    import src.agent_pipeline as agent_pipeline
+    import src.api.v1.chat as chat_mod
+    import src.main as main_mod
+    from src.channels.telegram import adapter as adapter_mod
+
+    monkeypatch.delenv("AION_DEFAULT_REASONING_EFFORT", raising=False)
+    monkeypatch.delenv("AION_THINKING_ENABLED", raising=False)
+    seen = {}
+
+    async def fake_get_agent(profile, **kwargs):
+        return object(), profile
+
+    class FakePipeline:
+        def __init__(self, **kwargs):
+            pass
+
+        async def run_stream(self, text, **kwargs):
+            seen.update(kwargs)
+            yield {"type": "final", "text": "ok"}
+
+    async def fake_runtime(runtime, uid, profile_name):
+        return {}
+
+    async def no_provider(tenant_id):
+        return None
+
+    monkeypatch.setattr(main_mod, "get_agent", fake_get_agent)
+    monkeypatch.setattr(main_mod, "set_event_loop", lambda loop: None)
+    monkeypatch.setattr(agent_pipeline, "AgentPipeline", FakePipeline)
+    monkeypatch.setattr(chat_mod, "_clamped_runtime", fake_runtime)
+    monkeypatch.setattr(adapter_mod, "_policy", lambda: _settings())
+
+    async def scenario():
+        ad = AionAdapter()
+        ad.default_llm_provider = no_provider
+        user = AionUserRef(row_id="u1", identifier="user-u1")
+        cid = await ad.create_conversation(
+            user, profile_slug="aion_std", project_slug=None
+        )
+        async for _ in ad.chat_stream(
+            user, cid, "ciao", profile_slug="aion_std", project_slug=None
+        ):
+            pass
+        async with get_async_session_maker()() as s:
+            return await s.get(Conversation, cid)
+
+    conv = _run(scenario())
+    assert conv.title == "Telegram"  # no first text: channel name as fallback
+    assert seen["turn_attachments"] == [] and seen["attachments"] is None
+    from src.channels.session_turn import resolve_channel_thinking
+
+    assert seen["reasoning_effort"] == resolve_channel_thinking(None)
+
+
+class _FileWritingAdapter(FakeAdapter):
+    """Fake AION whose agent writes deliverables in the session workspace."""
+
+    def __init__(self, names):
+        super().__init__()
+        self.names = names
+
+    async def chat_stream(self, user, cid, text, **kw):
+        from src.session_workspace import session_root
+
+        out = session_root(cid) / "workspace"
+        out.mkdir(parents=True, exist_ok=True)
+        for name in self.names:
+            (out / name).write_text("a,b\n1,2\n")
+        (out / "script.py").write_text("print(1)")  # not a deliverable
+        async for ev in super().chat_stream(user, cid, text, **kw):
+            yield ev
+
+
+def test_generated_files_are_sent_back_with_limit(session_dir):
+    """Files generated in the turn go back to the chat as documents (scripts
+    excluded); beyond ``max_outbound_files`` a notice says how many are left."""
+    from aiogram.methods import SendDocument
+
+    adapter = _FileWritingAdapter(["a.csv", "b.csv", "c.csv"])
+    h = ChatHarness(adapter, max_outbound_files=1)
+    _run(h.send("esporta i dati"))
+    docs = h.api.of(SendDocument)
+    assert len(docs) == 1 and docs[0].document.filename == "a.csv"
+    assert "Altri 2 file" in h.api.texts()[-1]
+
+
+def test_no_generated_files_no_extra_messages(session_dir):
+    """A plain answer sends no documents and no "more files" notice."""
+    from aiogram.methods import SendDocument
+
+    h = ChatHarness()
+    _run(h.send("ciao"))
+    assert h.api.of(SendDocument) == []
+    assert not any("Altri" in t for t in h.api.texts())
+
+
+def test_settings_validate_thinking_level_and_outbound_files():
+    """Channel thinking level is normalised like WhatsApp's (blank = system
+    default, invalid values rejected); ``max_outbound_files`` cannot be < 0."""
+    from pydantic import ValidationError
+
+    assert (
+        TelegramSettings(default_thinking_level=" MAX ").default_thinking_level == "max"
+    )
+    assert TelegramSettings(default_thinking_level="").default_thinking_level is None
+    assert TelegramSettings().max_outbound_files == 5
+    with pytest.raises(ValidationError):
+        TelegramSettings(default_thinking_level="huge")
+    with pytest.raises(ValidationError):
+        TelegramSettings(max_outbound_files=-1)
 
 
 def test_schema_upgrade_adds_new_columns_to_old_tables():
