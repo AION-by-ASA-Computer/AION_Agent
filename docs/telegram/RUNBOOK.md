@@ -10,9 +10,9 @@ Il canale gira **dentro il processo AION**: lo avvia e lo ferma il `_lifespan` d
 `src/api/main.py`. Riceve gli update con long polling, quindi serve solo traffico in
 uscita verso `api.telegram.org:443`, senza webhook né tunnel.
 
-## Configurazione (`.env` o Admin → Impostazioni → Telegram)
+## Configurazione (`.env` o Admin → Telegram → Configurazione)
 
-Tutte le variabili qui sotto si possono modificare dall'**Admin UI → Impostazioni → Telegram**, che le salva
+Tutte le variabili qui sotto si possono modificare dall'**Admin UI → Telegram → Configurazione**, che le salva
 come override in `data/runtime.env` (vincono sul `.env`). La pagina mostra anche lo stato del bot manager
 (connesso, Bot Management Mode, assistenti in ascolto, chiave di cifratura) e un pulsante **Verifica token**
 (`getMe` su Telegram, senza salvare). Il token resta mascherato (`***`): lasciarlo così non lo cambia.
@@ -89,7 +89,7 @@ oppure `https://t.me/BotFather?startapp`), scegliere il bot e attivare **Bot Man
   assistenti diverso da `AION_TELEGRAM_MAX_BOTS_PER_USER`; vuoto = valore predefinito. `0` impedisce di crearne.
 - **Registro.** Le ultime operazioni del canale (`tg_audit`): collegamenti, creazioni, cambi di
   configurazione e modalità, sospensioni, eliminazioni, rotazioni di token, riassegnazioni, quote.
-- **Policy del canale** (Admin → Impostazioni → Telegram → Assistenti personali):
+- **Policy del canale** (Admin → Telegram → Configurazione → Assistenti personali):
   `AION_TELEGRAM_BLOCKED_PROFILES` / `AION_TELEGRAM_BLOCKED_PROJECTS`. I profili e progetti indicati non
   compaiono in `/newbot`, `/mybots`, `/profile`, `/project` e, se un assistente li ha già, ogni messaggio
   viene rifiutato con "non disponibile su Telegram (policy dell'amministratore)".
@@ -115,13 +115,13 @@ utente). Cambiare la chiave rende **illeggibili** i token salvati: all'avvio que
 | Sintomo | Causa probabile | Cosa fare |
 |---|---|---|
 | Nessuna riga `telegram:` nei log | `AION_TELEGRAM_ENABLED` non è `1` o nome della variabile sbagliato | Il log segnala le variabili `AION_TELEGRAM_*` sconosciute; correggere e riavviare |
-| `token rifiutato da Telegram (401)` per il manager | token del manager errato o revocato | Admin → Impostazioni → Telegram → **Verifica token**, incollare quello nuovo |
+| `token rifiutato da Telegram (401)` per il manager | token del manager errato o revocato | Admin → Telegram → Configurazione → **Verifica token**, incollare quello nuovo |
 | `can_manage_bots=False` | Bot Management Mode spenta | Mini App di @BotFather → bot → Mode Settings → Bot Management Mode |
 | `/newbot` dice che manca la chiave di cifratura | `AION_CREDENTIAL_ENCRYPTION_KEY` assente in produzione | Impostarla nel `.env` e riavviare |
 | `conflitto 409` nei log | due istanze di AION sullo stesso token | Lasciarne una sola |
 | Il bot nel gruppo non risponde alle menzioni | privacy mode di Telegram | Usare `/ask@nome_bot` o rendere il bot amministratore del gruppo |
 | L'assistente esce da un gruppo appena aggiunto | assistente personale, oppure aggiunto da chi non è il creatore | Renderlo condiviso (`/mybots`) e farlo aggiungere al creatore |
-| "non disponibile su Telegram (policy…)" | profilo/progetto nella policy del canale | Admin → Impostazioni → Telegram → profili/progetti esclusi |
+| "non disponibile su Telegram (policy…)" | profilo/progetto nella policy del canale | Admin → Telegram → Configurazione → profili/progetti esclusi |
 | Assistente "sospeso: proprietario cambiato" | bot trasferito su @BotFather a un altro account | Admin → Telegram → **Riassegna** (il nuovo account deve aver collegato AION) |
 | `messaggi rich non disponibili` | il bot non supporta i messaggi rich | Nessuna azione: si usa l'HTML; `AION_TELEGRAM_RICH_MESSAGES=0` per forzarlo |
 | La build del sito docs fallisce su questo file | `<parola>` fuori da un blocco di codice (MDX) | Metterla tra backtick |
@@ -133,7 +133,7 @@ utente). Cambiare la chiave rende **illeggibili** i token salvati: all'avvio que
 3. **Elimina** (digitando lo username): sparisce dall'elenco (visibile con "Mostra eliminati").
 4. Quote: imposta `0` a un utente e prova `/newbot` con quell'account: viene rifiutato; svuota la quota e riprova.
 5. Registro: compaiono le operazioni appena fatte.
-6. Impostazioni → Telegram: metti un profilo in "Profili esclusi" e salva: sparisce da `/newbot`, e un
+6. Admin → Telegram → Configurazione: metti un profilo in "Profili esclusi" e salva: sparisce da `/newbot`, e un
    assistente che lo usa risponde "non disponibile su Telegram".
 7. Apri una chat Telegram nella Chat UI e prova a inviare via API `/v1/chat/stream`: `409 telegram_read_only`.
 8. Admin → Impostazioni: `AION_CREDENTIAL_ENCRYPTION_KEY` non è più leggibile.

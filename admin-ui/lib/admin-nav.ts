@@ -54,7 +54,6 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     labelKey: "admin_nav.groups.operations",
     items: [
       { id: "schedules", href: "/schedules", icon: Clock, labelKey: "admin_nav.schedules" },
-      { id: "telegram", href: "/telegram", icon: Send, labelKey: "admin_nav.telegram" },
     ],
   },
   {
@@ -81,6 +80,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     items: [
       { id: "settings", href: "/settings", icon: Settings, labelKey: "admin_nav.settings" },
       { id: "whatsapp", href: "/whatsapp", icon: MessageCircle, labelKey: "admin_nav.whatsapp" },
+      { id: "telegram", href: "/telegram", icon: Send, labelKey: "admin_nav.telegram" },
     ],
   },
 ];
