@@ -11,6 +11,14 @@
 #   - backend: uvicorn --reload via bind-mount di src/
 #   - chat-ui: next dev via bind-mount di chat-ui/
 #   - config/MCP: git pull su config_std/ + mcp_servers_std/, poi restart backend
+#
+# Samba di test (opzionale, per il connettore MCP `smb_files`, vedi PLAN_win_server_mcp.md):
+#   docker compose -f docker-compose.dev.yml --profile smb up samba
+#   - dal backend (rete aion_dev_net):  host `samba`, porta 445
+#   - dall'host (smbclient, test di integrazione): localhost:1445
+#   - utenti: alice / alice-pass-dev (Documenti rw + Archivio ro),
+#             bob   / bob-pass-dev   (solo Documenti: su Archivio -> access denied)
+#   Credenziali SOLO per sviluppo locale: la porta e' esposta solo su 127.0.0.1.
 
 name: aion-dev
 
@@ -109,6 +117,32 @@ services:
       - backend
     networks: [aion_dev_net]
 
+  # File server SMB di test per il connettore `smb_files`. Attivo solo con
+  # `--profile smb`, quindi non parte con il normale `docker compose up`.
+  # Immagine: variante smbd-only (nessun avahi/wsdd2 inutili in dev), versione fissata.
+  samba:
+    image: servercontainers/samba:smbd-only-a3.24.1-s4.23.8-r0
+    profiles: ["smb"]
+    environment:
+      # Account di test (nome -> password); gli UID fissi rendono stabili i permessi sui volumi.
+      ACCOUNT_alice: alice-pass-dev
+      UID_alice: "1001"
+      ACCOUNT_bob: bob-pass-dev
+      UID_bob: "1002"
+      # Nota: Samba 4.x rifiuta gia' SMB1 di default (smbprotocol parla solo SMB2/3),
+      # quindi non serve alcun parametro globale aggiuntivo.
+      # Share con lettura+scrittura, accessibile a entrambi gli utenti.
+      SAMBA_VOLUME_CONFIG_Documenti: "[Documenti]; path=/shares/Documenti; valid users = alice bob; read only = no; browseable = yes; force user = root"
+      # Share in sola lettura, riservata ad alice: bob ottiene STATUS_ACCESS_DENIED.
+      SAMBA_VOLUME_CONFIG_Archivio: "[Archivio]; path=/shares/Archivio; valid users = alice; read only = yes; browseable = yes; force user = root"
+    ports:
+      # 1445 sull'host: su macOS la 445 e' spesso occupata dalla condivisione file di sistema.
+      - "127.0.0.1:1445:445"
+    volumes:
+      - samba_dev_documenti:/shares/Documenti
+      - samba_dev_archivio:/shares/Archivio
+    networks: [aion_dev_net]
+
 networks:
   aion_dev_net:
     driver: bridge
@@ -116,3 +150,5 @@ networks:
 volumes:
   chat_ui_node_modules:
   redis_dev_data:
+  samba_dev_documenti:
+  samba_dev_archivio:

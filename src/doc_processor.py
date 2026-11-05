@@ -7,6 +7,40 @@ import pandas as pd
 logger = logging.getLogger(__name__)
 
 
+def _extract_docx(content: bytes) -> str:
+    """Plain text of a DOCX: body paragraphs, then tables as tab-separated rows."""
+    from docx import Document
+
+    doc = Document(io.BytesIO(content))
+    lines = [p.text for p in doc.paragraphs if p.text.strip()]
+    for table in doc.tables:
+        for row in table.rows:
+            lines.append("\t".join(cell.text.strip() for cell in row.cells))
+    return "\n".join(lines)
+
+
+def _extract_xlsx(content: bytes) -> str:
+    """Text dump of an XLSX: one block per sheet, tab-separated rows.
+
+    ``data_only`` returns cached formula results instead of formula strings;
+    ``read_only`` keeps memory flat on large workbooks.
+    """
+    from openpyxl import load_workbook
+
+    wb = load_workbook(io.BytesIO(content), read_only=True, data_only=True)
+    try:
+        blocks = []
+        for ws in wb.worksheets:
+            rows = [
+                "\t".join("" if c is None else str(c) for c in row)
+                for row in ws.iter_rows(values_only=True)
+            ]
+            blocks.append(f"## Sheet: {ws.title}\n" + "\n".join(rows))
+        return "\n\n".join(blocks)
+    finally:
+        wb.close()
+
+
 def extract_text_from_bytes(content: bytes, filename: str, mime_type: str) -> str:
     """Extract text from various file formats."""
     otel_enabled = os.getenv("AION_OTEL_ENABLED", "0") == "1"
@@ -56,6 +90,12 @@ def extract_text_from_bytes(content: bytes, filename: str, mime_type: str) -> st
                 for page in reader.pages:
                     text += page.extract_text() + "\n"
                 out = text
+
+            elif filename.lower().endswith(".docx") or "wordprocessingml" in mime_type:
+                out = _extract_docx(content)
+
+            elif filename.lower().endswith(".xlsx") or "spreadsheetml" in mime_type:
+                out = _extract_xlsx(content)
 
             elif "csv" in mime_type or filename.lower().endswith(".csv"):
                 df = pd.read_csv(io.BytesIO(content))
