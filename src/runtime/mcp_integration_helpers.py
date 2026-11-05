@@ -30,6 +30,98 @@ from src.runtime.credential_store import (
 
 _OAUTH_MANAGED_KEYS = frozenset({"OAUTH_TOKEN", "OAUTH_REFRESH_TOKEN"})
 
+# Value shown to the UI for any write-only secret (never the real value).
+WRITE_ONLY_HINT = "****"
+
+
+def write_only_keys_from_schema(schema: Optional[List[Dict[str, Any]]]) -> Set[str]:
+    """Keys of the credential fields flagged ``write_only`` in a form schema."""
+    return {
+        str(f.get("key")).strip()
+        for f in (schema or [])
+        if isinstance(f, dict) and f.get("write_only") and f.get("key")
+    }
+
+
+def apply_catalog_write_only(
+    schema: List[Dict[str, Any]], connector_row: Optional[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
+    """Re-mark as ``write_only`` the fields the connector catalog declares so.
+
+    The catalog is the source of truth: the schema stored in the DB can lose the
+    flag (admin Hub editor, ``schema_override`` policy saves, LLM enricher), and a
+    lost flag must never re-open the "reveal password" path. Returns new dicts;
+    the input list is not mutated.
+    """
+    # Imported lazily: mcp_integration_sync imports this module at load time.
+    from src.mcp_integration_sync import credential_schema_from_connector
+
+    catalog_keys = write_only_keys_from_schema(
+        credential_schema_from_connector(connector_row)
+    )
+    out: List[Dict[str, Any]] = []
+    for field in schema:
+        if field.get("key") in catalog_keys:
+            field = {**field, "write_only": True, "type": "password"}
+        out.append(field)
+    return out
+
+
+async def credential_key_is_write_only(server_slug: str, key: str) -> bool:
+    """True when ``key`` of ``server_slug`` must never be returned to any client.
+
+    Unions the write-only keys of the DB schema and of the catalog, and checks every
+    slug variant (``smb_files`` / ``smb-files``) and key alias that
+    ``credential_store.get_credential`` would resolve, so the check cannot be
+    bypassed by spelling the slug or key differently.
+    """
+    from src.runtime.credential_store import _slug_variants, credential_key_aliases
+
+    wanted = set(credential_key_aliases(key))
+    if not wanted:
+        return False
+    protected: Set[str] = set()
+    for slug in _slug_variants(server_slug):
+        async with get_async_session_maker()() as session:
+            row = (
+                (
+                    await session.execute(
+                        select(McpServerConfig).where(
+                            McpServerConfig.server_slug == slug
+                        )
+                    )
+                )
+                .scalars()
+                .first()
+            )
+        if row is not None:
+            try:
+                protected |= write_only_keys_from_schema(
+                    json.loads(row.credential_schema_json or "[]")
+                )
+            except ValueError:
+                pass
+        # Catalog lookup is best effort: on failure we still enforce the DB flags.
+        try:
+            from src.mcp_integration_sync import credential_schema_from_connector
+            from src.mcp_manager import mcp_manager
+
+            mcp_manager.load_registry()
+            connector_row = resolve_connector_row_for_mcp_server(
+                slug,
+                mcp_manager.get_server_config(slug) or {},
+                load_mcp_connector_catalog(),
+            )
+            protected |= write_only_keys_from_schema(
+                credential_schema_from_connector(connector_row)
+            )
+        except Exception:
+            pass
+    expanded: Set[str] = set()
+    for k in protected:
+        expanded.update(credential_key_aliases(k))
+    return bool(wanted & expanded)
+
 
 def oauth_access_token_fresh(hints: List[Dict[str, Any]]) -> bool:
     return any(
@@ -430,6 +522,16 @@ async def integration_row_to_public_dict(
             configured = configured and has_valid_oauth_session
 
     if show_form:
+        # Re-assert write_only from the catalog and never expose the stored hint of
+        # such fields (legacy rows may hold a non-masked hint).
+        schema = apply_catalog_write_only(schema, connector_row)
+        wo_keys = write_only_keys_from_schema(schema)
+        if wo_keys:
+            hints = [
+                {**h, "display_hint": WRITE_ONLY_HINT} if h.get("key") in wo_keys else h
+                for h in hints
+            ]
+
         from src.runtime.mcp_integration_integrity import (
             enrich_credential_schema_with_env_placeholders,
         )

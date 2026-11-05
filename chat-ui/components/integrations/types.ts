@@ -9,6 +9,8 @@ export type CredentialField = {
   /** Placeholder per env registry: ${AION_USER_SLUG__KEY} */
   env_placeholder?: string;
   registry_env_key?: string;
+  /** Value is never readable back from the server: no "reveal saved value" action. */
+  write_only?: boolean;
 };
 
 export type Integration = {

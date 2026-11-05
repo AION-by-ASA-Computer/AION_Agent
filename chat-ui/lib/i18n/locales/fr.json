@@ -607,6 +607,7 @@
     "field_saved_placeholder": "•••••••••••• (valeur enregistrée)",
     "filter_no_results": "Aucune intégration trouvée avec ce filtre.",
     "modify_field_hint": "Laissez inchangé pour conserver la valeur enregistrée, ou saisissez pour la remplacer.",
+    "write_only_field_hint": "Par sécurité, le mot de passe enregistré ne peut pas être affiché : saisissez-en un nouveau pour le remplacer.",
     "oauth_callback_missing_slug": "Erreur de callback OAuth : identifiant d'intégration manquant.",
     "oauth_callback_state_mismatch": "Échec du contrôle de sécurité OAuth : non-concordance de l'état.",
     "oauth_connect_service": "Connecter {{service}}",

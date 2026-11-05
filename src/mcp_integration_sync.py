@@ -113,6 +113,14 @@ def _oauth_dest_keys(connector_row: Optional[Dict[str, Any]]) -> Set[str]:
 def credential_schema_from_connector(
     connector_row: Optional[Dict[str, Any]],
 ) -> List[Dict[str, Any]]:
+    """Build the per-user credential form schema from a catalog connector row.
+
+    Each field carries ``key/label/type/required/description``. A field declared
+    ``write_only: true`` in the catalog (e.g. a Windows domain password) is always
+    treated as a secret and gets ``write_only: True`` so the backend never returns
+    its value and chat-ui hides the "reveal" toggle. The flag is emitted only when
+    true, so schemas of other connectors stay byte-identical (no spurious DB rewrites).
+    """
     if not connector_row:
         return []
     raw = connector_row.get("credential_fields")
@@ -129,18 +137,23 @@ def credential_schema_from_connector(
                 secret = bool(
                     re.search(r"TOKEN|SECRET|PASSWORD|API_KEY|REFRESH", key, re.I)
                 )
+            # A write-only value is by definition a secret, whatever ``secret`` says.
+            write_only = bool(row.get("write_only"))
+            if write_only:
+                secret = True
             ftype = "password" if secret else "text"
             if str(row.get("type") or "").lower() == "oauth":
                 ftype = "oauth"
-            out.append(
-                {
-                    "key": key,
-                    "label": str(row.get("label") or row.get("label_it") or key),
-                    "type": ftype,
-                    "required": bool(row.get("required", True)),
-                    "description": row.get("description") or row.get("description_it"),
-                }
-            )
+            field: Dict[str, Any] = {
+                "key": key,
+                "label": str(row.get("label") or row.get("label_it") or key),
+                "type": ftype,
+                "required": bool(row.get("required", True)),
+                "description": row.get("description") or row.get("description_it"),
+            }
+            if write_only:
+                field["write_only"] = True
+            out.append(field)
         return out
     req = connector_row.get("required_env") or []
     opt = connector_row.get("optional_env") or []
