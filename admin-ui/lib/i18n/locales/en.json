@@ -696,6 +696,7 @@
         "key_ph": "VARIABLE_NAME",
         "value_ph": "Value",
         "secret_ph": "Secret value",
+        "secret_replace_ph": "New value (leave empty to keep it)",
         "edit": "Edit",
         "cancel_edit": "Cancel edit",
         "show": "Show value",
