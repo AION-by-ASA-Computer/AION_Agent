@@ -5,9 +5,11 @@ tool many times, so after the *first* logon failure we persist a marker and
 refuse to contact the server again with the same credentials.
 
 The marker lives in the per-user MCP HOME (``data/users/<uid>/mcp_home``), so
-it is shared by every MCP process of that user (several open chats).  It stores
-only an HMAC fingerprint of user+password with a random per-file salt, never
-the password.  When the user saves new credentials the fingerprint changes and
+it is shared by every MCP process of that user (several open chats).  There is
+one marker per *credential set*: AD locks the account, and one set is one
+account, so a bad password for the servers of set ``A`` must not block the
+servers of set ``B`` (another domain).  It stores only an HMAC fingerprint of
+user+password with a random per-file salt, never the password.  When the user saves new credentials the fingerprint changes and
 the block lifts by itself.  ``account_locked`` blocks expire after a window
 because the lockout itself eventually expires on the server.
 """
@@ -23,7 +25,7 @@ import time
 from pathlib import Path
 from typing import Optional, Tuple
 
-MARKER_NAME = ".smb_auth_block.json"
+MARKER_PREFIX = ".smb_auth_block"
 
 # NTSTATUS -> error code.  Numeric values because smbprotocol's NtStatus
 # lacks some of these constants.
@@ -37,10 +39,13 @@ LOGON_STATUSES = {
 LOGON_CODES = frozenset(LOGON_STATUSES.values())
 
 
-def _marker_path() -> Optional[Path]:
-    """Marker location from the isolated HOME; ``None`` if there is no HOME."""
+def _marker_path(cred_set: str) -> Optional[Path]:
+    """Marker of one credential set in the isolated HOME; ``None`` without HOME.
+
+    ``cred_set`` is validated upstream (``[A-Z0-9]``), so it is safe in a file name.
+    """
     home = os.environ.get("HOME") or ""
-    return Path(home) / MARKER_NAME if home else None
+    return Path(home) / f"{MARKER_PREFIX}.{cred_set.lower()}.json" if home else None
 
 
 def _fingerprint(salt: str, username: str, password: str) -> str:
@@ -49,9 +54,9 @@ def _fingerprint(salt: str, username: str, password: str) -> str:
     ).hexdigest()
 
 
-def record_failure(code: str, username: str, password: str) -> None:
+def record_failure(code: str, username: str, password: str, cred_set: str) -> None:
     """Persist the block after a logon failure (atomic write, mode 0600)."""
-    path = _marker_path()
+    path = _marker_path(cred_set)
     if path is None:
         return
     salt = secrets.token_hex(16)
@@ -69,9 +74,9 @@ def record_failure(code: str, username: str, password: str) -> None:
     os.replace(tmp, path)  # atomic: concurrent readers never see a partial file
 
 
-def clear() -> None:
-    """Remove the block (called after a successful logon)."""
-    path = _marker_path()
+def clear(cred_set: str) -> None:
+    """Remove the block of one set (called after a successful logon)."""
+    path = _marker_path(cred_set)
     if path is not None:
         try:
             path.unlink()
@@ -80,10 +85,10 @@ def clear() -> None:
 
 
 def check(
-    username: str, password: str, lockout_minutes: int
+    username: str, password: str, lockout_minutes: int, cred_set: str
 ) -> Optional[Tuple[str, str]]:
-    """Return ``(code, message)`` if these exact credentials are blocked."""
-    path = _marker_path()
+    """Return ``(code, message)`` if these exact credentials of ``cred_set`` are blocked."""
+    path = _marker_path(cred_set)
     if path is None or not path.exists():
         return None
     try:
@@ -98,7 +103,7 @@ def check(
     code = data.get("code", "auth_failed")
     expired = time.time() - float(data.get("at", 0)) > lockout_minutes * 60
     if code == "account_locked" and expired:
-        clear()  # the server-side lockout has presumably expired
+        clear(cred_set)  # the server-side lockout has presumably expired
         return None
     return code, (
         "Windows login was rejected earlier with these credentials and is not "

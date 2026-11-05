@@ -127,6 +127,9 @@ smb_files:
   env:
     SMB_USERNAME: "${AION_USER_SMB_FILES__SMB_USERNAME}"
     SMB_PASSWORD: "${AION_USER_SMB_FILES__SMB_PASSWORD}"
+    # JSON of all the user's smb_files credentials: carries the extra credential
+    # sets (SMB_USERNAME__<SET> / SMB_PASSWORD__<SET>) of servers in other domains.
+    SMB_EXTRA_CREDENTIALS: "${AION_USER_SMB_FILES__*}"
 
 # --- Per-user MCP credentials (Approccio A + HOME isolation Approccio B) ---
 # Con AION_MCP_USER_CREDENTIALS=1, i valori sotto possono usare placeholder risolti dal DB

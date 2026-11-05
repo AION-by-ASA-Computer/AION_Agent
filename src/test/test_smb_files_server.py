@@ -20,7 +20,7 @@ from src.mcp_manager import (
 from src.runtime.credential_store import generate_probe_mock_value
 from src.tools.smb_files import client as smb_client
 from src.tools.smb_files import credentials, ops
-from src.tools.smb_files.settings_store import SmbConfig, SmbShare
+from src.tools.smb_files.settings_store import SmbConfig, SmbServer, SmbShare
 
 _REPO = Path(__file__).resolve().parents[2]
 
@@ -46,8 +46,22 @@ EXPECTED_TOOLS = {
 }
 
 CFG = SmbConfig(
-    host="fs01",
-    shares=(SmbShare("Documenti", label="Docs"), SmbShare("Archivio", read_only=True)),
+    servers=(
+        SmbServer(
+            alias="fs01",
+            host="fs01",
+            shares=(
+                SmbShare("Documenti", label="Docs"),
+                SmbShare("Archivio", read_only=True),
+            ),
+        ),
+        SmbServer(
+            alias="fs02",
+            host="fs02",
+            credential_set="ESTERO",
+            shares=(SmbShare("Documenti"),),
+        ),
+    ),
 )
 
 
@@ -97,7 +111,7 @@ def test_list_tools_exposes_read_write_tools_and_no_delete():
 def test_tool_reports_not_configured_without_admin_settings(monkeypatch):
     """Missing/disabled admin config yields a clean not_configured tool error."""
     _use_config(monkeypatch, None)
-    out = _call("smb_list_dir", {"path": "Documenti"})
+    out = _call("smb_list_dir", {"path": "fs01/Documenti"})
     assert out == {
         "ok": False,
         "error": "not_configured",
@@ -120,21 +134,36 @@ def test_probe_mock_credentials_never_reach_the_server(monkeypatch):
     _use_config(monkeypatch, CFG)
     monkeypatch.setenv("SMB_USERNAME", generate_probe_mock_value("SMB_USERNAME"))
     monkeypatch.setenv("SMB_PASSWORD", generate_probe_mock_value("SMB_PASSWORD"))
-    out = _call("smb_list_dir", {"path": "Documenti"})
+    out = _call("smb_list_dir", {"path": "fs01/Documenti"})
     assert out["ok"] is False
     assert out["error"] == "credentials_missing"
 
 
+def test_probe_mock_wildcard_never_reaches_extra_set_servers(monkeypatch):
+    """The probe mock of SMB_EXTRA_CREDENTIALS is not JSON: servers of another
+    credential set report credentials_missing without any SMB call."""
+    _use_config(monkeypatch, CFG)
+    monkeypatch.setenv("SMB_USERNAME", "ACME\\mario")
+    monkeypatch.setenv("SMB_PASSWORD", "pw")
+    monkeypatch.setenv(
+        credentials.EXTRA_ENV, generate_probe_mock_value(credentials.EXTRA_ENV)
+    )
+    out = _call("smb_list_dir", {"path": "fs02/Documenti"})
+    assert out["error"] == "credentials_missing"
+
+
 def test_list_shares_returns_admin_allowlist(monkeypatch):
-    """smb_list_shares answers from the admin config with read-only flags."""
+    """smb_list_shares answers from the admin config: every server with the
+    path prefix to use and the read-only flags."""
     _use_config(monkeypatch, CFG)
     out = _call("smb_list_shares")
     assert out["ok"] is True
-    assert out["host"] == "fs01"
-    assert out["shares"] == [
-        {"name": "Documenti", "label": "Docs", "read_only": False},
-        {"name": "Archivio", "label": "", "read_only": True},
+    assert [s["server"] for s in out["servers"]] == ["fs01", "fs02"]
+    assert out["servers"][0]["shares"] == [
+        {"name": "Documenti", "path": "fs01/Documenti", "label": "Docs", "read_only": False},
+        {"name": "Archivio", "path": "fs01/Archivio", "label": "", "read_only": True},
     ]
+    assert out["servers"][1]["shares"][0]["path"] == "fs02/Documenti"
 
 
 def test_probe_mock_values_are_recognised_as_fake():
@@ -153,7 +182,9 @@ def test_registry_entry_is_per_user_and_session_scoped():
     entry = registry["smb_files"]
     assert entry["args"] == ["-u", "smb_files/server.py"]
     assert entry["aion_connector_id"] == "smb_files"
-    assert set(entry["env"]) == {"SMB_USERNAME", "SMB_PASSWORD"}
+    assert set(entry["env"]) == {"SMB_USERNAME", "SMB_PASSWORD", "SMB_EXTRA_CREDENTIALS"}
+    # Extra credential sets travel as one JSON blob through the wildcard placeholder.
+    assert entry["env"]["SMB_EXTRA_CREDENTIALS"] == "${AION_USER_SMB_FILES__*}"
     assert _server_needs_user_credentials(entry)
     assert "smb_files" in _DEFAULT_SESSION_SCOPED_SERVERS
 

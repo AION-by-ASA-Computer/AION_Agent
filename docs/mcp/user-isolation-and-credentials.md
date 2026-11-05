@@ -33,6 +33,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 - `${VAR}` — risolto da `os.environ` / `.env` (comportamento storico).
 - `${AION_USER_<SLUG_MAIUSCOLO>__<CHIAVE>}` — risolto dal DB per l’utente corrente, es. `${AION_USER_EMAIL_MCP__ACCESS_TOKEN}` per lo slug registry `email_mcp`.
 - `${AION_USER_<CHIAVE>}` — forma breve: la chiave è relativa allo **slug del server** in cui compare la mappa `env`.
+- `${AION_USER_<SLUG_MAIUSCOLO>__*}` — jolly: un oggetto JSON con **tutte** le credenziali dell'utente per lo slug (stringa vuota se non ce ne sono). Serve quando i nomi delle chiavi dipendono dalla configurazione admin e non si possono elencare nel registry, es. i set di credenziali di [`smb_files`](smb-files.md#server-multipli-e-set-di-credenziali). Non blocca mai l'avvio del worker, non genera campi nel form (la variabile che lo riceve è un trasporto) e nel probe dell'Hub riceve un valore mock non-JSON. Solo i connettori che lo dichiarano ricevono il bundle.
 
 Vedi anche il commento di esempio in `config_std/mcp_registry.yaml`.
 

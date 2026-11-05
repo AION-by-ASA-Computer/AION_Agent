@@ -477,9 +477,10 @@ connectors:
     install_type: stdio
     default_credential_mode: per_user
     description: >
-      Legge e scrive i file delle share SMB del file server Windows aziendale con le
+      Legge e scrive i file delle share SMB dei file server Windows aziendali con le
       credenziali Windows dell'utente (valgono le ACL NTFS). Server e share sono
-      configurati dall'amministratore. Nessuna cancellazione. Inserisci utente e
+      configurati dall'amministratore; i server di un altro dominio chiedono una
+      coppia di credenziali in più. Nessuna cancellazione. Inserisci utente e
       password solo qui: non scriverle mai in chat.
     tags: [smb, windows, fileserver, files, share]
     mcp_name_hints: [smb_files, smb, fileserver]
@@ -499,3 +500,4 @@ connectors:
         env:
           SMB_USERNAME: "${AION_USER_SMB_FILES__SMB_USERNAME}"
           SMB_PASSWORD: "${AION_USER_SMB_FILES__SMB_PASSWORD}"
+          SMB_EXTRA_CREDENTIALS: "${AION_USER_SMB_FILES__*}"
