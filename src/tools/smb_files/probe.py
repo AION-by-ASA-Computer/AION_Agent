@@ -1,6 +1,6 @@
 """Admin connection test for the SMB file server ("Testa connessione" in admin-ui).
 
-Called by ``POST /admin/smb/test`` (``src/api/admin_smb.py``) through
+Called by ``POST /admin/smb/servers/{id}/test`` (``src/api/admin_smb.py``) through
 ``asyncio.to_thread`` because smbprotocol is blocking.  Two levels:
 
 * without credentials: TCP connect + SMB2/3 negotiate only, which proves the
@@ -22,7 +22,7 @@ from typing import Any, Dict, List, Optional
 
 from src.tools.smb_files.client import CONNECT_TIMEOUT, map_exception
 from src.tools.smb_files.credentials import normalize_username
-from src.tools.smb_files.settings_store import SmbConfig
+from src.tools.smb_files.settings_store import SmbServer
 
 logger = logging.getLogger("aion.smb_files.probe")
 
@@ -56,9 +56,11 @@ def _safe_disconnect(obj: Any, **kwargs: Any) -> None:
 
 
 def test_connection(
-    cfg: SmbConfig, username: Optional[str] = None, password: Optional[str] = None
+    server: SmbServer,
+    username: Optional[str] = None,
+    password: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Probe the configured server; returns a JSON-serialisable result.
+    """Probe one configured server; returns a JSON-serialisable result.
 
     Result keys: ``ok``, ``error`` (code of the first blocking failure),
     ``negotiated``, ``dialect``, ``authenticated`` (``None`` without
@@ -82,7 +84,7 @@ def test_connection(
     conn = session = None
     try:
         # Step 1: TCP + negotiate (no credentials involved).
-        conn = Connection(uuid.uuid4(), cfg.host, cfg.port)
+        conn = Connection(uuid.uuid4(), server.host, server.port)
         try:
             conn.connect(timeout=CONNECT_TIMEOUT)
         except Exception as exc:  # noqa: BLE001 - mapped to a code
@@ -98,10 +100,10 @@ def test_connection(
         # a wrong password counts against the AD lockout threshold).
         session = Session(
             conn,
-            username=normalize_username(username or "", cfg.default_domain),
+            username=normalize_username(username or "", server.default_domain),
             password=password,
-            require_encryption=cfg.require_encryption,
-            auth_protocol=cfg.auth_protocol,
+            require_encryption=server.require_encryption,
+            auth_protocol=server.auth_protocol,
         )
         try:
             session.connect()
@@ -113,8 +115,8 @@ def test_connection(
 
         # Step 3: every allowed share must be reachable with these credentials.
         shares: List[Dict[str, Any]] = []
-        for share in cfg.shares:
-            tree = TreeConnect(session, rf"\\{cfg.host}\{share.name}")
+        for share in server.shares:
+            tree = TreeConnect(session, rf"\\{server.host}\{share.name}")
             try:
                 tree.connect()
                 shares.append({"name": share.name, "ok": True, "error": None})
@@ -134,7 +136,7 @@ def test_connection(
         _safe_disconnect(conn, close=True)
         logger.info(
             "smb test host=%s ok=%s error=%s with_credentials=%s",
-            cfg.host,
+            server.host,
             result["ok"],
             result["error"],
             with_creds,

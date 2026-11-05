@@ -89,6 +89,20 @@ _ENV_PATTERNS = [
 
 _AION_USER_KEY_RE = re.compile(r"^\$\{AION_USER_[A-Z0-9_]+__([A-Z0-9_]+)\}$")
 _ENV_PLACEHOLDER_RE = re.compile(r"^\$\{([A-Z][A-Z0-9_]+)\}$")
+# Wildcard ``${AION_USER_<SLUG>__*}``: the process receives *all* of the user's
+# credentials for the slug as one JSON object (see ``credential_store``).  The
+# env var carrying it is plumbing, not something the user fills in, so it must
+# never become a credential form field.
+_AION_USER_WILDCARD_RE = re.compile(r"^\$\{AION_USER_[A-Z0-9_]+__\*\}$")
+
+
+def _wildcard_env_keys(env: Dict[str, Any]) -> Set[str]:
+    """Registry env names whose value is the ``${AION_USER_<SLUG>__*}`` wildcard."""
+    return {
+        str(k).strip()
+        for k, v in (env or {}).items()
+        if isinstance(v, str) and _AION_USER_WILDCARD_RE.match(v.strip())
+    }
 
 _CONFIG_FILE_HINTS = re.compile(
     r"config\.toml|\.config/|xdg|XDG_CONFIG|credentials?\s+file|file\s+di\s+configurazione",
@@ -392,6 +406,8 @@ def _keys_from_registry_env(env: Dict[str, Any]) -> Set[str]:
     """Chiavi env del registry (nome variabile MCP), non il testo interno ai placeholder."""
     found: Set[str] = set()
     for key, val in (env or {}).items():
+        if isinstance(val, str) and _AION_USER_WILDCARD_RE.match(val.strip()):
+            continue  # wildcard carrier, not a user-facing key
         if isinstance(key, str) and key.strip() and not _should_skip_env(key.strip()):
             found.add(key.strip())
         if isinstance(val, str):
@@ -1128,6 +1144,9 @@ def discover_mcp_credentials(
         )
         keys |= _keys_from_text(readme_text)
         sources.append("README.md")
+
+    # Source/README scans may also mention the wildcard carrier: drop it.
+    keys -= _wildcard_env_keys(env)
 
     # Solo chiavi che sembrano credenziali o config server (host/port)
     cred_keys = sorted(

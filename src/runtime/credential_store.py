@@ -44,6 +44,12 @@ def _oauth_refresh_lock(user_id: str, server_slug: str, tenant_id: str) -> async
 
 _USER_CREDENTIAL_RE = re.compile(r"^\$\{(AION_USER_[A-Z0-9_]+)__([A-Z0-9_]+)\}$")
 _USER_CREDENTIAL_SIMPLE_RE = re.compile(r"^\$\{(AION_USER_[A-Z0-9_]+)\}$")
+# Wildcard ``${AION_USER_<SLUG>__*}``: resolves to a JSON object with *all* of
+# the user's credentials for that connector.  Used when the key names depend on
+# admin configuration and cannot be listed in the static registry env (e.g.
+# smb_files credential sets ``SMB_USERNAME__<SET>``).  Registry-only syntax:
+# only connectors that opt in receive the extra keys.
+_USER_CREDENTIAL_WILDCARD_RE = re.compile(r"^\$\{(AION_USER_[A-Z0-9_]+?)__\*\}$")
 
 # Legacy ↔ canonical keys (email MCP migration); lookup tries all aliases.
 _CREDENTIAL_KEY_ALIASES: Dict[str, tuple[str, ...]] = {
@@ -717,6 +723,28 @@ async def get_all_credentials_for_server(
     return result
 
 
+def _credential_lookup_slugs(full_prefix: str, server_slug: str) -> list[str]:
+    """Slugs to search for a ``${AION_USER_<PREFIX>__...}`` placeholder.
+
+    Order: the spawning server's slug variants, then the slug encoded in the
+    placeholder prefix, then the legacy lowercase-underscore form.
+    """
+    lookup_slugs: list[str] = []
+    if server_slug:
+        lookup_slugs.extend(_slug_variants(server_slug))
+    from_prefix = _server_slug_from_env_prefix(full_prefix)
+    if from_prefix:
+        for s in _slug_variants(from_prefix):
+            if s not in lookup_slugs:
+                lookup_slugs.append(s)
+    legacy_underscore = full_prefix[len("AION_USER_") :].lower()
+    if legacy_underscore:
+        for s in _slug_variants(legacy_underscore):
+            if s not in lookup_slugs:
+                lookup_slugs.append(s)
+    return lookup_slugs
+
+
 async def resolve_user_credential_string(
     obj: str,
     *,
@@ -730,24 +758,24 @@ async def resolve_user_credential_string(
 
     effective_uid = user_id or "default"
 
+    mw = _USER_CREDENTIAL_WILDCARD_RE.match(obj)
+    if mw:
+        # Merge every slug variant; the first variant holding a key wins, like
+        # the single-key lookup below.  Empty -> "" (same as an unset key).
+        merged: Dict[str, str] = {}
+        for slug in _credential_lookup_slugs(mw.group(1), server_slug):
+            found = await get_all_credentials_for_server(
+                effective_uid, slug, tenant_id=tenant_id
+            )
+            for key, val in found.items():
+                merged.setdefault(key, normalize_inline_secret(val, cred_key=key))
+        return json.dumps(merged, sort_keys=True) if merged else ""
+
     m = _USER_CREDENTIAL_RE.match(obj)
     if m:
         full_prefix = m.group(1)
         cred_key = m.group(2)
-        lookup_slugs: list[str] = []
-        if server_slug:
-            lookup_slugs.extend(_slug_variants(server_slug))
-        from_prefix = _server_slug_from_env_prefix(full_prefix)
-        if from_prefix:
-            for s in _slug_variants(from_prefix):
-                if s not in lookup_slugs:
-                    lookup_slugs.append(s)
-        legacy_underscore = full_prefix[len("AION_USER_") :].lower()
-        if legacy_underscore:
-            for s in _slug_variants(legacy_underscore):
-                if s not in lookup_slugs:
-                    lookup_slugs.append(s)
-        for slug in lookup_slugs:
+        for slug in _credential_lookup_slugs(full_prefix, server_slug):
             val = await get_credential(
                 effective_uid, slug, cred_key, tenant_id=tenant_id
             )
@@ -914,6 +942,11 @@ async def resolve_mcp_env_for_user(
     out: Dict[str, Any] = {}
     is_probe = user_id == "admin-probe" or "probe" in str(user_id).lower()
     for k, v in env.items():
+        if is_probe and isinstance(v, str) and _USER_CREDENTIAL_WILDCARD_RE.match(v):
+            # A probe never receives the full credential bundle; the mock is
+            # not JSON, so connectors treat it as "not configured".
+            out[k] = generate_probe_mock_value(k)
+            continue
         if isinstance(v, str):
             val = await resolve_user_credential_string(
                 v, user_id=user_id, tenant_id=tenant_id, server_slug=server_slug

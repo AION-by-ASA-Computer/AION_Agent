@@ -77,9 +77,14 @@ async def credential_key_is_write_only(server_slug: str, key: str) -> bool:
     """
     from src.runtime.credential_store import _slug_variants, credential_key_aliases
 
+    from src.runtime.dynamic_credential_fields import dynamic_key_is_write_only
+
     wanted = set(credential_key_aliases(key))
     if not wanted:
         return False
+    # Admin-dependent password keys (``SMB_PASSWORD__<SET>``) are in no schema.
+    if any(dynamic_key_is_write_only(server_slug, k) for k in wanted):
+        return True
     protected: Set[str] = set()
     for slug in _slug_variants(server_slug):
         async with get_async_session_maker()() as session:
@@ -474,6 +479,17 @@ async def integration_row_to_public_dict(
             hints = await refresh_oauth_hints_if_needed(
                 user_id, r.server_slug, tenant_id, hints
             )
+
+    # Admin-dependent fields (e.g. one smb_files pair per extra credential set);
+    # before the saved-keys block so saved extra pairs keep their proper labels.
+    if show_form:
+        from src.runtime.dynamic_credential_fields import (
+            apply_dynamic_credential_fields,
+        )
+
+        schema = await apply_dynamic_credential_fields(
+            schema, r.server_slug, tenant_id
+        )
 
     # Include saved credential keys not in admin schema so users can still edit them.
     if show_form and hints:

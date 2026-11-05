@@ -392,12 +392,16 @@ See `docs/integrations/whatsapp.md`.
 
 `smb_files` MCP server (`mcp_servers_std/smb_files/server.py`, logic in `src/tools/smb_files/`) lets the
 agent read/write files on company Windows shares with the **calling user's own** Windows credentials
-(NTLM, NTFS ACLs apply; no delete tool). Users enter `SMB_USERNAME`/`SMB_PASSWORD` in chat-ui (per-user
-credential store; the password is a `write_only` field, `GET /v1/integrations/credentials/...` answers
-403 `secret_write_only`). The admin sets host, allowed shares (optionally read-only) and limits per tenant in
-admin-ui → Settings → File server (`/admin/smb*` in `src/api/admin_smb.py`, table `smb_settings`).
-An `auth_guard` stops retries after the first logon failure to avoid AD account lockout.
-Dev server: `docker compose -f docker-compose.dev.yml --profile smb up samba` (host port 1445).
+(NTLM, NTFS ACLs apply; no delete tool). The admin configures up to 20 servers per tenant in admin-ui →
+Settings → File server (`/admin/smb` globals + `/admin/smb/servers*` in `src/api/admin_smb.py`, tables
+`smb_settings` + `smb_servers`): alias, host, allowed shares (optionally read-only) and a **credential set**.
+Agent paths are `alias/Share/path`. Users enter `SMB_USERNAME`/`SMB_PASSWORD` (set `DEFAULT`, required) and
+optional `SMB_USERNAME__<SET>`/`SMB_PASSWORD__<SET>` per extra set in chat-ui; the extra pairs reach the
+process as JSON via the `${AION_USER_SMB_FILES__*}` wildcard (`src/runtime/dynamic_credential_fields.py`
+adds them to the form). Passwords are `write_only` (`GET /v1/integrations/credentials/...` answers 403
+`secret_write_only`). An `auth_guard` stops retries after the first logon failure, per credential set, to
+avoid AD account lockout.
+Dev servers: `docker compose -f docker-compose.dev.yml --profile smb up samba samba2` (host ports 1445/1446).
 See `docs/mcp/smb-files.md`.
 
 ### Documentation

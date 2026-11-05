@@ -5,7 +5,8 @@ Each public function is what one MCP tool calls.  They never raise: success is
 "message": ...}`` (same style as ``ocr_mcp``/``stt_mcp``), so the agent always
 gets an actionable message.  Safety rules enforced here:
 
-* every path goes through :func:`paths.resolve_path` (allowlist, no ``..``);
+* every path goes through :func:`paths.resolve_path` (server + share
+  allowlist, no ``..``), and the target's server picks the credential set;
 * writes are refused on read-only shares and never overwrite unless asked;
 * there is intentionally NO delete operation (SMB has no recycle bin);
 * sizes are capped by the admin limits; logs carry user/op/path only, never
@@ -27,7 +28,7 @@ from src.tools.smb_files.client import SmbError
 from src.tools.smb_files.credentials import CredentialsMissing, load_credentials
 from src.tools.smb_files.extract import extract_text
 from src.tools.smb_files.paths import PathError, SmbTarget, resolve_path
-from src.tools.smb_files.settings_store import SmbConfig
+from src.tools.smb_files.settings_store import SmbConfig, SmbServer
 
 logger = logging.getLogger("aion.smb_files.ops")
 
@@ -71,9 +72,9 @@ def _guarded(
     return _error(code, msg)
 
 
-def _connect(cfg: SmbConfig):
-    """Open the user's session (guard + lazy connect) and return smbclient."""
-    client.open_session(cfg, load_credentials(cfg))
+def _connect(cfg: SmbConfig, server: SmbServer):
+    """Open the user's session on ``server`` (guard + lazy connect) and return smbclient."""
+    client.open_session(server, load_credentials(server), cfg.lockout_minutes)
     return _smb()
 
 
@@ -93,17 +94,32 @@ def _entry(name: str, st) -> Dict[str, Any]:
 
 
 def list_shares(cfg: Optional[SmbConfig]) -> Dict[str, Any]:
-    """Shares the admin made available (no network access needed)."""
+    """Servers and shares the admin made available (no network access needed).
+
+    ``path`` of each share is the prefix the agent must use in the other tools.
+    """
     if cfg is None:
         return _error(
             "not_configured", "The file server is not configured by the administrator."
         )
     return {
         "ok": True,
-        "host": cfg.host,
-        "shares": [
-            {"name": s.name, "label": s.label, "read_only": s.read_only}
-            for s in cfg.shares
+        "servers": [
+            {
+                "server": srv.alias,
+                "label": srv.label,
+                "host": srv.host,
+                "shares": [
+                    {
+                        "name": s.name,
+                        "path": f"{srv.alias}/{s.name}",
+                        "label": s.label,
+                        "read_only": s.read_only,
+                    }
+                    for s in srv.shares
+                ],
+            }
+            for srv in cfg.servers
         ],
     }
 
@@ -113,7 +129,7 @@ def list_dir(cfg: Optional[SmbConfig], path: str, limit: int = 200) -> Dict[str,
 
     def run() -> Dict:
         t = resolve_path(path, cfg)
-        smb = _connect(cfg)
+        smb = _connect(cfg, t.server)
         entries = []
         for e in smb.scandir(t.unc):
             entries.append(_entry(e.name, e.stat()))
@@ -135,7 +151,7 @@ def stat(cfg: Optional[SmbConfig], path: str) -> Dict[str, Any]:
 
     def run() -> Dict:
         t = resolve_path(path, cfg)
-        st = _connect(cfg).stat(t.unc)
+        st = _connect(cfg, t.server).stat(t.unc)
         return {
             "ok": True,
             "path": t.display,
@@ -162,7 +178,7 @@ def search(
 
     def run() -> Dict:
         t = resolve_path(path, cfg)
-        smb = _connect(cfg)
+        smb = _connect(cfg, t.server)
         pat = pattern if any(c in pattern for c in "*?[") else f"*{pattern}*"
         deadline = time.monotonic() + time_budget_s
         found: List[Dict] = []
@@ -178,7 +194,8 @@ def search(
                 st = e.stat()
                 if fnmatch.fnmatch(e.name.lower(), pat.lower()):
                     item = _entry(e.name, st)
-                    item["path"] = f"{t.share}/{child_rel.replace(chr(92), '/')}"
+                    rel = child_rel.replace(chr(92), "/")
+                    item["path"] = f"{t.server.alias}/{t.share}/{rel}"
                     found.append(item)
                 if stat_mod.S_ISDIR(st.st_mode) and depth < max_depth:
                     stack.append((f"{unc}\\{e.name}", child_rel, depth + 1))
@@ -211,7 +228,7 @@ def read_file(
 
     def run() -> Dict:
         t = resolve_path(path, cfg)
-        data = _read_bytes(_connect(cfg), t, cfg.max_read_mb)
+        data = _read_bytes(_connect(cfg, t.server), t, cfg.max_read_mb)
         out = extract_text(data, os.path.basename(t.rel), max_chars, offset_chars)
         return {"ok": True, "path": t.display, **out}
 
@@ -234,7 +251,7 @@ def copy_to_session(
         from src.session_workspace import safe_resolve
 
         t = resolve_path(path, cfg)
-        data = _read_bytes(_connect(cfg), t, cfg.max_read_mb)
+        data = _read_bytes(_connect(cfg, t.server), t, cfg.max_read_mb)
         name = _UNSAFE_NAME.sub("_", dest_name or os.path.basename(t.rel) or "file")
         dest = safe_resolve(_session_id(), f"workspace/smb/{name}")
         dest.parent.mkdir(parents=True, exist_ok=True)
@@ -287,7 +304,11 @@ def write_text(
     def run() -> Dict:
         t = resolve_path(path, cfg)
         return _write(
-            _connect(cfg), t, content.encode("utf-8"), overwrite, cfg.max_write_mb
+            _connect(cfg, t.server),
+            t,
+            content.encode("utf-8"),
+            overwrite,
+            cfg.max_write_mb,
         )
 
     return _guarded("write_text", cfg, path, run)
@@ -310,7 +331,9 @@ def upload_from_session(
             ) from exc
         if not src.is_file():
             raise SmbError("session_file_not_found", "Session path is not a file.")
-        return _write(_connect(cfg), t, src.read_bytes(), overwrite, cfg.max_write_mb)
+        return _write(
+            _connect(cfg, t.server), t, src.read_bytes(), overwrite, cfg.max_write_mb
+        )
 
     return _guarded("upload_from_session", cfg, path, run)
 
@@ -323,7 +346,7 @@ def mkdir(cfg: Optional[SmbConfig], path: str, parents: bool = True) -> Dict[str
         _check_writable(t)
         if not t.rel:
             raise PathError("invalid_path", "Specify a folder path inside the share.")
-        smb = _connect(cfg)
+        smb = _connect(cfg, t.server)
         if parents:
             smb.makedirs(t.unc, exist_ok=True)
         else:
@@ -336,18 +359,22 @@ def mkdir(cfg: Optional[SmbConfig], path: str, parents: bool = True) -> Dict[str
 def move(
     cfg: Optional[SmbConfig], src: str, dst: str, overwrite: bool = False
 ) -> Dict[str, Any]:
-    """Rename/move within the same share (no cross-share: it would need a delete)."""
+    """Rename/move within the same share of the same server.
+
+    No cross-share or cross-server moves: they would need a copy + delete.
+    """
 
     def run() -> Dict:
         s, d = resolve_path(src, cfg), resolve_path(dst, cfg)
-        if s.share.lower() != d.share.lower():
+        if s.server.alias != d.server.alias or s.share.lower() != d.share.lower():
             raise SmbError(
-                "cross_share_move", "Moving between shares is not supported."
+                "cross_share_move",
+                "Moving between shares or servers is not supported.",
             )
         _check_writable(s)
         if not s.rel or not d.rel:
             raise PathError("invalid_path", "Cannot move a share root.")
-        smb = _connect(cfg)
+        smb = _connect(cfg, s.server)
         if _exists(smb, d.unc) and not overwrite:
             raise SmbError(
                 "already_exists",

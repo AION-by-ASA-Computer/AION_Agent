@@ -378,6 +378,18 @@ async def save_credentials(
             status_code=404, detail="Integration not found or not enabled"
         )
 
+    # Connectors whose credentials reach the process as one wildcard JSON
+    # (smb_files) only accept their own key format; checked before any write
+    # so a rejected request saves nothing.
+    from src.runtime.dynamic_credential_fields import credential_key_allowed
+
+    for key in body.credentials:
+        if not credential_key_allowed(body.server_slug, key):
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "credential_key_not_allowed", "key": key[:64]},
+            )
+
     for key, value in body.credentials.items():
         hint = (body.display_hints or {}).get(key)
         # The hint is client-supplied and returned by GET /integrations: for

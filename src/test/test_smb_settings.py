@@ -1,24 +1,29 @@
-"""Admin configuration of the SMB file server (phase 3 of the ``smb_files`` connector).
+"""Admin configuration of the SMB file servers (``smb_files`` connector).
 
-Covers ``/admin/smb`` (GET/PUT/test), the write side of
-``src/tools/smb_files/settings_store.py`` (persistence, cache, Hub sync) and the
-connection probe ``src/tools/smb_files/probe.py`` with smbprotocol faked, so no
-network is needed.  Pattern of ``test_smtp_settings.py``.
+Covers ``/admin/smb`` (global settings) and ``/admin/smb/servers`` (CRUD +
+per-server test), the write side of ``src/tools/smb_files/settings_store.py``
+(persistence, cache, Hub sync), the ``f3a4b5c034`` migration from the
+single-server row and the connection probe ``src/tools/smb_files/probe.py``
+with smbprotocol faked, so no network is needed.  Pattern of
+``test_smtp_settings.py``.
 """
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import logging
+from pathlib import Path
 from typing import List
 
 import pytest
 from fastapi import HTTPException
 
 from src.tools.smb_files import probe, settings_store
-from src.tools.smb_files.settings_store import SmbConfig, SmbShare
+from src.tools.smb_files.settings_store import SmbServer, SmbShare
 
 SECRET = "Win-S3cret!"
+_ROOT = Path(__file__).resolve().parents[2]
 
 
 async def _setup(monkeypatch, tmp_path):
@@ -59,11 +64,12 @@ def _auth():
     )
 
 
-def _body(**kw):
-    from src.api.admin_smb import SmbSettingsBody
+def _server(**kw):
+    """A valid server body (fs01, DEFAULT set); ``kw`` overrides fields."""
+    from src.api.admin_smb import SmbServerBody
 
     base = {
-        "enabled": True,
+        "alias": "fs01",
         "host": "fs01.corp.local",
         "port": 445,
         "default_domain": "CORP",
@@ -73,7 +79,22 @@ def _body(**kw):
         ],
     }
     base.update(kw)
-    return SmbSettingsBody(**base)
+    return SmbServerBody(**base)
+
+
+def _global(**kw):
+    from src.api.admin_smb import SmbGlobalBody
+
+    base = {"enabled": True}
+    base.update(kw)
+    return SmbGlobalBody(**base)
+
+
+async def _add(**kw) -> str:
+    """Create a server through the API and return its id."""
+    from src.api.admin_smb import create_server
+
+    return (await create_server(_server(**kw), auth=_auth()))["server_id"]
 
 
 async def _audit_ops(sm) -> List[tuple]:
@@ -86,65 +107,87 @@ async def _audit_ops(sm) -> List[tuple]:
     return [(r.operation, r.payload) for r in rows]
 
 
+async def _expect(code, coro, status=None):
+    """Await ``coro`` and assert it fails with ``code`` (and ``status`` if given)."""
+    with pytest.raises(HTTPException) as e:
+        await coro
+    assert e.value.detail == {"code": code}
+    if status is not None:
+        assert e.value.status_code == status
+
+
 @pytest.mark.anyio
-async def test_get_defaults_without_row(monkeypatch, tmp_path):
-    """No row yet: admin-ui gets a disabled, unconfigured default view."""
+async def test_get_defaults_without_rows(monkeypatch, tmp_path):
+    """No row yet: admin-ui gets a disabled, unconfigured view with no servers."""
     await _setup(monkeypatch, tmp_path)
     from src.api.admin_smb import get_smb
 
     res = await get_smb(auth=_auth())
     assert res["configured"] is False and res["enabled"] is False
-    assert (res["port"], res["shares"], res["auth_protocol"]) == (445, [], "ntlm")
+    assert (res["servers"], res["max_read_mb"], res["lockout_minutes"]) == ([], 25, 30)
 
 
 @pytest.mark.anyio
-async def test_put_persists_and_feeds_mcp_config(monkeypatch, tmp_path):
-    """A valid PUT is visible to the MCP read path (cache invalidated) and audited."""
+async def test_servers_feed_mcp_config(monkeypatch, tmp_path):
+    """Servers + global switch are visible to the MCP read path (cache invalidated) and audited."""
     sm = await _setup(monkeypatch, tmp_path)
     from src.api.admin_smb import put_smb
 
-    # Prime the cache with "not configured" to prove the save invalidates it.
+    # Prime the cache with "not configured" to prove the saves invalidate it.
     assert await settings_store.get_smb_config("default") is None
 
-    res = await put_smb(
-        _body(max_read_mb=10, lockout_minutes=45, auth_protocol="Negotiate"),
-        auth=_auth(),
-    )
+    await _add(auth_protocol="Negotiate")
+    await _add(alias="FS02", host="FS02.estero.local", credential_set="estero")
+    res = await put_smb(_global(max_read_mb=10, lockout_minutes=45), auth=_auth())
     assert res["configured"] and res["enabled"]
-    assert res["shares"][1] == {"name": "Archivio", "read_only": True, "label": ""}
+    assert [s["alias"] for s in res["servers"]] == ["fs01", "fs02"]
+    assert res["servers"][0]["shares"][1] == {
+        "name": "Archivio",
+        "read_only": True,
+        "label": "",
+    }
 
     cfg = await settings_store.get_smb_config("default")
     assert cfg is not None
-    assert (cfg.host, cfg.default_domain, cfg.auth_protocol) == (
+    fs01, fs02 = cfg.server("fs01"), cfg.server("fs02")
+    assert (fs01.host, fs01.default_domain, fs01.auth_protocol) == (
         "fs01.corp.local",
         "CORP",
         "negotiate",
     )
+    # Alias/host are stored lowercase, the credential set uppercase.
+    assert (fs02.host, fs02.credential_set) == ("fs02.estero.local", "ESTERO")
     assert (cfg.max_read_mb, cfg.lockout_minutes) == (10, 45)
-    assert cfg.share("archivio").read_only is True
+    assert fs01.share("archivio").read_only is True
 
-    ops = await _audit_ops(sm)
-    assert ops and ops[-1][0] == "smb.update"
+    ops = [op for op, _ in await _audit_ops(sm)]
+    assert ops == ["smb.server.create", "smb.server.create", "smb.update"]
 
 
 @pytest.mark.anyio
-async def test_disabled_row_is_draft(monkeypatch, tmp_path):
-    """Disabled settings may be incomplete and never reach the MCP connector."""
+async def test_disabled_server_and_draft_connector(monkeypatch, tmp_path):
+    """A disabled server may have no shares; a disabled connector never reaches MCP."""
     await _setup(monkeypatch, tmp_path)
     from src.api.admin_smb import put_smb
 
-    res = await put_smb(_body(enabled=False, shares=[]), auth=_auth())
+    await _add(enabled=False, shares=[])
+    res = await put_smb(_global(enabled=False), auth=_auth())
     assert res["enabled"] is False and res["configured"] is False
     assert await settings_store.get_smb_config("default") is None
 
 
 @pytest.mark.anyio
-async def test_put_validation(monkeypatch, tmp_path):
-    """Admin shares, sub-paths, duplicates and bad hosts are rejected with a code."""
+async def test_server_validation(monkeypatch, tmp_path):
+    """Bad alias/host/set, admin shares, sub-paths and duplicates are rejected with a code
+    (an empty credential set is not an error: it means DEFAULT)."""
     await _setup(monkeypatch, tmp_path)
-    from src.api.admin_smb import put_smb
+    from src.api.admin_smb import create_server
 
     for kw, code in (
+        ({"alias": "-fs"}, "invalid_alias"),
+        ({"alias": "fs 01"}, "invalid_alias"),
+        ({"alias": ""}, "invalid_alias"),
+        ({"credential_set": "est-ero"}, "invalid_credential_set"),
         ({"host": "bad host"}, "invalid_host"),
         ({"host": r"\\fs01"}, "invalid_host"),
         ({"host": ""}, "invalid_host"),
@@ -158,9 +201,102 @@ async def test_put_validation(monkeypatch, tmp_path):
         ({"shares": [{"name": "Docs"}, {"name": "DOCS"}]}, "duplicate_share"),
         ({"shares": []}, "shares_required"),
     ):
-        with pytest.raises(HTTPException) as e:
-            await put_smb(_body(**kw), auth=_auth())
-        assert e.value.detail == {"code": code}, kw
+        await _expect(code, create_server(_server(**kw), auth=_auth()), 400)
+
+
+@pytest.mark.anyio
+async def test_alias_and_host_are_unique_per_tenant(monkeypatch, tmp_path):
+    """smbclient caches sessions per host and paths start with the alias: both stay unique."""
+    await _setup(monkeypatch, tmp_path)
+    from src.api.admin_smb import create_server, update_server
+
+    first = await _add()
+    second = await _add(alias="fs02", host="fs02.corp.local")
+    await _expect(
+        "duplicate_alias",
+        create_server(_server(alias="FS01", host="other"), auth=_auth()),
+        409,
+    )
+    await _expect(
+        "duplicate_host",
+        create_server(_server(alias="fs03", host="FS01.corp.local"), auth=_auth()),
+        409,
+    )
+    await _expect(
+        "duplicate_host",
+        update_server(second, _server(alias="fs02", host="fs01.corp.local"), auth=_auth()),
+        409,
+    )
+    # Saving a server with its own alias/host is not a conflict.
+    res = await update_server(first, _server(label="Sede"), auth=_auth())
+    assert res["servers"][0]["label"] == "Sede"
+
+
+@pytest.mark.anyio
+async def test_server_cap(monkeypatch, tmp_path):
+    """At most MAX_SERVERS servers per tenant."""
+    await _setup(monkeypatch, tmp_path)
+    from src.api import admin_smb
+
+    monkeypatch.setattr(admin_smb, "MAX_SERVERS", 2)
+    await _add()
+    await _add(alias="fs02", host="fs02")
+    await _expect(
+        "too_many_servers",
+        admin_smb.create_server(_server(alias="fs03", host="fs03"), auth=_auth()),
+        400,
+    )
+
+
+@pytest.mark.anyio
+async def test_enabled_connector_needs_a_default_set_server(monkeypatch, tmp_path):
+    """Users' DEFAULT pair gates the connector: enabling needs a usable DEFAULT-set server,
+    and changes that would break an enabled connector are refused (409)."""
+    await _setup(monkeypatch, tmp_path)
+    from src.api.admin_smb import delete_server, put_smb, update_server
+
+    await _expect("servers_required", put_smb(_global(), auth=_auth()), 400)
+    estero = await _add(alias="fs02", host="fs02", credential_set="ESTERO")
+    await _expect(
+        "default_credential_set_required", put_smb(_global(), auth=_auth()), 400
+    )
+
+    main = await _add()
+    await put_smb(_global(), auth=_auth())
+
+    # The only DEFAULT server cannot be removed, disabled or moved to another set.
+    await _expect("default_credential_set_required", delete_server(main, auth=_auth()), 409)
+    await _expect(
+        "default_credential_set_required",
+        update_server(main, _server(enabled=False), auth=_auth()),
+        409,
+    )
+    await _expect(
+        "default_credential_set_required",
+        update_server(main, _server(credential_set="ALTRO"), auth=_auth()),
+        409,
+    )
+    # Other servers can change freely.
+    res = await delete_server(estero, auth=_auth())
+    assert [s["alias"] for s in res["servers"]] == ["fs01"]
+
+    # With the connector off the same changes are allowed (draft configuration).
+    await put_smb(_global(enabled=False), auth=_auth())
+    res = await delete_server(main, auth=_auth())
+    assert res["servers"] == []
+
+
+@pytest.mark.anyio
+async def test_unknown_server_ids(monkeypatch, tmp_path):
+    """Update/delete/test of an unknown id answer 404 server_not_found."""
+    await _setup(monkeypatch, tmp_path)
+    from src.api.admin_smb import SmbTestBody, delete_server, test_server, update_server
+
+    await _expect("server_not_found", update_server("nope", _server(), auth=_auth()), 404)
+    await _expect("server_not_found", delete_server("nope", auth=_auth()), 404)
+    await _expect(
+        "server_not_found", test_server("nope", SmbTestBody(), auth=_auth()), 404
+    )
 
 
 @pytest.mark.anyio
@@ -170,8 +306,9 @@ async def test_put_syncs_hub_entry(monkeypatch, tmp_path):
     from src.api.admin_smb import put_smb
     from src.data.models import McpServerConfig
 
+    await _add()
     # Without a Hub row the save still succeeds and reports it.
-    res = await put_smb(_body(), auth=_auth())
+    res = await put_smb(_global(), auth=_auth())
     assert res["connector_synced"] is False
 
     async with sm() as session:
@@ -185,63 +322,129 @@ async def test_put_syncs_hub_entry(monkeypatch, tmp_path):
         )
         await session.commit()
 
-    res = await put_smb(_body(), auth=_auth())
+    res = await put_smb(_global(), auth=_auth())
     assert res["connector_synced"] is True
     async with sm() as session:
         assert (await session.get(McpServerConfig, "m1")).is_enabled_for_users is True
 
-    await put_smb(_body(enabled=False), auth=_auth())
+    await put_smb(_global(enabled=False), auth=_auth())
     async with sm() as session:
         assert (await session.get(McpServerConfig, "m1")).is_enabled_for_users is False
 
 
 @pytest.mark.anyio
 async def test_connection_test_endpoint(monkeypatch, tmp_path, caplog):
-    """/test uses the saved config, records the outcome and never leaks the password."""
+    """The per-server test uses that server, records its outcome and never leaks the password."""
     sm = await _setup(monkeypatch, tmp_path)
     from src.api import admin_smb
-    from src.api.admin_smb import SmbTestBody, get_smb, put_smb, test_smb
+    from src.api.admin_smb import SmbTestBody, get_smb, test_server
 
-    with pytest.raises(HTTPException) as e:
-        await test_smb(SmbTestBody(), auth=_auth())
-    assert e.value.detail == {"code": "smb_not_configured"}
+    # Incomplete server (no share yet): nothing to test.
+    draft = await _add(alias="fs09", host="fs09", enabled=False, shares=[])
+    await _expect("smb_not_configured", test_server(draft, SmbTestBody(), auth=_auth()), 409)
 
-    # Works on a disabled (but complete) row: the admin tests before enabling.
-    await put_smb(_body(enabled=False), auth=_auth())
+    # Works on a disabled (but complete) server: the admin tests before enabling.
+    other = await _add(alias="fs02", host="fs02.estero.local", credential_set="ESTERO")
+    sid = await _add(enabled=False)
 
     calls = []
 
-    def fake_test(cfg, username=None, password=None):
-        calls.append((cfg.host, username, password))
+    def fake_test(server, username=None, password=None):
+        calls.append((server.host, username, password))
         if password == SECRET:
             return {"ok": False, "error": "auth_failed", "shares": []}
         return {"ok": True, "error": None, "negotiated": True, "shares": []}
 
     monkeypatch.setattr(admin_smb.probe, "test_connection", fake_test)
 
-    with pytest.raises(HTTPException) as e:
-        await test_smb(SmbTestBody(username="mario"), auth=_auth())
-    assert e.value.detail == {"code": "credentials_incomplete"}
+    await _expect(
+        "credentials_incomplete",
+        test_server(sid, SmbTestBody(username="mario"), auth=_auth()),
+        400,
+    )
 
-    res = await test_smb(SmbTestBody(), auth=_auth())
+    res = await test_server(sid, SmbTestBody(), auth=_auth())
     assert res["ok"] is True and calls[-1] == ("fs01.corp.local", None, None)
-    assert (await get_smb(auth=_auth()))["last_test_ok"] is True
 
     caplog.set_level(logging.DEBUG)
-    res = await test_smb(
-        SmbTestBody(username="CORP\\mario", password=SECRET), auth=_auth()
+    res = await test_server(
+        sid, SmbTestBody(username="CORP\\mario", password=SECRET), auth=_auth()
     )
     assert res == {"ok": False, "error": "auth_failed", "shares": []}
+
+    # The result is recorded on the tested server only.
     state = await get_smb(auth=_auth())
-    assert (state["last_test_ok"], state["last_test_error"]) == (False, "auth_failed")
+    by_id = {s["id"]: s for s in state["servers"]}
+    assert (by_id[sid]["last_test_ok"], by_id[sid]["last_test_error"]) == (
+        False,
+        "auth_failed",
+    )
+    assert by_id[other]["last_test_at"] is None
 
     ops = await _audit_ops(sm)
-    tests = [p for op, p in ops if op == "smb.test"]
+    tests = [p for op, p in ops if op == "smb.server.test"]
     assert len(tests) == 2
     assert all(SECRET not in (p or "") for _, p in ops)
     assert json.loads(tests[-1])["with_credentials"] is True
     assert SECRET not in caplog.text
     assert SECRET not in json.dumps(state)
+
+
+# --------------------------------------------------------------------------- migration
+
+
+def _run_migration(eng, filename, fn_name):
+    """Run ``upgrade``/``downgrade`` of one revision file against ``eng``."""
+    from alembic.operations import Operations
+    from alembic.runtime.migration import MigrationContext
+
+    path = _ROOT / "migrations/versions" / filename
+    spec = importlib.util.spec_from_file_location(f"mig_{path.stem}", path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    with eng.begin() as conn:
+        with Operations.context(MigrationContext.configure(conn)):
+            getattr(mod, fn_name)()
+
+
+def test_migration_moves_single_server_row(tmp_path):
+    """f3a4b5c034: the old single-server row becomes server ``fs01`` (DEFAULT set),
+    per-server columns leave smb_settings, a re-run is a no-op, downgrade restores them."""
+    from sqlalchemy import create_engine, inspect, text
+
+    eng = create_engine(f"sqlite:///{tmp_path}/m.db")
+    # Minimal FK targets: the real tables come from earlier revisions.
+    with eng.begin() as conn:
+        conn.execute(text("CREATE TABLE tenants (id VARCHAR(36) PRIMARY KEY)"))
+        conn.execute(text("CREATE TABLE users (id VARCHAR(36) PRIMARY KEY)"))
+        conn.execute(text("INSERT INTO tenants (id) VALUES ('default')"))
+    _run_migration(eng, "e2f3a4b033_smb_settings.py", "upgrade")
+    with eng.begin() as conn:
+        conn.execute(
+            text(
+                "INSERT INTO smb_settings (tenant_id, enabled, host, port, default_domain, "
+                "shares_json, auth_protocol) VALUES ('default', 1, 'FS01.corp.local', 445, "
+                "'CORP', '[{\"name\": \"Docs\"}]', 'ntlm')"
+            )
+        )
+
+    _run_migration(eng, "f3a4b5c034_smb_servers.py", "upgrade")
+    _run_migration(eng, "f3a4b5c034_smb_servers.py", "upgrade")  # idempotent
+    cols = {c["name"] for c in inspect(eng).get_columns("smb_settings")}
+    assert "host" not in cols and "shares_json" not in cols and "enabled" in cols
+    with eng.connect() as conn:
+        rows = conn.execute(
+            text("SELECT alias, host, credential_set, shares_json FROM smb_servers")
+        ).fetchall()
+    assert [tuple(r) for r in rows] == [
+        ("fs01", "fs01.corp.local", "DEFAULT", '[{"name": "Docs"}]')
+    ]
+
+    _run_migration(eng, "f3a4b5c034_smb_servers.py", "downgrade")
+    with eng.connect() as conn:
+        host = conn.execute(text("SELECT host FROM smb_settings")).scalar()
+    assert host == "fs01.corp.local"
+    assert "smb_servers" not in inspect(eng).get_table_names()
 
 
 # --------------------------------------------------------------------------- probe
@@ -314,7 +517,8 @@ class _FakeSmb:
         return self
 
 
-_CFG = SmbConfig(
+_CFG = SmbServer(
+    alias="fs01",
     host="fs01",
     default_domain="CORP",
     shares=(SmbShare("Documenti"), SmbShare("Archivio", read_only=True)),
