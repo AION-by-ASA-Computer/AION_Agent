@@ -555,6 +555,7 @@ from .auth_sso import router as auth_sso_router
 from .admin_sso import router as admin_sso_router
 from .admin_auth_mode import router as admin_auth_mode_router
 from .admin_smtp import router as admin_smtp_router
+from .admin_smb import router as admin_smb_router
 from .auth_password_setup import router as auth_password_setup_router
 from .chat_ui import router as chat_ui_router
 
@@ -564,6 +565,7 @@ app.include_router(auth_sso_router)
 app.include_router(admin_sso_router)
 app.include_router(admin_auth_mode_router)
 app.include_router(admin_smtp_router)
+app.include_router(admin_smb_router)
 app.include_router(auth_password_setup_router)
 app.include_router(chat_ui_router)
 

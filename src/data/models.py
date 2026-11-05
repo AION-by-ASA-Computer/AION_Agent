@@ -1212,6 +1212,56 @@ class SmtpSettings(Base):
     )
 
 
+class SmbSettings(Base):
+    """Windows file server for the ``smb_files`` MCP connector (migration e2f3a4b033).
+
+    One row per tenant, written by the admin API (``src/api/admin_smb.py``) and
+    read by the MCP server through ``src/tools/smb_files/settings_store.py``.
+    No secret here: each user's Windows credentials live in the per-user
+    credential store and reach the MCP process as env at spawn time.
+    """
+
+    __tablename__ = "smb_settings"
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tenants.id"), primary_key=True
+    )
+    # Disabled by default: the connector stays off until the admin opts in.
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    host: Mapped[Optional[str]] = mapped_column(String(256))
+    port: Mapped[int] = mapped_column(Integer, default=445, server_default="445")
+    # Used for bare usernames ("mario.rossi" -> "DOMAIN\mario.rossi").
+    default_domain: Mapped[Optional[str]] = mapped_column(String(128))
+    # JSON list: [{"name": "Documenti", "read_only": false, "label": "..."}]
+    shares_json: Mapped[str] = mapped_column(
+        Text, default="[]", server_default="[]", nullable=False
+    )
+    # Values: 'ntlm', 'negotiate' (negotiate prepares the Kerberos roadmap).
+    auth_protocol: Mapped[str] = mapped_column(
+        String(16), default="ntlm", server_default="ntlm", nullable=False
+    )
+    require_encryption: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0"
+    )
+    max_read_mb: Mapped[int] = mapped_column(Integer, default=25, server_default="25")
+    max_write_mb: Mapped[int] = mapped_column(
+        Integer, default=25, server_default="25"
+    )
+    # How long a local AD-lockout block lasts (see smb_files/auth_guard.py).
+    lockout_minutes: Mapped[int] = mapped_column(
+        Integer, default=30, server_default="30"
+    )
+    last_test_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_test_ok: Mapped[Optional[bool]] = mapped_column(Boolean)
+    last_test_error: Mapped[Optional[str]] = mapped_column(String(64))
+    updated_by_user_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("users.id"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class PasswordSetupToken(Base):
     """Link monouso inviati via email per impostare la password.
 
