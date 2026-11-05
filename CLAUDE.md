@@ -388,6 +388,18 @@ webhook + `/v1/me/whatsapp*` in `src/api/v1/whatsapp.py`, `/admin/whatsapp*` in
 `src/api/admin_whatsapp.py`); kill switch `AION_WHATSAPP_FORCE_DISABLE=1`.
 See `docs/integrations/whatsapp.md`.
 
+### Windows file server (SMB) connector
+
+`smb_files` MCP server (`mcp_servers_std/smb_files/server.py`, logic in `src/tools/smb_files/`) lets the
+agent read/write files on company Windows shares with the **calling user's own** Windows credentials
+(NTLM, NTFS ACLs apply; no delete tool). Users enter `SMB_USERNAME`/`SMB_PASSWORD` in chat-ui (per-user
+credential store; the password is a `write_only` field, `GET /v1/integrations/credentials/...` answers
+403 `secret_write_only`). The admin sets host, allowed shares (optionally read-only) and limits per tenant in
+admin-ui → Settings → File server (`/admin/smb*` in `src/api/admin_smb.py`, table `smb_settings`).
+An `auth_guard` stops retries after the first logon failure to avoid AD account lockout.
+Dev server: `docker compose -f docker-compose.dev.yml --profile smb up samba` (host port 1445).
+See `docs/mcp/smb-files.md`.
+
 ### Documentation
 - Single source of truth: `docs/` directory
 - Rendered site: `website/` (Docusaurus)

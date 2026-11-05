@@ -51,6 +51,15 @@ L'inferenza automatica della modalità avviene in `src/mcp_integration_sync.py` 
 - `${VAR}` (variabili standard) → `org_shared`
 - Nessuna variabile → `none`
 
+## Campi write-only (`write_only`)
+
+Un campo di `credential_fields` (catalogo connettori) può dichiarare `write_only: true`, tipicamente per password che non devono mai poter essere rilette, come la password di dominio Windows di [`smb_files`](smb-files.md). Per questi campi:
+
+- `GET /v1/integrations/credentials/{slug}/{key}` risponde **403** `secret_write_only` (il controllo usa schema DB e catalogo, quindi non si aggira con alias di slug o chiave): il valore è letto solo dal runtime allo spawn del processo MCP.
+- L'hint di visualizzazione resta sempre `****`; gli hint salvati in precedenza sono mascherati in `GET /v1/integrations`.
+- chat-ui nasconde l'icona «occhio» sul campo già salvato (compare solo mentre si digita un nuovo valore, che sostituisce quello salvato); admin-ui preserva il flag quando si salva lo schema dall'Hub.
+- Il flag è un'impostazione del catalogo: i campi senza `write_only` mantengono il comportamento storico.
+
 ## Hub unificato (admin)
 
 La configurazione admin avviene in **un solo percorso**: **MCP Hub** (`/hub` → Modifica configurazione). Vedi [MCP Hub Wizard](hub-wizard.md) per il flusso completo.
