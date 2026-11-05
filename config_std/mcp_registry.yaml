@@ -119,6 +119,15 @@ mssql:
     MSSQL_TRUST_SERVER_CERTIFICATE: "true"
     NODE_TLS_REJECT_UNAUTHORIZED: "0"
 
+smb_files:
+  command: python
+  args: [-u, smb_files/server.py]
+  description: "File server Windows (share SMB) con le credenziali dell'utente"
+  aion_connector_id: smb_files
+  env:
+    SMB_USERNAME: "${AION_USER_SMB_FILES__SMB_USERNAME}"
+    SMB_PASSWORD: "${AION_USER_SMB_FILES__SMB_PASSWORD}"
+
 monge_gateway:
   command: "python"
   args: ["-u", "monge_gateway/server.py"]

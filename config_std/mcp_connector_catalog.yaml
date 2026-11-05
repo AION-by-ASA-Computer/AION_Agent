@@ -470,3 +470,32 @@ connectors:
           MSSQL_ENCRYPT: "false"
           MSSQL_TRUST_SERVER_CERTIFICATE: "true"
           NODE_TLS_REJECT_UNAUTHORIZED: "0"
+
+  - id: smb_files
+    title: File server Windows (SMB)
+    category: files
+    install_type: stdio
+    default_credential_mode: per_user
+    description: >
+      Legge e scrive i file delle share SMB del file server Windows aziendale con le
+      credenziali Windows dell'utente (valgono le ACL NTFS). Server e share sono
+      configurati dall'amministratore. Nessuna cancellazione. Inserisci utente e
+      password solo qui: non scriverle mai in chat.
+    tags: [smb, windows, fileserver, files, share]
+    mcp_name_hints: [smb_files, smb, fileserver]
+    credential_fields:
+      - { key: SMB_USERNAME, label: "Utente Windows (es. DOMINIO\\mario.rossi)", secret: false, required: true }
+      - { key: SMB_PASSWORD, label: "Password Windows", secret: true, write_only: true, required: true }
+    registry_search_hint: smb windows file server
+    required_env:
+      - SMB_USERNAME
+      - SMB_PASSWORD
+    approval_status: aion_recommended
+    example_registry_block: |
+      smb_files:
+        command: python
+        args: [-u, smb_files/server.py]
+        aion_connector_id: smb_files
+        env:
+          SMB_USERNAME: "${AION_USER_SMB_FILES__SMB_USERNAME}"
+          SMB_PASSWORD: "${AION_USER_SMB_FILES__SMB_PASSWORD}"
