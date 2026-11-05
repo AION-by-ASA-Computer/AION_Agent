@@ -1,4 +1,7 @@
-"""BotSupervisor: un long polling per ogni bot personale attivo, nel loop di AION.
+"""BotSupervisor: un long polling (o un webhook) per ogni bot personale attivo.
+
+In ``delivery_mode = "webhook"`` ogni bot registra il proprio webhook invece di
+tenere aperto ``getUpdates`` (vedi ``webhook.py``); il resto non cambia.
 
 Ascoltare costa poco: ogni bot tiene aperta una richiesta ``getUpdates`` in attesa
 (nessuna CPU, nessuna chiamata al modello). Il lavoro vero parte solo quando arriva
@@ -22,7 +25,12 @@ from aiogram.exceptions import TelegramUnauthorizedError
 
 from src.channels.telegram.bots import BotInfo, BotStatus, TelegramBots, child_bot
 from src.channels.telegram.config import TelegramSettings
-from src.channels.telegram.poller import UpdatePoller
+from src.channels.telegram.webhook import (
+    UpdateSource,
+    WebhookReceiver,
+    make_update_source,
+    remove_webhook,
+)
 from src.channels.telegram.redact import redact
 
 logger = logging.getLogger("aion.telegram")
@@ -37,7 +45,7 @@ Notify = Callable[[int, str], Awaitable[object]]
 class _Runtime:
     info: BotInfo
     bot: Bot
-    poller: UpdatePoller
+    poller: UpdateSource
     stopping: asyncio.Event = field(default_factory=asyncio.Event)
     task: Optional[asyncio.Task] = None
 
@@ -113,7 +121,7 @@ class BotSupervisor:
         if len(self._runtimes) >= limit:
             logger.warning(
                 "telegram: limite di %d bot in ascolto raggiunto, %s non avviato "
-                "(AION_TELEGRAM_MAX_RUNNING_BOTS)",
+                "(max_running_bots, Admin → Telegram)",
                 limit,
                 info.mention,
             )
@@ -126,13 +134,12 @@ class BotSupervisor:
         if not token:
             return
         bot = self._make_bot(token, self.settings)
-        poller = UpdatePoller(
+        poller = make_update_source(
             bot,
             self.dispatcher,
             name=f"bot-{info.username or info.bot_tg_id}",
-            polling_timeout=self.settings.polling_timeout,
-            shutdown_grace_sec=self.settings.shutdown_grace_sec,
-            allowed_updates=self.dispatcher.resolve_used_update_types(),
+            token=token,
+            settings=self.settings,
         )
         rt = _Runtime(info=info, bot=bot, poller=poller)
         self._runtimes[info.bot_tg_id] = rt
@@ -146,6 +153,11 @@ class BotSupervisor:
             return
         rt.stopping.set()
         await rt.poller.stop()
+        # Webhook mode: a bot stopped while AION keeps running (suspended, deleted,
+        # token replaced) must not keep receiving updates we no longer serve. On
+        # AION shutdown (``_closed``) the webhook stays: Telegram queues the updates.
+        if isinstance(rt.poller, WebhookReceiver) and not self._closed:
+            await remove_webhook(rt.bot)
         if rt.task is not None and rt.task is not asyncio.current_task():
             try:
                 await asyncio.wait_for(rt.task, timeout=5.0)
@@ -177,7 +189,13 @@ class BotSupervisor:
             await self._mark_error(rt.info, "token rifiutato da Telegram (401)")
 
     async def _bootstrap(self, rt: _Runtime) -> bool:
-        """Rimuove un eventuale webhook (escluderebbe il polling). False su 401 o stop."""
+        """In polling rimuove un eventuale webhook (lo escluderebbe). False su 401 o stop.
+
+        In webhook mode non c'è nulla da fare qui: il receiver registra il webhook
+        in ``poller.run()`` (e segnala il 401 con ``unauthorized``).
+        """
+        if self.settings.webhook_mode:
+            return True
         delay = _BOOT_RETRY_START_SEC
         while not rt.stopping.is_set():
             try:

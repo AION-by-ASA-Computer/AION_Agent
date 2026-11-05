@@ -151,6 +151,11 @@ def test_output_snapshot_filters_internal_files(data_dir):
     write("derived/tool_results/r.txt")
     write("derived/docs/page_1.md")
     write("uploads/input.pdf")
+    # Packages installed by the agent inside the workspace: not deliverables,
+    # and chat-ui does not list subfolders either.
+    write("workspace/node_modules/docx/README.md")
+    write("workspace/node_modules/docx/license.md")
+    write("workspace/project/notes.md")
     # Rewritten during the turn -> counts as a new output.
     os.utime(old, ns=(old.stat().st_atime_ns, old.stat().st_mtime_ns + 10**9))
 

@@ -9,7 +9,6 @@ export type SettingsTab =
   | "appearance"
   | "security"
   | "api-keys"
-  | "telegram"
   | "whatsapp"
   | "telegram"
   | "instructions"

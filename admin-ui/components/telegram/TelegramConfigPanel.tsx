@@ -48,7 +48,7 @@ export type ConfigSection = "connection" | "policies" | "chat";
 
 /** Which form fields live in which tab, to flag the tabs holding unsaved edits. */
 const SECTION_KEYS: Record<ConfigSection, string[]> = {
-  connection: ["enabled", "manager_token", "proxy_url"],
+  connection: ["enabled", "manager_token", "proxy_url", "delivery_mode"],
   policies: ["default_profile", "max_bots_per_user", "allowed_profiles", "allowed_projects", "max_running_bots", "manager_chat"],
   chat: [
     "max_concurrent_jobs",
@@ -214,6 +214,21 @@ type Status = {
   running_bots: number;
   encryption_ok: boolean;
   encryption_error: string | null;
+  delivery_mode: "polling" | "webhook";
+  /** Webhook diagnostics; present only with the channel on in webhook mode. */
+  webhook: {
+    /** URL AION registers (public API base + /v1/channels/telegram/webhook/<bot id>). */
+    url: string | null;
+    /** Why the webhook cannot work (no public HTTPS URL, setWebhook error), or null. */
+    problem: string | null;
+    /** What Telegram reports (getWebhookInfo); null when unreachable. */
+    telegram: {
+      url: string | null;
+      pending_update_count: number;
+      last_error_message: string | null;
+      last_error_date: string | null;
+    } | null;
+  } | null;
 };
 
 /** `POST /admin/telegram/test-token`: checks the token typed in the field, before saving. */
@@ -516,8 +531,45 @@ export function TelegramConfigPanel({
                   tone={!status.enabled ? "muted" : status.encryption_ok ? "ok" : "warn"}
                   value={!status.enabled ? "—" : status.encryption_ok ? t(`${c}.st_encryption_ok`) : t(`${c}.st_encryption_missing`)}
                 />
+                <StatusItem
+                  label={t(`${c}.st_delivery`)}
+                  tone={!status.enabled ? "muted" : status.webhook?.problem ? "warn" : "ok"}
+                  value={t(`${c}.delivery_${status.delivery_mode}`)}
+                />
               </dl>
             )}
+            {/* Webhook mode: the registered URL and Telegram's own delivery report,
+                the quickest way to see why updates do not arrive (tunnel down, DNS). */}
+            {status?.webhook ? (
+              <div className="mt-4 space-y-1 border-t border-border/50 pt-3 text-xs">
+                <p className="text-muted-foreground">
+                  {t(`${c}.wh_url`)} <Mono>{status.webhook.url || "—"}</Mono>
+                </p>
+                {status.webhook.problem ? <p className="text-destructive">{status.webhook.problem}</p> : null}
+                {status.webhook.telegram ? (
+                  <>
+                    {status.webhook.telegram.url !== status.webhook.url ? (
+                      <p className="text-warning">
+                        {t(`${c}.wh_telegram_url`)} <Mono>{status.webhook.telegram.url || "—"}</Mono>
+                      </p>
+                    ) : null}
+                    <p className="text-muted-foreground">
+                      {t(`${c}.wh_pending`, { count: String(status.webhook.telegram.pending_update_count) })}
+                    </p>
+                    {status.webhook.telegram.last_error_message ? (
+                      <p className="text-warning">
+                        {t(`${c}.wh_last_error`, {
+                          error: status.webhook.telegram.last_error_message,
+                          date: status.webhook.telegram.last_error_date
+                            ? new Date(status.webhook.telegram.last_error_date).toLocaleString()
+                            : "—",
+                        })}
+                      </p>
+                    ) : null}
+                  </>
+                ) : null}
+              </div>
+            ) : null}
           </div>
         </Group>
 
@@ -564,6 +616,18 @@ export function TelegramConfigPanel({
                   mono
                   onChange={(v) => set("proxy_url", v)}
                   placeholder="http://proxy.example.com:3128"
+                />
+              </Field>
+              {/* Polling works everywhere; webhook needs a public HTTPS URL for the API
+                  (domain, or the tunnel of scripts/whatsapp-tunnel.sh). */}
+              <Field label={t(`${c}.delivery`)} hint={t(`${c}.delivery_hint`)} wide>
+                <Select
+                  value={txt("delivery_mode", "polling")}
+                  onChange={(v) => set("delivery_mode", v)}
+                  options={[
+                    { value: "polling", label: t(`${c}.delivery_polling`) },
+                    { value: "webhook", label: t(`${c}.delivery_webhook`) },
+                  ]}
                 />
               </Field>
             </FieldGrid>

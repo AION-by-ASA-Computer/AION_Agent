@@ -26,15 +26,15 @@ from src.session_workspace import is_user_facing_generated_file, session_root
 
 logger = logging.getLogger("aion.channels.session_turn")
 
-# Output folders scanned around a turn, and subtrees that never hold
-# deliverables: artifact version history, offloaded tool results and the
-# per-page text extracted by PDF auto-ingest.
+# Output folders scanned around a turn. Only their top-level files count, exactly
+# like chat-ui (``listSessionFilesSubdir("workspace" | "derived")`` →
+# ``session_workspace.list_dir``, not recursive): subfolders hold the agent's
+# internals, e.g. packages it installed (node_modules/*/README.md, LICENSE…),
+# artifact version history (workspace/.versions), offloaded tool results
+# (derived/tool_results) and PDF auto-ingest pages (derived/docs). Scanning them
+# recursively flooded the channels with files the user never asked for and pushed
+# the real deliverable past ``max_outbound_files``.
 _OUTPUT_ROOTS = ("workspace", "derived")
-_SKIPPED_PREFIXES = (
-    "workspace/.versions/",
-    "derived/tool_results/",
-    "derived/docs/",
-)
 
 OutputSnapshot = Dict[str, Tuple[int, int]]
 
@@ -148,19 +148,20 @@ async def sync_thinking_metadata(
 
 
 def snapshot_outputs(session_id: str) -> OutputSnapshot:
-    """``{relative_path: (mtime_ns, size)}`` of the files in the output folders."""
+    """``{relative_path: (mtime_ns, size)}`` of the top-level files of the output folders.
+
+    Same set of files chat-ui lists under a turn (see ``_OUTPUT_ROOTS``).
+    """
     root = session_root(session_id)
     out: OutputSnapshot = {}
     for top in _OUTPUT_ROOTS:
         base = root / top
         if not base.is_dir():
             continue
-        for path in base.rglob("*"):
+        for path in base.iterdir():
             if not path.is_file():
                 continue
             rel = path.relative_to(root).as_posix()
-            if rel.startswith(_SKIPPED_PREFIXES):
-                continue
             try:
                 st = path.stat()
             except OSError:

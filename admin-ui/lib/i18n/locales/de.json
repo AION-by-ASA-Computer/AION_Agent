@@ -1718,8 +1718,7 @@
       "stt": "Audio",
       "sandbox": "Sandbox",
       "retention": "Aufbewahrung",
-      "smtp": "E-Mail (SMTP)",
-      "telegram": "Telegram"
+      "smtp": "E-Mail (SMTP)"
     },
     "page": {
       "title": "Einstellungen",
@@ -1750,10 +1749,7 @@
       "v_emb_url": "Die URL des Embedding-Dienstes muss mit http:// oder https:// beginnen.",
       "v_fetch_chars": "Max. Zeichen für Abrufe muss eine positive ganze Zahl sein.",
       "v_search_results": "Max. Suchergebnisse muss eine positive ganze Zahl sein.",
-      "v_search_timeout": "Das Such-Timeout muss eine positive ganze Zahl sein.",
-      "v_tg_number": "{{key}} muss eine positive ganze Zahl sein.",
-      "v_tg_proxy": "Der Telegram-Proxy muss mit http://, https:// oder socks5:// beginnen.",
-      "v_tg_non_negative": "{{key}} muss eine ganze Zahl größer oder gleich 0 sein."
+      "v_search_timeout": "Das Such-Timeout muss eine positive ganze Zahl sein."
     },
     "models": {
       "title": "Modelle",
@@ -2543,7 +2539,16 @@
       "retry": "Erneut versuchen",
       "saved": "Telegram-Konfiguration gespeichert.",
       "show_secret": "Anzeigen",
-      "hide_secret": "Ausblenden"
+      "hide_secret": "Ausblenden",
+      "st_delivery": "Update-Empfang",
+      "delivery": "Update-Empfang",
+      "delivery_hint": "Polling funktioniert hinter jeder Firewall. Der Webhook braucht eine öffentliche HTTPS-URL für die API (AION_PUBLIC_API_URL: Ihre Domain oder der Test-Tunnel): Telegram sendet die Updates dann an AION.",
+      "delivery_polling": "Long Polling",
+      "delivery_webhook": "Webhook",
+      "wh_url": "Webhook-URL:",
+      "wh_telegram_url": "Bei Telegram registrierte URL:",
+      "wh_pending": "Wartende Updates bei Telegram: {{count}}",
+      "wh_last_error": "Letzter Zustellfehler von Telegram: {{error}} ({{date}})"
     },
     "loading": "Wird geladen…",
     "load_failed": "Daten nicht verfügbar. Ist das Backend erreichbar?",

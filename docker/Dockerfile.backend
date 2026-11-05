@@ -82,6 +82,20 @@ RUN apt-get update \
     libreoffice-writer-nogui \
     && rm -rf /var/lib/apt/lists/*
 
+# Node libraries of the office skills, preinstalled globally so the agent does not
+# run `npm install` in every session: docx (Word, config/skills/docx) and pptxgenjs
+# (PowerPoint, config/skills/pptx). The skills load them with CommonJS require(),
+# which honours NODE_PATH; sandbox_install_npm_packages (src/tools/session_npm.py)
+# skips packages found there, so no workspace/node_modules (README/LICENSE files the
+# channels used to send as "generated files") is created. Excel and python-docx use
+# the Python packages of requirements.txt. Deliberately unpinned: latest at build
+# time, the same version the agent would get installing them itself (same in
+# docker/Dockerfile.sandbox). Docker caches this layer: a plain rebuild keeps the
+# version already baked, `docker compose build --no-cache backend` refreshes it.
+ENV NODE_PATH=/usr/lib/node_modules:/usr/local/lib/node_modules
+RUN npm install -g --no-fund --no-audit --cache /tmp/.npm-cache docx pptxgenjs \
+    && rm -rf /tmp/.npm-cache
+
 # Copia il venv (contiene tutti i pacchetti Python + console scripts)
 COPY --from=builder /opt/venv /opt/venv
 

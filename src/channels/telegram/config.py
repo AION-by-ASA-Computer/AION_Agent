@@ -16,7 +16,7 @@ load anything of it.
 
 from __future__ import annotations
 
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, field_validator
 
@@ -37,7 +37,15 @@ class TelegramSettings(BaseModel):
     manager_token: Optional[SecretStr] = None
     # HTTP(S)/SOCKS proxy towards api.telegram.org (e.g. corporate proxy).
     proxy_url: Optional[str] = None
-    # Long polling: seconds Telegram waits on each getUpdates.
+    # How Telegram delivers updates to the manager and the personal bots:
+    # - "polling": each bot keeps a long-polling getUpdates open (default; works
+    #   behind NAT/firewalls, never loses an update across restarts);
+    # - "webhook": Telegram POSTs every update to
+    #   ``<public API base>/v1/channels/telegram/webhook/<bot id>`` (needs a public
+    #   HTTPS URL, e.g. the Cloudflare tunnel of ``scripts/whatsapp-tunnel.sh``).
+    # See ``src/channels/telegram/webhook.py`` and ``docs/telegram/RUNBOOK.md``.
+    delivery_mode: Literal["polling", "webhook"] = "polling"
+    # Long polling: seconds Telegram waits on each getUpdates (polling mode only).
     polling_timeout: int = Field(50, ge=1)
     # On shutdown: max wait for running handlers before committing the offset.
     # Not exposed in the admin UI.
@@ -95,6 +103,19 @@ class TelegramSettings(BaseModel):
     @property
     def allowed_project_set(self) -> frozenset:
         return self._slugs(self.allowed_projects)
+
+    @field_validator("delivery_mode", mode="before")
+    @classmethod
+    def _delivery_mode(cls, v):
+        # Blank/None (field never saved, or reset from the admin UI) = polling.
+        if v is None or (isinstance(v, str) and not v.strip()):
+            return "polling"
+        return v.strip().lower() if isinstance(v, str) else v
+
+    @property
+    def webhook_mode(self) -> bool:
+        """True when updates arrive through the public webhook instead of polling."""
+        return self.delivery_mode == "webhook"
 
     @field_validator("manager_token", "proxy_url", mode="before")
     @classmethod

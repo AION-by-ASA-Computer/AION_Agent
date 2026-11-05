@@ -7,8 +7,9 @@ description: Avvio, configurazione e checklist di test manuale del canale Telegr
 # AION × Telegram — Runbook
 
 Il canale gira **dentro il processo AION**: lo avvia e lo ferma il `_lifespan` di
-`src/api/main.py`. Riceve gli update con long polling, quindi serve solo traffico in
-uscita verso `api.telegram.org:443`, senza webhook né tunnel.
+`src/api/main.py`. Per default riceve gli update con long polling, quindi serve solo traffico in
+uscita verso `api.telegram.org:443`, senza webhook né tunnel. In alternativa può ricevere gli update
+via **webhook** (vedi "Modalità webhook").
 
 ## Configurazione (Admin → Telegram → Configurazione)
 
@@ -33,7 +34,8 @@ Nella tabella, la prima colonna è il nome del campo (quello usato dall'API e ne
 | `enabled` | `0` | con `0` AION non carica nulla del canale |
 | `manager_token` | — | token del bot manager da @BotFather; mai in git |
 | `proxy_url` | — | `http://`, `https://` o `socks5://` (proxy aziendale) |
-| `polling_timeout` | `50` | secondi di long polling per `getUpdates` |
+| `delivery_mode` | `polling` | come arrivano gli update: `polling` (long polling, default) o `webhook` (Telegram chiama AION su un URL pubblico HTTPS, vedi "Modalità webhook") |
+| `polling_timeout` | `50` | secondi di long polling per `getUpdates` (solo in modalità `polling`) |
 | `shutdown_grace_sec` | `10` | attesa degli handler in corso allo shutdown (fisso, non modificabile dall'Admin UI) |
 | `pairing_code_ttl_min` | `15` | validità (minuti) dei link di collegamento |
 | `manager_chat` | `0` | `0`: il bot manager gestisce solo account e assistenti, si chatta con gli assistenti personali. `1`: riattiva la chat sul manager (`/new`, `/profile`, `/project`, `/stop`), da usare solo in emergenza o per demo |
@@ -63,7 +65,7 @@ uvicorn src.api.main:app --reload --reload-exclude data/sessions
 
 Log attesi con il flag acceso (logger `aion.telegram`):
 
-- `telegram: gateway avviato (long polling)`
+- `telegram: gateway avviato (long polling)` (oppure `(webhook)`)
 - `telegram: bot manager @<username> (id=…) can_manage_bots=True|False`
 
 Se `can_manage_bots=False`, aprire la **Mini App di @BotFather** (pulsante *Open* nella chat,
@@ -83,6 +85,51 @@ oppure `https://t.me/BotFather?startapp`), scegliere il bot e attivare **Bot Man
 - **I token non compaiono nei log**, nemmeno dentro gli URL della Bot API nelle eccezioni.
 - **Conflitto 409** (due istanze in polling sullo stesso token): viene loggato e ritentato.
   Non avviare due AION con lo stesso token.
+
+## Modalità webhook
+
+Con **Ricezione degli update = Webhook** (`delivery_mode=webhook`, Admin → Telegram → Connessione) ogni bot
+del canale, cioè il manager e ogni assistente personale attivo, registra su Telegram (`setWebhook`) l'URL
+
+```
+<URL pubblico dell'API>/v1/channels/telegram/webhook/<bot id>
+```
+
+e Telegram vi invia gli update con una `POST`. L'URL pubblico è lo stesso usato per il callback di
+WhatsApp (`AION_OAUTH_REDIRECT_BASE_URL` / `AION_PUBLIC_API_URL`); dietro Caddy è
+`https://<dominio>/api/v1/channels/telegram/webhook/<bot id>`. Telegram accetta solo **HTTPS** sulle porte
+443, 80, 88 o 8443 e un host raggiungibile da Internet (niente `localhost`).
+
+- **Autenticazione**: ogni webhook ha un `secret_token` derivato dal token del bot (HMAC, nulla da salvare);
+  Telegram lo rimanda nell'header `X-Telegram-Bot-Api-Secret-Token` e l'endpoint
+  (`src/api/v1/telegram_webhook.py`) rifiuta con 401 le richieste senza.
+- **Risposta immediata**: l'endpoint risponde 200 appena accetta l'update e il turno gira in background,
+  così Telegram non ritenta durante i turni lunghi. Gli update duplicati (`update_id` già visto) vengono
+  ignorati. Con il bot non ancora in ascolto (gateway in riavvio) risponde 503 e Telegram ritenta.
+- **Registrazione automatica**: il webhook si registra a ogni avvio del gateway (anche dopo un salvataggio
+  in Admin), quindi segue da solo un URL che cambia, come quello del tunnel di test. Un assistente sospeso,
+  eliminato o con un token nuovo perde il proprio webhook; allo shutdown di AION i webhook restano e Telegram
+  tiene in coda gli update fino al riavvio. Tornando a `polling`, i poller rimuovono il webhook all'avvio.
+- **Compromesso**: a differenza del polling, un update ancora in lavorazione quando AION si ferma non viene
+  riconsegnato (l'update era già stato confermato con il 200). Per la produzione il polling resta la scelta
+  più robusta.
+- **Diagnostica**: il riquadro Stato di Admin → Telegram mostra la modalità, l'URL che AION registra, un
+  eventuale problema (URL pubblico mancante o non HTTPS, `setWebhook` rifiutato) e quanto riporta Telegram
+  (`getWebhookInfo`: URL registrato, update in coda, ultimo errore di consegna).
+
+### Test in locale con il tunnel
+
+`scripts/whatsapp-tunnel.sh` apre un quick tunnel Cloudflare (`https://<random>.trycloudflare.com`) verso
+Caddy e riavvia lo stack con gli URL pubblici puntati al tunnel: vale anche per Telegram.
+
+1. `scripts/whatsapp-tunnel.sh` (con `DOMAIN=:80` nel `.env`);
+2. Admin → Telegram → Connessione → **Ricezione degli update = Webhook** → Salva;
+3. nel riquadro Stato l'URL del webhook deve essere quello del tunnel e "Update in attesa" scendere a 0
+   dopo un messaggio al bot.
+
+L'URL del tunnel cambia a ogni avvio dello script: il backend viene ricreato e registra da solo il nuovo
+webhook, senza passaggi manuali. Chiuso il tunnel, tornare a `polling` (o rilanciare lo script), altrimenti
+Telegram accumula gli update su un URL non più raggiungibile.
 
 ## Amministrazione (Fase 8)
 

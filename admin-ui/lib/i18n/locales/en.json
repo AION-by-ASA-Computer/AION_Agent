@@ -1718,8 +1718,7 @@
       "stt": "Audio",
       "sandbox": "Sandbox",
       "retention": "Retention",
-      "smtp": "Email (SMTP)",
-      "telegram": "Telegram"
+      "smtp": "Email (SMTP)"
     },
     "page": {
       "title": "Settings",
@@ -1750,10 +1749,7 @@
       "v_emb_url": "The embeddings service URL must start with http:// or https://.",
       "v_fetch_chars": "Fetch max characters must be a positive integer.",
       "v_search_results": "Search max results must be a positive integer.",
-      "v_search_timeout": "Search timeout must be a positive integer.",
-      "v_tg_number": "{{key}} must be a positive integer.",
-      "v_tg_proxy": "The Telegram proxy must start with http://, https:// or socks5://.",
-      "v_tg_non_negative": "{{key}} must be an integer greater than or equal to 0."
+      "v_search_timeout": "Search timeout must be a positive integer."
     },
     "models": {
       "title": "Models",
@@ -2543,7 +2539,16 @@
       "retry": "Try again",
       "saved": "Telegram configuration saved.",
       "show_secret": "Show",
-      "hide_secret": "Hide"
+      "hide_secret": "Hide",
+      "st_delivery": "Update delivery",
+      "delivery": "Update delivery",
+      "delivery_hint": "Polling works behind any firewall. Webhook needs a public HTTPS URL for the API (AION_PUBLIC_API_URL: your domain or the test tunnel): Telegram then pushes updates to AION.",
+      "delivery_polling": "Long polling",
+      "delivery_webhook": "Webhook",
+      "wh_url": "Webhook URL:",
+      "wh_telegram_url": "URL registered on Telegram:",
+      "wh_pending": "Updates waiting on Telegram: {{count}}",
+      "wh_last_error": "Last delivery error from Telegram: {{error}} ({{date}})"
     },
     "loading": "Loading…",
     "load_failed": "Data unavailable. Is the backend reachable?",

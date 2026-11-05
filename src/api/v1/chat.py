@@ -620,7 +620,6 @@ async def chat_stream(
         body_user_id=body.user_id,
         x_aion_user_id=x_aion_user_id,
     )
-    await _reject_read_only_conversation(body.conversation_id)
     body.profile = await enforce_profile_access(auth.user_row_id, body.profile)
 
     from src.runtime.agent_mode_resolve import resolve_agent_mode

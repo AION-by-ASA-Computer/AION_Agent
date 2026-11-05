@@ -20,7 +20,6 @@
       "appearance": "Appearance",
       "security": "Security",
       "api_keys": "API keys",
-      "telegram": "Telegram",
       "instructions": "Instructions",
       "tunings": "Tuning & Parameters",
       "runtime": "Runtime",
@@ -165,7 +164,7 @@
     },
     "telegram": {
       "title": "Telegram",
-      "desc": "Link your Telegram account to use AION from your phone. Chats started on Telegram stay separate from Chat UI conversations.",
+      "desc": "Link your Telegram account to use AION from your phone. Chats started on Telegram appear in the sidebar and can be continued from the Chat UI too.",
       "loading": "Loading Telegram status…",
       "retry": "Retry",
       "disabled": "The Telegram integration is not enabled on this server. Contact your administrator.",
@@ -201,11 +200,6 @@
         "desc": "You won't be able to use AION from Telegram until you link the account again. Existing chats stay saved.",
         "confirm": "Unlink"
       },
-      "chats_title": "Telegram chats",
-      "chats_desc": "Conversations started on Telegram, kept separate from Chat UI conversations.",
-      "chats_empty": "No chats started from Telegram yet. Message one of your assistants to start one.",
-      "chat_untitled": "Telegram chat",
-      "chat_meta": "{{count}} messages · {{date}}",
       "bots_title": "Your assistants",
       "bots_desc": "Personal assistants created from {{bot}} with /newbot: each has its own profile and project, and answers only you.",
       "bots_empty": "No assistants yet. Whenever you like, send /newbot to {{bot}} to create one.",
@@ -216,10 +210,8 @@
       "bot_status_active": "Active",
       "bot_status_suspended": "Suspended",
       "bot_status_error": "Error",
-      "chat_via_manager": "manager bot",
       "bot_mode_personal": "Personal",
       "bot_mode_shared": "Shared",
-      "chat_in_group": "group {{chat}}",
       "toast": {
         "linked": "Telegram account linked",
         "unlinked": "Telegram account unlinked"
@@ -395,67 +387,6 @@
         "disabled": "The WhatsApp channel is not active. Contact your administrator.",
         "generic": "Something went wrong. Please try again."
       }
-    },
-    "telegram": {
-      "title": "Telegram",
-      "desc": "Link your Telegram account to use AION from your phone. Chats started on Telegram appear in the sidebar and can be continued from the Chat UI too.",
-      "loading": "Loading Telegram status…",
-      "retry": "Retry",
-      "disabled": "The Telegram integration is not enabled on this server. Contact your administrator.",
-      "status": {
-        "linked": "Linked",
-        "not_linked": "Not linked"
-      },
-      "link_title": "Link your account",
-      "link_desc": "Each AION user can link a single Telegram account.",
-      "step1": "Press “Link Telegram” to generate a one-time link.",
-      "step2": "Open the link (or scan the QR code) on your phone: the chat with {{bot}} opens.",
-      "step3": "Press “Start” in Telegram: the link is immediate.",
-      "link_button": "Link Telegram",
-      "pairing_hint": "Scan the QR code with your phone or open the link on the device where you use Telegram, then press “Start”.",
-      "open_telegram": "Open in Telegram",
-      "copy_link": "Copy link",
-      "copied": "Copied",
-      "waiting": "Waiting for confirmation from Telegram… The link expires at {{time}}.",
-      "expired": "The link expired without being used. Generate a new one.",
-      "regenerate": "Generate a new link",
-      "qr_alt": "QR code of the Telegram linking link",
-      "linked_title": "Linked account",
-      "account": "Telegram account",
-      "user_id": "Telegram user id",
-      "linked_at": "Linked on",
-      "last_seen": "Last activity",
-      "never": "Never",
-      "open_bot": "Open {{bot}} in Telegram",
-      "unlink": "Unlink",
-      "cancel": "Cancel",
-      "unlink_dialog": {
-        "title": "Unlink Telegram?",
-        "desc": "You won't be able to use AION from Telegram until you link the account again. Existing chats stay saved.",
-        "confirm": "Unlink"
-      },
-      "bots_title": "Your assistants",
-      "bots_desc": "Personal assistants created from {{bot}} with /newbot: each has its own profile and project, and answers only you.",
-      "bots_empty": "No assistants yet. Whenever you like, send /newbot to {{bot}} to create one.",
-      "bot_open": "Open",
-      "bot_profile": "Profile: {{profile}}",
-      "bot_project": "Project: {{project}}",
-      "bot_status_provisioning": "Setting up",
-      "bot_status_active": "Active",
-      "bot_status_suspended": "Suspended",
-      "bot_status_error": "Error",
-      "bot_mode_personal": "Personal",
-      "bot_mode_shared": "Shared",
-      "toast": {
-        "linked": "Telegram account linked",
-        "unlinked": "Telegram account unlinked"
-      },
-      "err": {
-        "unavailable": "The Telegram bot is not connected yet. Retry in a few seconds.",
-        "user_token_required": "Sign in with your account to manage the Telegram link.",
-        "not_linked": "No Telegram account linked.",
-        "generic": "The operation failed. Retry."
-      }
     }
   },
   "sidebar": {
@@ -497,7 +428,7 @@
       "admin_panel": "Admin panel"
     },
     "from_whatsapp": "Conversation from WhatsApp",
-    "from_telegram": "Started from Telegram"
+    "from_telegram": "Conversation from Telegram"
   },
   "schedulesPage": {
     "title": "Automations",
@@ -887,7 +818,6 @@
     },
     "history_load_error": "Could not load conversation history: {{msg}}",
     "session_preparing": "Preparing integrations and tools…",
-    "telegram_read_only": "Chat started from Telegram: read-only here, continue it from Telegram.",
     "mcp_errors_hint": "Some integrations failed to start. You can still chat with the tools that loaded.",
     "mcp_errors_details": "Details",
     "empty_assistant_reply": "No content was saved for this reply. Try regenerating or sending your message again.",

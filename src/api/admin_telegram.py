@@ -52,7 +52,53 @@ async def telegram_status():
         "running_bots": gateway.supervisor.running if gateway is not None else 0,
         "encryption_ok": encryption_error is None,
         "encryption_error": encryption_error,
+        "delivery_mode": settings.delivery_mode,
+        # Only in webhook mode: registration as seen by AION and by Telegram.
+        "webhook": await _webhook_status(settings, gateway)
+        if settings.enabled and settings.webhook_mode
+        else None,
     }
+
+
+_WEBHOOK_INFO_TIMEOUT_SEC = 5.0
+
+
+async def _webhook_status(settings, gateway) -> dict:
+    """Webhook diagnostics of the manager bot for Admin → Telegram.
+
+    ``url`` is what AION registers (from the public API base), ``problem`` why it
+    cannot work (no public HTTPS URL, receiver error), ``telegram`` what Telegram
+    reports via ``getWebhookInfo`` (registered URL, queued updates, last delivery
+    error), None when the gateway is down or Telegram is unreachable.
+    """
+    from src.channels.telegram.webhook import (
+        WebhookReceiver,
+        public_webhook_base,
+        webhook_url_for,
+        webhook_url_problem,
+    )
+
+    token = settings.manager_token_value
+    url = webhook_url_for(token) if token else public_webhook_base()
+    problem = webhook_url_problem(url)
+    receiver = gateway.poller if gateway is not None else None
+    if problem is None and isinstance(receiver, WebhookReceiver):
+        problem = receiver.last_error
+    info = None
+    if gateway is not None:
+        try:
+            wi = await asyncio.wait_for(
+                gateway.bot.get_webhook_info(), timeout=_WEBHOOK_INFO_TIMEOUT_SEC
+            )
+            info = {
+                "url": wi.url or None,
+                "pending_update_count": wi.pending_update_count,
+                "last_error_message": wi.last_error_message,
+                "last_error_date": _iso(wi.last_error_date),
+            }
+        except Exception as e:  # noqa: BLE001 — diagnostics only
+            logger.info("telegram: getWebhookInfo fallito: %s", type(e).__name__)
+    return {"url": url or None, "problem": problem, "telegram": info}
 
 
 # ---------- configurazione (DB, cifrata) ----------

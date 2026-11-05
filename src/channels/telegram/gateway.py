@@ -1,4 +1,4 @@
-"""Bootstrap del canale Telegram: bot manager in long polling nel loop di AION."""
+"""Bootstrap del canale Telegram: bot manager (long polling o webhook) nel loop di AION."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ from src.channels.telegram.handlers import (
 from src.channels.telegram.handlers.child import ChildAccessMiddleware
 from src.channels.telegram.middleware import AccessMiddleware
 from src.channels.telegram.groups import GroupLog
-from src.channels.telegram.poller import UpdatePoller
+from src.channels.telegram.webhook import make_update_source
 from src.channels.telegram.supervisor import BotSupervisor
 from src.channels.telegram.redact import install_log_redaction, redact
 
@@ -108,7 +108,7 @@ class TelegramGateway:
     def __init__(self, settings: TelegramSettings) -> None:
         token = settings.manager_token_value
         if not token:
-            raise ValueError("AION_TELEGRAM_MANAGER_TOKEN non configurato")
+            raise ValueError("token del bot manager non configurato (Admin → Telegram)")
         self.settings = settings
         session = (
             AiohttpSession(proxy=settings.proxy_url) if settings.proxy_url else None
@@ -134,13 +134,10 @@ class TelegramGateway:
             notify=self.notify,
         )
         factory.supervisor = self.supervisor
-        self.poller = UpdatePoller(
-            self.bot,
-            self.dispatcher,
-            name="manager",
-            polling_timeout=settings.polling_timeout,
-            shutdown_grace_sec=settings.shutdown_grace_sec,
-            allowed_updates=self.dispatcher.resolve_used_update_types(),
+        # Long poller or webhook receiver, per Admin → Telegram "delivery_mode";
+        # both expose run()/stop(), so the rest of the gateway does not care.
+        self.poller = make_update_source(
+            self.bot, self.dispatcher, name="manager", token=token, settings=settings
         )
         self._task: Optional[asyncio.Task] = None
         self._reconcile_task: Optional[asyncio.Task] = None
@@ -198,7 +195,7 @@ class TelegramGateway:
         await self.poller.run()
 
     async def _reconcile_loop(self) -> None:
-        """Ogni ``AION_TELEGRAM_RECONCILE_INTERVAL_MIN`` controlla tutti gli assistenti."""
+        """Ogni ``reconcile_interval_min`` (Admin → Telegram) controlla tutti gli assistenti."""
         interval = self.settings.reconcile_interval_min * 60
         factory: BotFactory = self.dispatcher["bot_factory"]
         while not self._stopping.is_set():
@@ -219,9 +216,11 @@ class TelegramGateway:
         delay = _BOOT_RETRY_START_SEC
         while not self._stopping.is_set():
             try:
-                # Polling e webhook si escludono: rimuove un eventuale webhook
-                # senza scartare gli update in coda (drop_pending_updates=False).
-                await self.bot.delete_webhook(drop_pending_updates=False)
+                # Polling e webhook si escludono: in polling rimuove un eventuale
+                # webhook senza scartare gli update in coda (drop_pending_updates=False);
+                # in webhook mode lo registra il receiver in ``poller.run()``.
+                if not self.settings.webhook_mode:
+                    await self.bot.delete_webhook(drop_pending_updates=False)
                 me = await self.bot.get_me()
                 self.bot_username = me.username
                 factory = self.dispatcher["bot_factory"]
@@ -247,8 +246,8 @@ class TelegramGateway:
                 return True
             except TelegramUnauthorizedError:
                 logger.error(
-                    "telegram: AION_TELEGRAM_MANAGER_TOKEN rifiutato da Telegram (401): "
-                    "gateway non avviato"
+                    "telegram: token del bot manager rifiutato da Telegram (401): "
+                    "gateway non avviato (correggerlo da Admin → Telegram)"
                 )
                 return False
             except asyncio.CancelledError:
@@ -277,5 +276,8 @@ async def start_gateway(settings: TelegramSettings) -> Optional[TelegramGateway]
         return None
     runtime.set_gateway(gateway)
     await gateway.start()
-    logger.info("telegram: gateway avviato (long polling)")
+    logger.info(
+        "telegram: gateway avviato (%s)",
+        "webhook" if settings.webhook_mode else "long polling",
+    )
     return gateway

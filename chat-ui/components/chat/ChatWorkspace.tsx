@@ -928,8 +928,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     parentTitle: string | null;
     quote: string;
   } | null>(null);
-  /** Conversation started from Telegram: readable here, continued only from Telegram. */
-  const [telegramReadOnly, setTelegramReadOnly] = useState(false);
   const [sideThreads, setSideThreads] = useState<SideThreadSummary[]>([]);
   const [sideThreadTarget, setSideThreadTarget] = useState<SideThreadTarget | null>(null);
   const [sideThreadFocusKey, setSideThreadFocusKey] = useState(0);
@@ -2941,7 +2939,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     setSqlQueryProject(readStoredSqlProject());
     setConversationTitle(null);
     setThreadOrigin(null);
-    setTelegramReadOnly(false);
 
     // 1. Carica prima i valori di fallback locali (localStorage)
     const storedThinking = localStorage.getItem("aion_last_thinking_enabled");
@@ -2987,7 +2984,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           }
           if (details.metadata) {
             const meta = details.metadata;
-            setTelegramReadOnly(meta.source === "telegram");
             const thinkingPatch: {
               thinking_enabled?: boolean;
               reasoning_effort?: "min" | "medium" | "max";
@@ -4043,16 +4039,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       </>,
     );
   }, [setDockOpen, setDock, dockTab, dockTabs, dockBody]);
-
-  const renderTelegramReadOnlyNotice = () => (
-    <div
-      className="inline-flex max-w-full items-center gap-2 rounded-full border border-primary/20 bg-background/85 px-3.5 py-1.5 text-xs font-medium text-muted-foreground shadow-xs backdrop-blur-md"
-      role="status"
-    >
-      <Send className="size-3.5 shrink-0 text-primary" aria-hidden />
-      <span>{t("chat.telegram_read_only")}</span>
-    </div>
-  );
 
   const renderComposer = () => {
     const profileSelectorNode = (
@@ -5382,7 +5368,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                   userDisplayName={currentUserDisplayName || userId}
                 />
                 <div className="w-full">
-                  {telegramReadOnly ? renderTelegramReadOnlyNotice() : renderComposer()}
+                  {renderComposer()}
                 </div>
               </div>
             </div>
@@ -5771,7 +5757,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                       className="mr-0.5"
                                     />
                                   ) : null}
-                                  {!m.archived && !telegramReadOnly ? (
+                                  {!m.archived ? (
                                     <button
                                       type="button"
                                       onClick={() => handleStartEdit(m)}
@@ -5844,15 +5830,14 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                                   messageId={m.id}
                                   copyText={extractAssistantCopyText(m)}
                                   rating={messageRatings[m.id] ?? null}
-                                  onRate={telegramReadOnly ? undefined : handleMessageRate}
-                                  onRegenerate={telegramReadOnly ? undefined : handleRegenerate}
+                                  onRate={handleMessageRate}
+                                  onRegenerate={handleRegenerate}
                                   showRegenerate={
-                                    !telegramReadOnly &&
                                     m.id === lastAssistantMessageId &&
                                     messages[messages.length - 1]?.id === m.id
                                   }
                                   pinned
-                                  onMemorize={telegramReadOnly ? undefined : () => handleMemorize(m.id)}
+                                  onMemorize={() => handleMemorize(m.id)}
                                   threadCount={sideThreadsByMessage.get(m.id)?.length ?? 0}
                                   onOpenThreads={() => {
                                     const list = sideThreadsByMessage.get(m.id);
@@ -5955,7 +5940,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       <ShimmerText>{t("chat.session_preparing")}</ShimmerText>
                     </div>
                   ) : null}
-                  {telegramReadOnly ? renderTelegramReadOnlyNotice() : renderComposer()}
+                  {renderComposer()}
                 </div>
               </div>
             </div>

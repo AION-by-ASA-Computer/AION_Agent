@@ -16,6 +16,42 @@ def test_validate_package_names_rejects_shell():
         _validate_package_names(["docx; rm -rf /"])
 
 
+def test_preinstalled_packages_skip_npm_install(tmp_path, monkeypatch):
+    """Libraries baked into the Docker image (NODE_PATH) need no workspace install."""
+    import os
+
+    from src.tools import session_npm
+
+    (tmp_path / "docx").mkdir()
+    (tmp_path / "docx" / "package.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv(
+        "NODE_PATH", os.pathsep.join([str(tmp_path / "missing"), str(tmp_path)])
+    )
+    # Would fail if npm were invoked: the session workspace must stay untouched.
+    monkeypatch.setattr(
+        session_npm, "workspace_dir", lambda _sid: pytest.fail("npm install ran")
+    )
+
+    assert session_npm.is_preinstalled("docx")
+    assert not session_npm.is_preinstalled("pptxgenjs")
+    out = session_npm.install_npm_packages("sid", ["docx"])
+    assert out.startswith("OK:") and "already preinstalled" in out
+
+
+def test_missing_packages_still_go_through_npm(tmp_path, monkeypatch):
+    """Only the packages not preinstalled are handed to npm."""
+    from src.tools import session_npm
+
+    (tmp_path / "docx").mkdir()
+    (tmp_path / "docx" / "package.json").write_text("{}", encoding="utf-8")
+    monkeypatch.setenv("NODE_PATH", str(tmp_path))
+    monkeypatch.setattr(
+        session_npm.shutil, "which", lambda _exe: None
+    )  # stop before running npm
+    out = session_npm.install_npm_packages("sid", ["docx", "lodash"])
+    assert out.startswith("Error: npm not found")
+
+
 def test_build_session_env_has_npm_config_cache(tmp_path):
     from src.security.session_env import build_session_env
 
