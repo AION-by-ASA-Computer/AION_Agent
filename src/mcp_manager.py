@@ -89,6 +89,7 @@ _DEFAULT_SESSION_SCOPED_SERVERS = frozenset(
         "skills_hub",
         "query_memory",
         "aion_subagents",
+        "smb_files",  # session workspace copy/upload + per-user Windows credentials
     }
 )
 
