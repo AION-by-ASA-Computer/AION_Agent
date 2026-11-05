@@ -173,7 +173,7 @@ class AgentProfile:
         self.max_agent_steps = max_agent_steps
 
     def resolved_skills(self) -> List[str]:
-        """Expands glob/wildcard patterns (e.g. 'monge_*') against available skills in the registry."""
+        """Expands glob/wildcard patterns (e.g. 'sql_*') against available skills in the registry."""
         import fnmatch
 
         all_names = skill_registry.get_all_names()
