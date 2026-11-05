@@ -544,6 +544,7 @@
     "field_saved_placeholder": "•••••••••••• (gesicherter Wert)",
     "filter_no_results": "Keine Integrationen mit diesem Filter gefunden.",
     "modify_field_hint": "Unverändert lassen, um den gespeicherten Wert zu behalten, oder tippen, um ihn zu ersetzen.",
+    "write_only_field_hint": "Aus Sicherheitsgründen kann das gespeicherte Passwort nicht angezeigt werden: Zum Ersetzen neu eingeben.",
     "oauth_callback_missing_slug": "OAuth-Rückruffehler: Integrationskennung fehlt.",
     "oauth_callback_state_mismatch": "OAuth-Sicherheitsprüfung fehlgeschlagen: Status stimmt nicht überein.",
     "oauth_connect_service": "{{service}} verbinden",
