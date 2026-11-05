@@ -107,3 +107,40 @@ def test_offload_appends_ledger(session_id, monkeypatch):
     assert row["tool"] == "web_fetch_page"
     assert row["path"] is not None
     assert "Group_B" in row["target"] or "wiki" in row["target"]
+
+
+def test_prune_ledger_since_drops_rows_and_offload_files(session_id, monkeypatch):
+    from src.runtime.tool_ledger import list_ledger_entries, prune_ledger_since
+    from src.session_workspace import safe_resolve
+
+    monkeypatch.setenv("AION_TOOL_LEDGER_ENABLED", "1")
+    old_rel = "derived/tool_results/0001_list_hosts_call.txt"
+    new_rel = "derived/tool_results/0002_list_pending_updates_call.txt"
+    for seq, ts, rel in ((1, 100.0, old_rel), (2, 200.0, new_rel)):
+        p = safe_resolve(session_id, rel)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text("x", encoding="utf-8")
+        append_ledger_entry(
+            session_id,
+            LedgerEntry(
+                seq=seq, ts=ts, tool="t", target="h", ok=True, chars=1, path=rel
+            ),
+        )
+
+    assert prune_ledger_since(session_id, 150.0) == 1
+    assert [r["seq"] for r in list_ledger_entries(session_id)] == [1]
+    assert safe_resolve(session_id, old_rel).is_file()
+    assert not safe_resolve(session_id, new_rel).exists()
+    assert "0002" not in render_ledger_table(session_id)
+
+
+def test_prune_ledger_since_noop_without_newer_rows(session_id, monkeypatch):
+    from src.runtime.tool_ledger import prune_ledger_since
+
+    monkeypatch.setenv("AION_TOOL_LEDGER_ENABLED", "1")
+    append_ledger_entry(
+        session_id,
+        LedgerEntry(seq=1, ts=10.0, tool="t", target="h", ok=True, chars=1),
+    )
+    assert prune_ledger_since(session_id, 50.0) == 0
+    assert prune_ledger_since("", 0.0) == 0

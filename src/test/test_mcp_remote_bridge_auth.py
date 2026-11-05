@@ -46,3 +46,12 @@ def test_discover_remote_bridge_uses_auth_env_var(monkeypatch) -> None:
     )
     result = discover_mcp_credentials("clickup", cfg)
     assert any(s.get("key") == "OAUTH_TOKEN" for s in result.schema)
+
+
+def test_resolve_legacy_org_shared_prefers_header_token() -> None:
+    cfg = {
+        "type": "remote-bridge",
+        "auth_env_var": "AION_USER_BROKER__API_KEY",
+        "args": ["--header", "Authorization: Bearer ${API_KEY}"],
+    }
+    assert resolve_remote_bridge_auth_env_var(cfg) == "API_KEY"

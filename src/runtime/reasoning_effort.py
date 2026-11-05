@@ -21,6 +21,11 @@ Non coincidono: ``min`` è sforzo basso (``low``), non lo spegnimento.
 
 ``AION_NATIVE_REASONING_DIALECT`` e ``AION_NATIVE_REASONING_EFFORT_VALUES``
 sono override rari. Lasciarli vuoti: il default vLLM è già ``low|medium|xhigh``.
+
+Con thinking acceso, sui dialetti vLLM/OpenAI-compat si inviano anche i flag
+del chat template che conservano il reasoning degli step precedenti del turno
+(``preserve_thinking`` per Qwen3.6+, ``clear_thinking=false`` per GLM-5.x). Il
+reasoning stesso viene rimandato da ``llm_lite_llm_adapter`` (``AION_REASONING_REPLAY``).
 """
 
 from __future__ import annotations
@@ -277,6 +282,7 @@ def _strip_vllm_thinking_fields(extra_body: Dict[str, Any]) -> Dict[str, Any]:
     cleaned.pop("chat_template_kwargs", None)
     cleaned.pop("enable_thinking", None)
     cleaned.pop("preserve_thinking", None)
+    cleaned.pop("clear_thinking", None)
     cleaned.pop("reasoning_effort", None)
     cleaned.pop("thinking_token_budget", None)
     return cleaned
@@ -385,6 +391,11 @@ def merge_generation_kwargs(
     ctk["preserve_thinking"] = thinking_on
     eb["enable_thinking"] = thinking_on
     eb["preserve_thinking"] = thinking_on
+    if thinking_on:
+        # GLM-5.x: senza questo il template scarta il reasoning degli step precedenti.
+        ctk["clear_thinking"] = False
+    else:
+        ctk.pop("clear_thinking", None)
     _apply_native_effort_fields(out, eb, ctk, native)
 
     if thinking_on:

@@ -46,6 +46,20 @@ def _disabled_msg() -> str:
     return "Scheduled jobs are disabled (set AION_CRON_ENABLED=1 on the server)."
 
 
+async def _allowed_profile(user_id: str, profile_slug: str) -> Optional[str]:
+    """Profilo consentito all'utente (stesse regole di chat); None se vietato."""
+    from fastapi import HTTPException
+
+    from src.api.profile_access import enforce_profile_access, user_row_id_for
+
+    try:
+        return await enforce_profile_access(
+            await user_row_id_for(user_id), profile_slug
+        )
+    except HTTPException:
+        return None
+
+
 async def _create_scheduled_job(
     name: str,
     cron_expression: str,
@@ -63,12 +77,15 @@ async def _create_scheduled_job(
     n = await cron_db.count_jobs_for_user(user_id)
     if n >= _max_jobs_per_user():
         return f"Error: max scheduled jobs per user ({_max_jobs_per_user()}) reached."
+    profile = await _allowed_profile(user_id, profile_slug or "generic_assistant")
+    if profile is None:
+        return f"Error: profile `{profile_slug}` is not allowed for this user."
     job = await cron_db.create_job(
         user_id=user_id,
         name=name,
         cron_expression=cron_expression,
         prompt=prompt,
-        profile_slug=profile_slug or "generic_assistant",
+        profile_slug=profile,
         session_mode=session_mode,
         session_id=session_id if session_mode == "fixed" else None,
         timezone=timezone,
@@ -144,7 +161,10 @@ async def _update_scheduled_job(
     if prompt is not None:
         patch["prompt"] = prompt
     if profile_slug is not None:
-        patch["profile_slug"] = profile_slug
+        allowed = await _allowed_profile(user_id, profile_slug)
+        if allowed is None:
+            return f"Error: profile `{profile_slug}` is not allowed for this user."
+        patch["profile_slug"] = allowed
     if session_mode is not None:
         patch["session_mode"] = session_mode
     if timezone is not None:

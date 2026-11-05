@@ -10,36 +10,47 @@ Il canale gira **dentro il processo AION**: lo avvia e lo ferma il `_lifespan` d
 `src/api/main.py`. Riceve gli update con long polling, quindi serve solo traffico in
 uscita verso `api.telegram.org:443`, senza webhook né tunnel.
 
-## Configurazione (`.env` o Admin → Impostazioni → Telegram)
+## Configurazione (Admin → Telegram → Configurazione)
 
-Tutte le variabili qui sotto si possono modificare dall'**Admin UI → Impostazioni → Telegram**, che le salva
-come override in `data/runtime.env` (vincono sul `.env`). La pagina mostra anche lo stato del bot manager
-(connesso, Bot Management Mode, assistenti in ascolto, chiave di cifratura) e un pulsante **Verifica token**
-(`getMe` su Telegram, senza salvare). Il token resta mascherato (`***`): lasciarlo così non lo cambia.
-Al salvataggio, in Docker il backend si riavvia; fuori da Docker il gateway Telegram si riavvia da solo
-con i nuovi valori (log: `telegram: impostazioni riapplicate`).
+La configurazione del canale si gestisce **solo** dall'**Admin UI → Telegram → Configurazione**
+(`GET/PUT /admin/telegram/settings`) e vive **solo nel database**: tabella `tg_settings`, una riga per tenant,
+con tutti i valori (token del manager compreso) in un unico JSON cifrato con
+`AION_CREDENTIAL_ENCRYPTION_KEY`. Il `.env` non viene letto, né come valore iniziale né come fallback: i campi
+mai salvati usano i default qui sotto, e se nell'ambiente restano variabili `AION_TELEGRAM_*` il log segnala
+che sono ignorate.
 
-| Variabile | Default | Note |
+La pagina mostra anche lo stato del bot manager (connesso, Bot Management Mode, assistenti in ascolto, chiave
+di cifratura) e un pulsante **Verifica token** (`getMe` su Telegram, senza salvare). Il token non viene mai
+restituito: il campo mostra solo le ultime 4 cifre di quello salvato e lasciarlo vuoto non lo cambia.
+Al salvataggio la nuova configurazione si applica **subito, senza riavviare l'API né il container**: il gateway
+Telegram si ferma e riparte da solo con i nuovi valori (log: `telegram: impostazioni riapplicate`). Ogni
+salvataggio lascia nel registro operazioni una riga `settings_updated` con i soli nomi dei campi cambiati.
+
+Nella tabella, la prima colonna è il nome del campo (quello usato dall'API e nel resto di questo documento).
+
+| Campo | Default | Note |
 |---|---|---|
-| `AION_TELEGRAM_ENABLED` | `0` | con `0` AION non carica nulla del canale |
-| `AION_TELEGRAM_MANAGER_TOKEN` | — | token del bot manager da @BotFather; mai in git |
-| `AION_TELEGRAM_PROXY_URL` | — | `http://`, `https://` o `socks5://` (proxy aziendale) |
-| `AION_TELEGRAM_POLLING_TIMEOUT` | `50` | secondi di long polling per `getUpdates` |
-| `AION_TELEGRAM_SHUTDOWN_GRACE_SEC` | `10` | attesa degli handler in corso allo shutdown |
-| `AION_TELEGRAM_PAIRING_CODE_TTL_MIN` | `15` | validità (minuti) dei link di collegamento |
-| `AION_TELEGRAM_MANAGER_CHAT` | `0` | `0`: il bot manager gestisce solo account e assistenti, si chatta con gli assistenti personali. `1`: riattiva la chat sul manager (`/new`, `/profile`, `/project`, `/stop`), da usare solo in emergenza o per demo |
-| `AION_TELEGRAM_DEFAULT_PROFILE` | `generic_assistant` | profilo proposto per primo (⭐) nel wizard `/newbot`; con `MANAGER_CHAT=1` è anche il profilo iniziale della chat sul manager |
-| `AION_TELEGRAM_MAX_CONCURRENT_JOBS` | `1` | turni dell'agente in parallelo; gli altri attendono in coda |
-| `AION_TELEGRAM_STREAM_EDIT_INTERVAL_MS` | `1000` | frequenza di aggiornamento della risposta in streaming |
-| `AION_TELEGRAM_TURN_TIMEOUT_SEC` | `900` | durata massima di un turno avviato da Telegram |
-| `AION_TELEGRAM_RICH_MESSAGES` | `1` | risposte nel formato rich di Telegram (vedi "Fase 7"); `0` = solo HTML |
-| `AION_TELEGRAM_SHOW_REASONING` | `1` | ragionamento del modello in una sezione richiudibile (solo formato rich) |
-| `AION_TELEGRAM_SHOW_TOOLS` | `1` | mostra i tool chiamati (in streaming e in un riquadro in fondo alla risposta) |
-| `AION_TELEGRAM_MAX_RUNNING_BOTS` | `200` | bot personali in ascolto contemporaneamente (rete di sicurezza; oltre il limite un bot non viene avviato e il log lo segnala) |
-| `AION_TELEGRAM_RECONCILE_INTERVAL_MIN` | `30` | controllo periodico degli assistenti (vedi "Ciclo di vita"); `0` lo disattiva |
-| `AION_TELEGRAM_MAX_BOTS_PER_USER` | `3` | bot personali per utente AION creati con `/newbot` (gli eliminati non contano) |
-| `AION_TELEGRAM_BLOCKED_PROFILES` | — | policy del canale: profili (slug separati da virgola) mai usabili da Telegram |
-| `AION_TELEGRAM_BLOCKED_PROJECTS` | — | policy del canale: progetti (slug separati da virgola) mai usabili da Telegram |
+| `enabled` | `0` | con `0` AION non carica nulla del canale |
+| `manager_token` | — | token del bot manager da @BotFather; mai in git |
+| `proxy_url` | — | `http://`, `https://` o `socks5://` (proxy aziendale) |
+| `polling_timeout` | `50` | secondi di long polling per `getUpdates` |
+| `shutdown_grace_sec` | `10` | attesa degli handler in corso allo shutdown (fisso, non modificabile dall'Admin UI) |
+| `pairing_code_ttl_min` | `15` | validità (minuti) dei link di collegamento |
+| `manager_chat` | `0` | `0`: il bot manager gestisce solo account e assistenti, si chatta con gli assistenti personali. `1`: riattiva la chat sul manager (`/new`, `/profile`, `/project`, `/stop`), da usare solo in emergenza o per demo |
+| `default_profile` | `generic_assistant` | profilo proposto per primo (⭐) nel wizard `/newbot`; con `manager_chat=1` è anche il profilo iniziale della chat sul manager |
+| `max_concurrent_jobs` | `1` | turni dell'agente in parallelo; gli altri attendono in coda |
+| `stream_edit_interval_ms` | `1000` | frequenza di aggiornamento della risposta in streaming |
+| `turn_timeout_sec` | `900` | durata massima di un turno avviato da Telegram |
+| `default_thinking_level` | — | ragionamento dei turni Telegram: `off`, `min`, `medium`, `max`; vuoto = default di sistema (`AION_DEFAULT_REASONING_EFFORT`). Come su WhatsApp, viene copiato nei metadati della conversazione e il composer della Chat UI lo mostra |
+| `max_outbound_files` | `5` | file generati dall'agente in un turno rimandati in chat; gli altri restano nella sessione e il bot scrive "📁 Altri N file sono disponibili su AION" |
+| `rich_messages` | `1` | risposte nel formato rich di Telegram (vedi "Fase 7"); `0` = solo HTML |
+| `show_reasoning` | `1` | ragionamento del modello in una sezione richiudibile (solo formato rich) |
+| `show_tools` | `1` | mostra i tool chiamati (in streaming e in un riquadro in fondo alla risposta) |
+| `max_running_bots` | `200` | bot personali in ascolto contemporaneamente (rete di sicurezza; oltre il limite un bot non viene avviato e il log lo segnala) |
+| `reconcile_interval_min` | `30` | controllo periodico degli assistenti (vedi "Ciclo di vita"); `0` lo disattiva |
+| `max_bots_per_user` | `3` | bot personali per utente AION creati con `/newbot` (gli eliminati non contano) |
+| `allowed_profiles` | — | policy del canale (allowlist stretta): profili (slug separati da virgola) usabili da Telegram; vuoto = nessuno |
+| `allowed_projects` | — | policy del canale (allowlist stretta): progetti (slug separati da virgola) usabili da Telegram; vuoto = nessuno (resta sempre possibile "Nessun progetto") |
 | `AION_CREDENTIAL_ENCRYPTION_KEY` | — | chiave già usata da AION per le credenziali: cifra anche i token dei bot personali. Senza, in sviluppo si usa una chiave insicura; in produzione `/newbot` è disattivato. In Admin → Impostazioni compare mascherata (`***`) |
 
 Dipendenze: `aiogram[proxy]` in `requirements.txt` (`uv pip install -r requirements.txt`).
@@ -86,25 +97,28 @@ oppure `https://t.me/BotFather?startapp`), scegliere il bot e attivare **Bot Man
   sospende e ne registra il nuovo account; se quell'account ha collegato AION, l'admin conferma e il bot
   passa al suo utente AION, torna attivo e il nuovo proprietario riceve un avviso.
 - **Quote.** Per ogni utente con Telegram collegato (o con assistenti) si può fissare un numero massimo di
-  assistenti diverso da `AION_TELEGRAM_MAX_BOTS_PER_USER`; vuoto = valore predefinito. `0` impedisce di crearne.
+  assistenti diverso da `max_bots_per_user`; vuoto = valore predefinito. `0` impedisce di crearne.
 - **Registro.** Le ultime operazioni del canale (`tg_audit`): collegamenti, creazioni, cambi di
   configurazione e modalità, sospensioni, eliminazioni, rotazioni di token, riassegnazioni, quote.
-- **Policy del canale** (Admin → Impostazioni → Telegram → Assistenti personali):
-  `AION_TELEGRAM_BLOCKED_PROFILES` / `AION_TELEGRAM_BLOCKED_PROJECTS`. I profili e progetti indicati non
-  compaiono in `/newbot`, `/mybots`, `/profile`, `/project` e, se un assistente li ha già, ogni messaggio
-  viene rifiutato con "non disponibile su Telegram (policy dell'amministratore)".
-- **Sola lettura anche via API.** `POST /v1/chat/stream` su una conversazione con
-  `metadata.source = "telegram"` risponde `409 telegram_read_only`: le chat Telegram si continuano solo da
-  Telegram. La ricerca della barra laterale della Chat UI le esclude già (filtra l'elenco senza chat Telegram).
+- **Policy del canale** (Admin → Telegram → Configurazione → Assistenti personali):
+  `allowed_profiles` / `allowed_projects`, scelti da due elenchi a spunta. È un'allowlist stretta: solo i
+  profili e progetti selezionati compaiono in `/newbot`, `/mybots`, `/profile`, `/project`; con l'elenco
+  vuoto non è consentito nulla e i profili/progetti creati in seguito vanno abilitati esplicitamente. Se un
+  assistente usa già un profilo o progetto non consentito, ogni messaggio viene rifiutato con "non
+  disponibile su Telegram (policy dell'amministratore)". Il pannello avvisa se nessun profilo è
+  consentito o se il profilo suggerito (`default_profile`) non è tra quelli consentiti.
+- **Le chat Telegram sono sessioni AION normali.** Compaiono nella sidebar della Chat UI (con l'icona di
+  Telegram) e si possono continuare da lì, come quelle WhatsApp; vedi "Chat con l'agente".
 
 ### Rotazione della chiave di cifratura
 
-I token dei bot sono cifrati con `AION_CREDENTIAL_ENCRYPTION_KEY` (la stessa delle credenziali MCP per
-utente). Cambiare la chiave rende **illeggibili** i token salvati: all'avvio quei bot passano in errore
-("token non decifrabile"). Procedura consigliata:
+La configurazione del canale e i token dei bot sono cifrati con `AION_CREDENTIAL_ENCRYPTION_KEY` (la stessa
+delle credenziali MCP per utente). Cambiare la chiave rende **illeggibili** i valori salvati: il canale riparte
+spento finché la configurazione non viene salvata di nuovo da Admin → Telegram (token del manager compreso), e
+i bot passano in errore ("token non decifrabile"). Procedura consigliata:
 
 1. Nuova chiave: `openssl rand -hex 32`, impostata nel `.env` (non nell'Admin UI, dove è mascherata).
-2. Riavvia AION.
+2. Riavvia AION, poi reinserisci la configurazione da Admin → Telegram e salva.
 3. I bot in errore si recuperano da soli al controllo periodico se il manager riesce a ottenere di nuovo il
    token (`getManagedBotToken`, che lo salva cifrato con la nuova chiave); altrimenti il proprietario usa
    `/mybots` → **🔑 Rigenera token** o **Riprova configurazione**.
@@ -114,16 +128,17 @@ utente). Cambiare la chiave rende **illeggibili** i token salvati: all'avvio que
 
 | Sintomo | Causa probabile | Cosa fare |
 |---|---|---|
-| Nessuna riga `telegram:` nei log | `AION_TELEGRAM_ENABLED` non è `1` o nome della variabile sbagliato | Il log segnala le variabili `AION_TELEGRAM_*` sconosciute; correggere e riavviare |
-| `token rifiutato da Telegram (401)` per il manager | token del manager errato o revocato | Admin → Impostazioni → Telegram → **Verifica token**, incollare quello nuovo |
+| Nessuna riga `telegram:` nei log | canale non attivo in Admin → Telegram | Attivarlo e salvare: il gateway parte senza riavvio |
+| `configurazione salvata non decifrabile` nei log | `AION_CREDENTIAL_ENCRYPTION_KEY` cambiata o assente | Ripristinare la chiave, oppure riconfigurare e salvare da Admin → Telegram |
+| `token rifiutato da Telegram (401)` per il manager | token del manager errato o revocato | Admin → Telegram → Configurazione → **Verifica token**, incollare quello nuovo |
 | `can_manage_bots=False` | Bot Management Mode spenta | Mini App di @BotFather → bot → Mode Settings → Bot Management Mode |
 | `/newbot` dice che manca la chiave di cifratura | `AION_CREDENTIAL_ENCRYPTION_KEY` assente in produzione | Impostarla nel `.env` e riavviare |
 | `conflitto 409` nei log | due istanze di AION sullo stesso token | Lasciarne una sola |
 | Il bot nel gruppo non risponde alle menzioni | privacy mode di Telegram | Usare `/ask@nome_bot` o rendere il bot amministratore del gruppo |
 | L'assistente esce da un gruppo appena aggiunto | assistente personale, oppure aggiunto da chi non è il creatore | Renderlo condiviso (`/mybots`) e farlo aggiungere al creatore |
-| "non disponibile su Telegram (policy…)" | profilo/progetto nella policy del canale | Admin → Impostazioni → Telegram → profili/progetti esclusi |
+| "non disponibile su Telegram (policy…)" | profilo/progetto nella policy del canale | Admin → Telegram → Configurazione → profili/progetti esclusi |
 | Assistente "sospeso: proprietario cambiato" | bot trasferito su @BotFather a un altro account | Admin → Telegram → **Riassegna** (il nuovo account deve aver collegato AION) |
-| `messaggi rich non disponibili` | il bot non supporta i messaggi rich | Nessuna azione: si usa l'HTML; `AION_TELEGRAM_RICH_MESSAGES=0` per forzarlo |
+| `messaggi rich non disponibili` | il bot non supporta i messaggi rich | Nessuna azione: si usa l'HTML; `rich_messages=0` per forzarlo |
 | La build del sito docs fallisce su questo file | `<parola>` fuori da un blocco di codice (MDX) | Metterla tra backtick |
 
 ## Checklist di test manuale — Fase 8
@@ -133,9 +148,9 @@ utente). Cambiare la chiave rende **illeggibili** i token salvati: all'avvio que
 3. **Elimina** (digitando lo username): sparisce dall'elenco (visibile con "Mostra eliminati").
 4. Quote: imposta `0` a un utente e prova `/newbot` con quell'account: viene rifiutato; svuota la quota e riprova.
 5. Registro: compaiono le operazioni appena fatte.
-6. Impostazioni → Telegram: metti un profilo in "Profili esclusi" e salva: sparisce da `/newbot`, e un
+6. Admin → Telegram → Configurazione: metti un profilo in "Profili esclusi" e salva: sparisce da `/newbot`, e un
    assistente che lo usa risponde "non disponibile su Telegram".
-7. Apri una chat Telegram nella Chat UI e prova a inviare via API `/v1/chat/stream`: `409 telegram_read_only`.
+7. Apri una chat Telegram nella Chat UI e scrivi un messaggio: l'agente risponde nella stessa conversazione.
 8. Admin → Impostazioni: `AION_CREDENTIAL_ENCRYPTION_KEY` non è più leggibile.
 
 ## Collegamento account (Fase 2)
@@ -143,7 +158,7 @@ utente). Cambiare la chiave rende **illeggibili** i token salvati: all'avvio que
 Ogni utente collega il proprio account Telegram dalla **Chat UI → Impostazioni → Telegram**:
 
 1. **Collega Telegram** genera un link monouso `https://t.me/<bot>?start=pair_<codice>` (più un QR),
-   valido `AION_TELEGRAM_PAIRING_CODE_TTL_MIN` minuti. Generarne uno nuovo invalida il precedente.
+   valido `pairing_code_ttl_min` minuti. Generarne uno nuovo invalida il precedente.
 2. L'utente apre il link dal telefono e preme **Avvia**: il bot riscatta il codice e collega
    l'account Telegram all'utente AION. La pagina delle impostazioni si aggiorna da sola.
 3. Un utente AION ha al massimo un account Telegram, e un account Telegram al massimo un utente AION.
@@ -164,47 +179,61 @@ Regole:
 
 ## Ruoli: bot manager e assistenti personali
 
-- **Bot manager** (`AION_TELEGRAM_MANAGER_TOKEN`, uno per installazione): collegamento dell'account
+- **Bot manager** (`manager_token`, uno per installazione): collegamento dell'account
   (`/start`, `/me`, `/unlink`, `/whoami`) e gestione degli assistenti (`/newbot`, `/mybots`, `/cancel`).
   **Non chatta con l'agente**: al testo libero risponde con i pulsanti per aprire gli assistenti
   dell'utente, oppure ricorda che può crearne uno con `/newbot`. La creazione non è mai obbligatoria
   né proposta in automatico: parte solo dall'utente.
 - **Assistenti personali** (Fase 4/5): l'unico posto dove si chatta con l'agente, ognuno con il suo
   profilo e progetto, accessibili solo al proprietario.
-- **Chat UI → Impostazioni → Telegram**: stato del collegamento, elenco degli assistenti con link
-  "Apri" e chat Telegram in sola lettura (ognuna indica l'assistente o "bot di gestione").
-- Con `AION_TELEGRAM_MANAGER_CHAT=1` il manager torna a chattare come descritto qui sotto.
+- **Chat UI → Impostazioni → Telegram**: stato del collegamento ed elenco degli assistenti con link
+  "Apri". Le chat Telegram sono nella sidebar, come le altre conversazioni.
+- Con `manager_chat=1` il manager torna a chattare come descritto qui sotto.
 
 ## Chat con l'agente (Fase 3)
 
 Un utente collegato scrive al bot e risponde l'agente AION, **a nome del suo utente AION**: stessa
 memoria, stessi permessi su profili e progetti, stessa pipeline della Chat UI. Vale per gli assistenti
-personali e, solo con `AION_TELEGRAM_MANAGER_CHAT=1`, per il bot manager (`/profile` e `/project` sono
+personali e, solo con `manager_chat=1`, per il bot manager (`/profile` e `/project` sono
 comandi del manager).
 
-- **Conversazioni.** Ogni chat Telegram punta a una conversazione AION (`tg_sessions`), che ricorda il
-  contesto finché non si usa `/new`. Le conversazioni sono marcate `metadata.source = "telegram"`.
-- **Nella Chat UI** non compaiono tra i Recenti della sidebar. Sono elencate in **Impostazioni → Telegram**
-  e si aprono **in sola lettura**: niente campo di scrittura, modifica, rigenerazione, valutazione o
-  "memorizza". La sola lettura vale nell'interfaccia; l'API `/v1/chat/stream` non la blocca.
-- **Profilo e progetto.** Profilo iniziale `AION_TELEGRAM_DEFAULT_PROFILE`; `/profile` e `/project`
+- **Conversazioni = sessioni AION.** Ogni chat Telegram punta a una conversazione AION (`tg_sessions`:
+  bot, chat, thread, utente → conversazione), che ricorda il contesto finché non si usa `/new`, come
+  `/nuova` su WhatsApp. È una sessione vera, indistinguibile da una della Chat UI: marcata
+  `metadata.source = "telegram"`, titolata dal primo messaggio, con upload, file generati e memoria della
+  sessione. Il turno usa la stessa logica di WhatsApp, in `src/channels/session_turn.py`:
+  - **Chat UI.** La conversazione compare subito nella sidebar con l'icona di Telegram e si continua da lì:
+    stessa cronologia, si scrive, si rigenera, si valuta. La risposta finale su Telegram ha in fondo il link
+    "💬 Continua su AION" (solo se `AION_PUBLIC_CHAT_URL` non è `localhost`).
+  - **Turno seguibile dal vivo.** Mentre l'agente risponde su Telegram, il turno è registrato come run in
+    background (`_background_runs` + redis `stream_active`): aprendo la conversazione nella Chat UI lo
+    streaming si vede in diretta (`/v1/chat/stream/reconnect`). Lo stop dalla Chat UI ferma anche la
+    risposta su Telegram.
+  - **Ragionamento.** Livello `default_thinking_level` del canale, copiato in `metadata.thinking_enabled` /
+    `metadata.reasoning_effort` a ogni turno.
+  - **Allegati.** All'agente arrivano i file del messaggio ("nuovi") e tutti gli upload precedenti della
+    sessione ("storici"), come nella Chat UI.
+  - **File generati.** Quelli creati dall'agente nel turno (CSV, PDF, grafici...) tornano in chat: jpeg/png
+    fino a 10 MB come foto, il resto come documento (limite dei bot: 50 MB). Al massimo
+    `max_outbound_files` per turno; gli altri restano nella sessione.
+- **Profilo e progetto.** Profilo iniziale `default_profile`; `/profile` e `/project`
   mostrano solo ciò che l'utente può usare. Valgono dal messaggio successivo, nella stessa conversazione.
 - **Streaming.** In chat privata si usa `sendMessageDraft` (anteprima animata, poi messaggio finale).
   Se Telegram lo rifiuta, il bot passa da solo all'invio di un messaggio aggiornato ogni
-  `AION_TELEGRAM_STREAM_EDIT_INTERVAL_MS`; nei log compare `sendMessageDraft non disponibile`.
+  `stream_edit_interval_ms`; nei log compare `sendMessageDraft non disponibile`.
 - **Tool.** Durante la risposta compare l'elenco dei tool chiamati (⏳ in corso, ✓ riuscito, ✗ errore),
   anche per quelli che durano pochi millisecondi; nel messaggio finale resta un riquadro richiudibile
-  "🔧 Strumenti usati". Si disattiva con `AION_TELEGRAM_SHOW_TOOLS=0`.
+  "🔧 Strumenti usati". Si disattiva con `show_tools=0`.
 - **Tool "a richiesta".** Con `AION_DEFER_TOOL_GROUPS=1` (default AION) alcuni gruppi, tra cui
   `web_research`, vengono caricati solo se il modello chiama `activate_tool_group`. Se non lo fa, risponde
   di non avere la ricerca web: è lo stesso comportamento della Chat UI, non del canale.
 - **Formattazione.** Il Markdown dell'agente diventa HTML Telegram: grassetto, corsivo, codice, link,
   citazioni, elenchi; le tabelle restano allineate in un blocco monospazio. Le risposte oltre i 4096
   caratteri sono divise in più messaggi, senza spezzare i blocchi di codice.
-- **Coda.** Al massimo `AION_TELEGRAM_MAX_CONCURRENT_JOBS` turni insieme per tutti gli utenti; due messaggi
+- **Coda.** Al massimo `max_concurrent_jobs` turni insieme per tutti gli utenti; due messaggi
   rapidi nella stessa chat vengono eseguiti uno dopo l'altro. Chi aspetta riceve "⏳ In coda (posizione N)".
 - **Stop e limiti.** `/stop` interrompe la risposta (la parte già scritta resta, con "⏹️ Risposta interrotta").
-  Dopo `AION_TELEGRAM_TURN_TIMEOUT_SEC` il turno viene fermato.
+  Dopo `turn_timeout_sec` il turno viene fermato.
 - **Riavvio di AION.** I turni in corso vengono interrotti e l'utente riceve "AION si sta riavviando".
   Un crash del processo durante un turno perde quella risposta: va riformulata la domanda.
 - **Per ora solo testo.** Foto, documenti e vocali ricevono un messaggio di cortesia (Fase 7).
@@ -225,7 +254,7 @@ aprire @BotFather e senza toccare il `.env`. Richiede **Bot Management Mode** at
   il token con `getManagedBotToken`, lo salva **cifrato** in `tg_bots` (mai in chiaro nel DB o nei log),
   imposta comandi e descrizioni del bot e limita l'accesso al solo proprietario
   (`setManagedBotAccessSettings`). L'utente riceve "✅ @nome_bot è pronto".
-- **Quota.** Al massimo `AION_TELEGRAM_MAX_BOTS_PER_USER` bot per utente. Un bot creato fuori dalla
+- **Quota.** Al massimo `max_bots_per_user` bot per utente. Un bot creato fuori dalla
   procedura (link diretto) oltre la quota viene registrato ma resta sospeso.
 - **`/mybots`.** Elenco con stato (in configurazione, attivo, sospeso, errore) e, per ogni bot:
   cambio profilo e progetto, sospendi/riattiva, "Riprova configurazione" se è in errore, elimina.
@@ -244,12 +273,12 @@ aprire @BotFather e senza toccare il `.env`. Richiede **Bot Management Mode** at
   eliminati e in errore non vengono ascoltati. Nel log: `N bot personali in ascolto`, `bot @x in ascolto`.
 - **Costo.** Ascoltare un bot significa tenere aperta una richiesta `getUpdates` in attesa: niente CPU e
   nessuna chiamata al modello. Il lavoro parte solo all'arrivo di un messaggio e passa dalla **stessa coda**
-  del bot manager (`AION_TELEGRAM_MAX_CONCURRENT_JOBS` vale per tutti i bot insieme). Conversazione e
+  del bot manager (`max_concurrent_jobs` vale per tutti i bot insieme). Conversazione e
   sessione nascono al primo messaggio; i server MCP inattivi vengono spenti dal core dopo
   `AION_MCP_POOL_IDLE_SEC` e ricreati al messaggio successivo.
 - **Configurazione.** Risponde l'agente con profilo e progetto del bot, riletti a ogni messaggio: un
   cambio da `/mybots` vale dal messaggio successivo. Le conversazioni appartengono all'utente AION
-  proprietario, con `metadata.telegram_bot = <username>`, e compaiono in Impostazioni → Telegram.
+  proprietario, con `metadata.telegram_bot = <username>`, e compaiono nella sidebar della Chat UI.
 - **Comandi del bot.** `/start`, `/help`, `/new`, `/stop`, `/status` (profilo e progetto),
   `/project` (cambia il progetto del bot, come da `/mybots`).
 - **Accesso.** Solo il proprietario, con l'account Telegram collegato allo stesso utente AION che ha
@@ -268,9 +297,18 @@ In `/newbot`, dopo il nome, si sceglie la **modalità** (cambiabile poi da `/myb
 | Chi può scrivere | solo il creatore | qualunque utente AION che abbia collegato Telegram |
 | Identità AION del turno | del creatore | **di chi scrive** (suoi permessi, memoria, conversazioni) |
 | Accesso Telegram (`setManagedBotAccessSettings`) | ristretto al proprietario | aperto: il controllo lo fa AION |
-| Gruppi | no (esce da solo) | sì, ma **solo il creatore** può aggiungerlo |
+| Gruppi | no (esce da solo) | **disattivati per ora**; con il flag attivo, solo il creatore può aggiungerlo |
 | Profilo e progetto | quelli del bot | quelli del bot (vedi "Progetto nei gruppi") |
 
+- **Gruppi disattivati (2026-11).** Per ora gli assistenti non funzionano nei gruppi:
+  `GROUPS_ENABLED = False` in `src/channels/telegram/groups.py`. Un assistente aggiunto a un gruppo, o che
+  riceve un messaggio da un gruppo, scrive "Gli assistenti AION nei gruppi non sono ancora disponibili" ed
+  esce; il menu dei gruppi (`/ask`) non viene registrato e i testi di `/newbot` e `/mybots` non citano i
+  gruppi. "Condiviso" vale quindi solo in chat privata. Il codice dei gruppi resta e i suoi test girano con
+  il flag attivo. Prima di riattivarli bisogna togliere il contesto del gruppo dal messaggio utente salvato
+  (vedi "Contesto del gruppo"): con le chat Telegram diventate sessioni della Chat UI, quel prefisso
+  comparirebbe nella cronologia. Va passato al turno come contesto di sistema. Le voci qui sotto descrivono
+  il comportamento con il flag attivo.
 - **Progetto nei gruppi (decisione 2026-10-30).** In chat privata con un assistente condiviso vale il
   controllo per persona: chi non è membro del progetto del bot riceve un rifiuto. **Nei gruppi** invece il
   progetto si usa con i **permessi del creatore**: chiunque nel gruppo può fare domande e leggere le risposte,
@@ -306,7 +344,7 @@ In `/newbot`, dopo il nome, si sceglie la **modalità** (cambiabile poi da `/myb
 
 - **Formato rich** (`sendRichMessage`, Bot API 10.x): il Markdown dell'agente viene inviato così com'è
   (Markdown in stile GitHub): **tabelle vere**, codice con linguaggio, titoli, elenchi. Come nella Chat UI,
-  con `AION_TELEGRAM_SHOW_REASONING=1` la risposta si apre con "💭 Ragionamento" (richiudibile); in fondo
+  con `show_reasoning=1` la risposta si apre con "💭 Ragionamento" (richiudibile); in fondo
   "🔧 Strumenti usati". Mentre il modello ragiona l'anteprima mostra "💭 Sto ragionando…".
   Anteprima in privato con `sendRichMessageDraft`, nei gruppi con un messaggio rich modificato.
 - **Ripiego HTML automatico.** Se Telegram rifiuta il formato rich per un bot (log: `messaggi rich non
@@ -334,13 +372,15 @@ In `/newbot`, dopo il nome, si sceglie la **modalità** (cambiabile poi da `/myb
    fondo le sezioni richiudibili (strumenti, ragionamento se il modello ragiona).
 2. Fai una domanda lunga e premi il pulsante di stop sull'anteprima: la risposta si ferma con
    "⏹️ Risposta interrotta".
-3. Invia un PDF con didascalia "riassumilo": l'agente lo legge; nella Chat UI (Impostazioni → Telegram) la
-   chat mostra l'allegato.
+3. Invia un PDF con didascalia "riassumilo": l'agente lo legge; nella Chat UI (sidebar) la chat mostra
+   l'allegato. Una domanda successiva sul PDF, senza reinviarlo, funziona (upload storici).
+4b. Chiedi un file ("esportami i dati in CSV"): arriva come documento su Telegram ed è nella sessione della
+   Chat UI. Con più di `max_outbound_files` file arriva "📁 Altri N file sono disponibili su AION".
 4. Invia una foto senza didascalia: l'agente la descrive.
 5. Invia un file oltre 20 MB: il bot avvisa del limite.
 6. Invia un vocale: il bot chiede di scrivere la domanda.
 7. Nel gruppo: rispondi a un messaggio dell'assistente con una foto e una didascalia: risponde citando.
-8. Con `AION_TELEGRAM_RICH_MESSAGES=0` le risposte tornano in HTML.
+8. Con `rich_messages=0` le risposte tornano in HTML.
 
 ## Ciclo di vita degli assistenti (Fase 6)
 
@@ -355,7 +395,7 @@ In `/newbot`, dopo il nome, si sceglie la **modalità** (cambiabile poi da `/myb
   (log: `eliminato senza revoca del token`).
 - **🔑 Rigenera token** (`/mybots` → assistente): nuovo token con `replaceManagedBotToken`, salvato cifrato,
   ascolto riavviato una sola volta; quello vecchio smette di funzionare.
-- **Controllo periodico** ogni `AION_TELEGRAM_RECONCILE_INTERVAL_MIN` minuti, per ogni assistente non eliminato:
+- **Controllo periodico** ogni `reconcile_interval_min` minuti, per ogni assistente non eliminato:
   - aggiorna nome e username se cambiati su Telegram;
   - un assistente in errore che risponde di nuovo torna attivo (il proprietario riceve un avviso);
   - token rifiutato: se il manager ottiene un nuovo token (cambio non notificato) lo salva e riavvia;
@@ -366,10 +406,12 @@ In `/newbot`, dopo il nome, si sceglie la **modalità** (cambiabile poi da `/myb
 
 1. `/newbot` → nome → **👥 Condiviso** → profilo → crea. Il messaggio "pronto" indica la modalità.
 2. Un collega con Telegram collegato al **suo** utente AION scrive all'assistente in privato: risponde con
-   i permessi del collega; nella Chat UI del collega compare la chat (Impostazioni → Telegram).
+   i permessi del collega; nella Chat UI del collega la chat compare nella sidebar.
 3. Un account Telegram non collegato scrive all'assistente: riceve l'invito a collegarsi.
 4. Il collega prova `/project`: "Solo il creatore…".
-5. Il creatore aggiunge l'assistente a un gruppo: messaggio di benvenuto. Un altro membro che prova ad
+5. **Con i gruppi disattivati (default)**: aggiungi l'assistente a un gruppo, scrive "Gli assistenti AION
+   nei gruppi non sono ancora disponibili" ed esce. I punti 5b-8 valgono solo con `GROUPS_ENABLED = True`.
+5b. Il creatore aggiunge l'assistente a un gruppo: messaggio di benvenuto. Un altro membro che prova ad
    aggiungerlo a un suo gruppo: l'assistente scrive "Solo il creatore…" ed esce.
 6. Nel gruppo: "ciao a tutti" → nessuna risposta; `/ask@nome_bot domanda` o risposta a un suo messaggio
    → risposta che cita la domanda. Rendi il bot amministratore: arriva "Ora rispondo anche quando mi
@@ -386,7 +428,7 @@ In `/newbot`, dopo il nome, si sceglie la **modalità** (cambiabile poi da `/myb
 3. Ripeti lo scollegamento dalla Chat UI: su Telegram arriva l'avviso con gli assistenti sospesi.
 4. `/mybots` → assistente → **🔑 Rigenera token**: l'assistente continua a rispondere; nel log c'è un solo
    `bot @... in ascolto` dopo la rotazione.
-5. Rinomina l'assistente da @BotFather; con `AION_TELEGRAM_RECONCILE_INTERVAL_MIN=1` entro un minuto
+5. Rinomina l'assistente da @BotFather; con `reconcile_interval_min=1` entro un minuto
    `/mybots` mostra il nuovo nome.
 6. Cancella un assistente da @BotFather: al controllo successivo arriva "non esiste più su Telegram" e
    sparisce da `/mybots`.
@@ -395,7 +437,7 @@ In `/newbot`, dopo il nome, si sceglie la **modalità** (cambiabile poi da `/myb
 
 ## Checklist di test manuale — Manager senza chat
 
-1. Ricostruisci backend e chat-ui (`AION_TELEGRAM_MANAGER_CHAT` assente o `0`).
+1. Ricostruisci backend e chat-ui (`manager_chat` assente o `0`).
 2. Sul manager il menu comandi non ha più `/new`, `/profile`, `/project`, `/stop`; `/help` mostra
    "Assistenti personali" e "Account".
 3. Scrivi "ciao" al manager: nessuna risposta dell'agente, ma i pulsanti "💬 nome assistente" che aprono
@@ -414,7 +456,7 @@ In `/newbot`, dopo il nome, si sceglie la **modalità** (cambiabile poi da `/myb
 5. Dal manager `/mybots` → cambia profilo → la domanda successiva sul bot usa il nuovo profilo.
 6. `/mybots` → Sospendi → sul bot non arriva più risposta; Riattiva → risponde di nuovo, senza riavvio.
 7. Domanda sul manager e sul bot personale quasi insieme: la seconda mostra "⏳ In coda".
-8. Chat UI → Impostazioni → Telegram: compaiono anche le chat del bot personale (sola lettura).
+8. Chat UI: le chat del bot personale compaiono nella sidebar con l'icona di Telegram e si continuano da lì.
 9. Riavvia il backend: il bot personale torna in ascolto da solo.
 
 ## Checklist di test manuale — Fase 4
@@ -439,15 +481,16 @@ Prerequisito: `docker compose up -d --build backend chat-ui`; account Telegram g
 3. [ ] Scrivi una domanda lunga (es. "spiegami in 10 punti come funziona un database relazionale"):
        compare "Sto pensando…"/"sta scrivendo…", il testo cresce progressivamente, poi resta il messaggio finale formattato.
 4. [ ] Fai una domanda di seguito ("e il secondo punto in dettaglio?"): la risposta tiene conto della precedente.
-5. [ ] Chat UI: la conversazione **non** è tra i Recenti; in Impostazioni → Telegram c'è nell'elenco con
-       l'anteprima della domanda; cliccandola si apre in sola lettura con l'avviso "Chat avviata da Telegram".
+5. [ ] Chat UI: la conversazione è nella sidebar con l'icona di Telegram e il titolo della prima domanda.
+       Aprila durante una risposta lunga: lo streaming si vede in diretta. Scrivi un messaggio dalla Chat UI:
+       risponde nella stessa conversazione, e la domanda successiva da Telegram ne tiene conto.
 6. [ ] Una domanda che richiede uno strumento (es. ricerca web): compare la riga "🔧 …" durante l'uso.
 7. [ ] `/stop` durante una risposta lunga: "⏹️ Interrompo…" e la risposta si chiude con "Risposta interrotta".
 8. [ ] Due messaggi rapidi uno dopo l'altro: il secondo riceve "⏳ In coda" e viene risposto dopo il primo.
 9. [ ] `/profile` → pulsanti con i profili consentiti (✓ su quello attuale) → sceglierne un altro → la
        risposta successiva usa quel profilo. `/project` → idem, incluso "Nessun progetto".
-10. [ ] `/new` → "Nuova conversazione"; la domanda successiva non ricorda il contesto; in Impostazioni →
-        Telegram ci sono ora due chat.
+10. [ ] `/new` → "Nuova conversazione"; la domanda successiva non ricorda il contesto; nella sidebar
+        della Chat UI ci sono ora due chat.
 11. [ ] Invia una foto o un vocale: risposta "Per ora posso rispondere solo a messaggi di testo".
 12. [ ] Riavvia il backend durante una risposta: arriva "AION si sta riavviando: risposta interrotta".
 
@@ -474,10 +517,10 @@ Prerequisito: ricostruire backend e Chat UI (`docker compose up -d --build backe
 
 ## Checklist di test manuale — Fase 1
 
-Prerequisiti: punti 1–5 e 7 del § 1 del piano (bot manager creato, token in `.env`).
+Prerequisiti: punti 1–5 e 7 del § 1 del piano (bot manager creato, token salvato in Admin → Telegram).
 
-1. [ ] Con `AION_TELEGRAM_ENABLED=0` AION parte come prima: nei log nessuna riga `aion.telegram`.
-2. [ ] Con `AION_TELEGRAM_ENABLED=1` compaiono `gateway avviato` e la riga `can_manage_bots=…`.
+1. [ ] Con il canale non attivo AION parte come prima: nei log nessuna riga `aion.telegram`.
+2. [ ] Attivato e salvato da Admin → Telegram (senza riavviare AION) compaiono `gateway avviato` e la riga `can_manage_bots=…`.
 3. [ ] Dal telefono: `/start` riceve il saluto in meno di 2 s.
 4. [ ] `/whoami` restituisce il proprio user id: annotarlo (prerequisito 6 del piano).
 5. [ ] `/help` mostra l'elenco; il menu comandi del client (tasto `/`) contiene start, help, whoami.
@@ -485,4 +528,4 @@ Prerequisiti: punti 1–5 e 7 del § 1 del piano (bot manager creato, token in `
 7. [ ] Fermare AION (Ctrl+C): nei log `offset confermato allo shutdown` (se c'erano update) e `gateway fermato`.
 8. [ ] Con AION spento inviare `/whoami` e un testo; riavviare AION: entrambi ricevono risposta.
 9. [ ] Riavviare di nuovo AION senza scrivere nulla: nessuna risposta duplicata.
-10. [ ] Token errato in `.env`: AION parte comunque e logga `rifiutato da Telegram (401)`.
+10. [ ] Token errato salvato in Admin → Telegram: AION parte comunque e logga `rifiutato da Telegram (401)`.

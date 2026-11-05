@@ -2,7 +2,7 @@
 
 AION non limita le chiamate parallele al modello (AION_MAP § 11): con un modello
 locale due turni insieme rallentano entrambi. Qui un semaforo FIFO globale
-(``AION_TELEGRAM_MAX_CONCURRENT_JOBS``) e un lock per conversazione: due messaggi
+(``max_concurrent_jobs`` in Admin → Telegram) e un lock per conversazione: due messaggi
 rapidi nella stessa chat vengono eseguiti uno dopo l'altro, mai in parallelo.
 """
 

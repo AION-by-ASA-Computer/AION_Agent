@@ -11,6 +11,10 @@ MODULES=(
   src/test/test_session_sandbox_escape.py
   src/test/test_mcp_catalog_install.py
   src/test/test_data_git_tracking.py
+  src/test/test_api_contract_routes.py
+  src/test/test_api_contract_responses.py
+  src/test/test_sse_contract.py
+  src/test/test_openapi_contract.py
   src/test/test_audio_transcribe.py
   src/test/test_admin_stt.py
   src/test/test_whatsapp_voice.py

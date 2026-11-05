@@ -99,6 +99,10 @@ def serialize_messages(messages: List[ChatMessage]) -> List[Dict[str, Any]]:
                     row[key] = str(meta[key])[:32_000]
             if meta.get("usage"):
                 row["usage"] = meta["usage"]
+        rc = getattr(message, "reasoning", None)
+        rc_text = getattr(rc, "reasoning_text", None) if rc is not None else None
+        if rc_text:
+            row["reasoning"] = str(rc_text)[:32_000]
         rows.append(row)
     return rows
 

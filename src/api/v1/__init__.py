@@ -16,6 +16,7 @@ from . import (
     me_telegram,
     whatsapp,
     voice,
+    me_telegram,
 )
 from src.api.cron_user import router as cron_user_router
 
@@ -36,3 +37,4 @@ api_v1_router.include_router(me_api_keys.router)
 api_v1_router.include_router(me_telegram.router)
 api_v1_router.include_router(whatsapp.router)
 api_v1_router.include_router(voice.router)
+api_v1_router.include_router(me_telegram.router)

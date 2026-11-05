@@ -1101,16 +1101,12 @@ async def get_agent(
 
     try:
         if user_id and user_id != "default":
-            from sqlalchemy import select
-            from .data.engine import get_async_session_maker
-            from .data.models import UserProfileAccess
+            from .api.profile_access import allowed_profile_slugs, user_row_id_for
 
-            async with get_async_session_maker()() as session:
-                q = select(UserProfileAccess.profile_slug).where(
-                    UserProfileAccess.user_id == user_id
-                )
-                res = await session.execute(q)
-                allowed_slugs = [r[0] for r in res.all()]
+            # ``user_profile_access.user_id`` è ``users.id``, non l'identificativo.
+            allowed_slugs = await allowed_profile_slugs(
+                await user_row_id_for(user_id, tenant_id)
+            )
 
             if allowed_slugs:
                 try:

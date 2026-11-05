@@ -231,6 +231,26 @@ class TgGroupMessage(TelegramBase):
     )
 
 
+class TgSettings(TelegramBase):
+    """Channel configuration edited from Admin → Telegram (one row per tenant).
+
+    Replaces the former ``AION_TELEGRAM_*`` env variables: the channel never reads
+    ``.env``. ``data_encrypted`` is the JSON of the explicitly set fields of
+    ``TelegramSettings`` (manager token included), encrypted as a whole with
+    ``credential_store`` so no value is ever stored in clear. Unset fields use the
+    defaults declared in code. Read/written by ``settings_store``.
+    """
+
+    __tablename__ = "tg_settings"
+
+    tenant_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    data_encrypted: Mapped[Optional[str]] = mapped_column(Text)
+    updated_by_user_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey(_USER_FK, ondelete="SET NULL")
+    )
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+
+
 Index(
     "ix_tg_group_messages_chat",
     TgGroupMessage.bot_id,
@@ -261,6 +281,7 @@ CHANNEL_TABLES = (
     TgPendingCreation.__table__,
     TgGroupMessage.__table__,
     TgUserQuota.__table__,
+    TgSettings.__table__,
 )
 
 # Colonne aggiunte dopo la creazione delle tabelle: (tabella, colonna, DDL).

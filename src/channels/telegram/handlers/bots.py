@@ -28,6 +28,7 @@ from aiogram.types import (
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from src.channels.telegram import groups
 from src.channels.telegram.adapter import AionUserRef, ChatAccessError
 from src.channels.telegram.bots import (
     MODE_LABELS,
@@ -151,7 +152,9 @@ async def on_name(
         "Chi potrà usarlo?\n"
         "🔒 <b>Personale</b>: solo tu, in chat privata.\n"
         "👥 <b>Condiviso</b>: chiunque abbia collegato il proprio account ad AION "
-        "(ognuno con i propri permessi); puoi aggiungerlo ai gruppi.",
+        "(ognuno con i propri permessi)"
+        # Group mentions only while groups are enabled (``groups.GROUPS_ENABLED``).
+        + ("; puoi aggiungerlo ai gruppi." if groups.GROUPS_ENABLED else "."),
         reply_markup=kb.as_markup(),
     )
 
@@ -270,8 +273,8 @@ async def _show_summary(
     project = escape(data["project"]) if data.get("project") else "nessuno"
     mode = data.get("mode", BotMode.PERSONAL.value)
     access = (
-        "Lo potranno usare tutti gli utenti AION che hanno collegato Telegram; "
-        "solo tu potrai aggiungerlo ai gruppi."
+        "Lo potranno usare tutti gli utenti AION che hanno collegato Telegram"
+        + ("; solo tu potrai aggiungerlo ai gruppi." if groups.GROUPS_ENABLED else ".")
         if mode == BotMode.SHARED.value
         else "Il bot sarà accessibile solo a te."
     )
@@ -682,7 +685,8 @@ async def on_my_mode(
     note = (
         "Ora è condiviso: tutti gli utenti AION collegati possono usarlo."
         if info.shared
-        else "Ora è personale: risponde solo a te e non nei gruppi."
+        else "Ora è personale: risponde solo a te"
+        + (" e non nei gruppi." if groups.GROUPS_ENABLED else ".")
     )
     await query.answer(note, show_alert=True)
     await _show_details(query, info, bot_factory)

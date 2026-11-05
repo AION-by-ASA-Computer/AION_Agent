@@ -23,6 +23,7 @@ from src.data.message_roles import (
     normalize_message_role,
 )
 from src.data.models import Conversation
+from src.api.contract_models import ConversationCreated
 
 router = APIRouter()
 
@@ -47,7 +48,7 @@ def _require_unified():
         )
 
 
-@router.post("/conversations")
+@router.post("/conversations", response_model=ConversationCreated)
 async def create_conversation(
     body: ConversationCreate,
     ctx: AuthContext = Depends(require_scope(Scope.CONVERSATIONS_WRITE)),

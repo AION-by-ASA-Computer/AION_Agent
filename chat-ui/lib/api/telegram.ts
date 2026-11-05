@@ -10,13 +10,13 @@ export type TelegramLink = {
 };
 
 export type TelegramStatus = {
-  /** Integrazione attiva sul server (AION_TELEGRAM_ENABLED). */
+  /** Integrazione attiva sul server (Admin → Telegram → Attiva). */
   enabled: boolean;
   /** Bot manager connesso a Telegram: senza, non si possono generare link. */
   available: boolean;
   bot_username: string | null;
   pairing_ttl_min: number;
-  /** Chat sul bot manager attiva (AION_TELEGRAM_MANAGER_CHAT); di default si chatta con gli assistenti. */
+  /** Chat sul bot manager attiva (Admin → Telegram); di default si chatta con gli assistenti. */
   manager_chat?: boolean;
   link: TelegramLink | null;
 };
@@ -83,34 +83,6 @@ export async function unlinkTelegram(userId: string, token?: string | null): Pro
     headers: baseUserHeaders(userId, token),
   });
   if (!r.ok) throw await parseError(r);
-}
-
-/** Conversation started from Telegram; opened read-only in the chat view. */
-export type TelegramConversation = {
-  id: string;
-  title: string | null;
-  /** First user message, used when the conversation has no title yet. */
-  preview: string | null;
-  profile_slug: string | null;
-  /** Username of the personal assistant; null for chats on the manager bot. */
-  telegram_bot?: string | null;
-  /** Group title when the question was asked in a Telegram group. */
-  telegram_chat?: string | null;
-  message_count: number;
-  created_at: string | null;
-  updated_at: string | null;
-};
-
-export async function listTelegramConversations(
-  userId: string,
-  token?: string | null,
-): Promise<TelegramConversation[]> {
-  const r = await fetch(`${apiBase()}/v1/me/telegram/conversations`, {
-    headers: baseUserHeaders(userId, token),
-    cache: "no-store",
-  });
-  if (!r.ok) throw await parseError(r);
-  return ((await r.json()) as { data: TelegramConversation[] }).data;
 }
 
 export type TelegramBotStatus = "provisioning" | "active" | "suspended" | "error";

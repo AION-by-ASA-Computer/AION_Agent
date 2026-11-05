@@ -1,0 +1,35 @@
+: aion-open
+
+event: message
+data: {"type": "turn_started", "user_message_id": "<uuid>", "assistant_message_id": "<uuid>"}
+
+event: message
+data: {"type": "context_budget", "phase": "preflight", "total": 4301, "max_prompt": 126976, "trigger": 65536, "message_count": 8, "pct": 3.4, "parts": [{"key": "system_prompt", "tokens": 4096, "pct": 3.2}, {"key": "user", "tokens": 187, "pct": 0.1}, {"key": "assistant", "tokens": 18, "pct": 0.0}]}
+
+event: message
+data: {"type": "prompt_snapshot", "assistant_message_id": "<uuid>", "snapshot": {"phase": "pre_run"}}
+
+event: message
+data: {"type": "tool_event", "event": {"type": "tool_start", "id": "call-1", "name": "splunk_search", "input": {"q": "error"}}}
+
+event: message
+data: {"type": "context_budget", "phase": "tool", "total": 5108, "max_prompt": 126976, "trigger": 65536, "message_count": 8, "pct": 4.0, "parts": [{"key": "system_prompt", "tokens": 4903, "pct": 3.9}, {"key": "user", "tokens": 187, "pct": 0.1}, {"key": "assistant", "tokens": 18, "pct": 0.0}]}
+
+event: message
+data: {"type": "tool_event", "event": {"type": "tool_end", "id": "call-1", "name": "splunk_search", "output": "3 risultati", "input": {"q": "error"}, "tokens_in": 6, "tokens_out": 3}}
+
+event: message
+data: {"type": "token", "content": "Trovati "}
+
+event: message
+data: {"type": "token", "content": "3 errori."}
+
+event: message
+data: {"type": "stream_end", "finish_reason": "stop"}
+
+event: message
+data: {"type": "prompt_snapshot", "assistant_message_id": "<uuid>", "snapshot": {"phase": "complete"}}
+
+event: message
+data: {"type": "final", "text": "Trovati 3 errori."}
+

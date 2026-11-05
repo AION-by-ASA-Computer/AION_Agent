@@ -93,6 +93,7 @@ function tabFromSearchParam(tab: string | null): SettingsTab {
   if (tab === "api-keys" || tab === "api_keys" || tab === "apikeys") return "api-keys";
   if (tab === "telegram") return "telegram";
   if (tab === "whatsapp") return "whatsapp";
+  if (tab === "telegram") return "telegram";
   if (tab === "tunings" || tab === "tuning" || tab === "runtime" || tab === "presets") return "tunings";
   return "profile";
 }
@@ -569,6 +570,7 @@ export default function SettingsPage() {
             {activeTab === "whatsapp" && currentToken && whatsappEnabled ? (
               <WhatsAppSection onToast={showToast} />
             ) : null}
+            {activeTab === "telegram" && currentToken ? <TelegramSection onToast={showToast} /> : null}
 
             {activeTab === "instructions" ? (
               <UserMdSection

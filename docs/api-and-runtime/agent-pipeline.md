@@ -292,6 +292,16 @@ The model can emit **many** tokens in the `reasoning` channel before the useful 
 - **vLLM Server**: for **streaming reasoning**, **`--reasoning-parser qwen3`** is required; see [Reasoning outputs (vLLM)](https://docs.vllm.ai/en/latest/features/reasoning_outputs/).
 - **`AION_CHAT_MAX_TOKENS`**: remains the global ceiling of the completion; the thinking budget prevents almost all of the budget from being consumed by the internal monologue.
 
+#### Reasoning replay inside the turn (interleaved thinking)
+
+In the tool loop every LLM call sees the previous tool calls and their results. Without the model's own reasoning from those steps it re-derives the plan at every step, and that is the main cause of very long thinking on multi-tool turns. AION therefore keeps the reasoning of each assistant step and sends it back:
+
+- **Capture**: `src/runtime/llm_lite_llm_adapter.py` attaches a `ReasoningContent` to the assistant `ChatMessage`. In streaming it is re-aggregated from the chunk `meta["reasoning"]`; without streaming it is read from `message.reasoning_content` / `message.reasoning`. Replies that contain only reasoning (no text, no tool calls) are left as they are.
+- **Replay**: when building the LiteLLM request, every assistant message carrying `ReasoningContent` gets the fields listed in `AION_REASONING_REPLAY_FIELDS` (default `reasoning_content` and `reasoning`). `AION_REASONING_REPLAY=0` turns this off. Anthropic and Google are skipped, because they need signed thinking blocks.
+- **Scope**: messages rebuilt from STM and history are text-only, so only the reasoning of the current turn is replayed. Earlier turns are never re-sent with their thinking.
+- **Template flags**: with thinking on, `chat_template_kwargs` also carries `preserve_thinking=true` (Qwen3.6+) and `clear_thinking=false` (GLM-5.x), so the chat template keeps the replayed reasoning instead of stripping it.
+- **Budget and audit**: mid-turn compaction counts the replayed reasoning in the prompt estimate, and the LLM call audit shows it per message (`reasoning`).
+
 #### Parser vs `--reasoning-config` (why it seems redundant)
 
 In the official *Thinking budget control* documentation ([Reasoning outputs](https://docs.vllm.ai/en/latest/features/reasoning_outputs/)) the roles are distinct:

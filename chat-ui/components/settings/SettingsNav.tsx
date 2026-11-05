@@ -11,6 +11,7 @@ export type SettingsTab =
   | "api-keys"
   | "telegram"
   | "whatsapp"
+  | "telegram"
   | "instructions"
   | "tunings";
 

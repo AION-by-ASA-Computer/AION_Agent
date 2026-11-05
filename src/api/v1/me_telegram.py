@@ -1,18 +1,17 @@
 """Collegamento Telegram dell'utente loggato (chat-ui → Impostazioni → Telegram).
 
 Solo token chat, come le API key personali: il collegamento è un'azione dell'utente.
-La logica sta in ``src/channels/telegram``; con ``AION_TELEGRAM_ENABLED=0`` gli
-endpoint rispondono ``enabled: false`` e non importano aiogram.
+La logica sta in ``src/channels/telegram``; con il canale spento (Admin → Telegram)
+gli endpoint rispondono ``enabled: false`` e non importano aiogram.
 """
 
 from __future__ import annotations
 
 import asyncio
-import json
 from datetime import datetime, timezone
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException
 
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
 from src.channels.telegram import runtime
@@ -149,77 +148,6 @@ async def delete_my_telegram_link(auth: ChatAuthIdentity = Depends(_me)):
             )
         )
     return {"ok": True, "suspended_bots": len(suspended)}
-
-
-_PREVIEW_CHARS = 120
-
-
-@router.get("/conversations")
-async def list_my_telegram_conversations(
-    limit: int = Query(50, ge=1, le=200),
-    auth: ChatAuthIdentity = Depends(_me),
-):
-    """Chat avviate da Telegram (``metadata.source = "telegram"``): escluse dalla
-    sidebar e mostrate solo in Impostazioni → Telegram."""
-    from sqlalchemy import select
-
-    from src.channels.telegram.adapter import SOURCE, default_tenant_id
-    from src.data.engine import get_async_session_maker
-    from src.data.models import Conversation, Message
-    from src.identity import sanitize_user_id
-
-    user_id = sanitize_user_id(auth.identifier or auth.user_row_id)
-    async with get_async_session_maker()() as session:
-        rows = (
-            (
-                await session.execute(
-                    select(Conversation)
-                    .where(
-                        Conversation.tenant_id == default_tenant_id(),
-                        Conversation.user_id == user_id,
-                        Conversation.archived_at.is_(None),
-                        Conversation.parent_conversation_id.is_(None),
-                    )
-                    .order_by(Conversation.updated_at.desc())
-                    .limit(limit * 4)
-                )
-            )
-            .scalars()
-            .all()
-        )
-        metas = {r.id: json.loads(r.metadata_json or "{}") for r in rows}
-        convs = [r for r in rows if metas[r.id].get("source") == SOURCE][:limit]
-        # Primo messaggio dell'utente come anteprima (le chat Telegram spesso non hanno titolo).
-        previews: dict = {}
-        if convs:
-            msgs = await session.execute(
-                select(Message.conversation_id, Message.content)
-                .where(
-                    Message.conversation_id.in_([c.id for c in convs]),
-                    Message.role == "user",
-                )
-                .order_by(Message.conversation_id, Message.seq)
-            )
-            for conv_id, content in msgs.all():
-                previews.setdefault(conv_id, (content or "").strip()[:_PREVIEW_CHARS])
-    return {
-        "data": [
-            {
-                "id": c.id,
-                "title": c.title,
-                "preview": previews.get(c.id) or None,
-                "profile_slug": c.profile_slug,
-                # Username dell'assistente personale; None = chat sul bot manager.
-                "telegram_bot": metas[c.id].get("telegram_bot"),
-                # Titolo del gruppo per le domande fatte in un gruppo Telegram.
-                "telegram_chat": metas[c.id].get("telegram_chat"),
-                "message_count": c.message_count,
-                "created_at": _iso(c.created_at),
-                "updated_at": _iso(c.updated_at),
-            }
-            for c in convs
-        ]
-    }
 
 
 @router.get("/bots")

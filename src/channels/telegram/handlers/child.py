@@ -48,6 +48,7 @@ from src.channels.telegram.chat import (
     files_label,
     incoming_file,
 )
+from src.channels.telegram import groups
 from src.channels.telegram.groups import GroupLog, group_prompt
 from src.channels.telegram.handlers.chat import target_of
 from src.channels.telegram.handlers.common import on_error
@@ -138,6 +139,11 @@ class ChildAccessMiddleware(BaseMiddleware):
         in_group = chat.type in GROUP_TYPES
         if chat.type != ChatType.PRIVATE and not in_group:
             return None  # canali
+        if in_group and not groups.GROUPS_ENABLED:
+            # Groups are disabled (see ``groups.GROUPS_ENABLED``): never answer
+            # there, leave the group the bot is still in.
+            await _leave(data["bot"], chat.id, groups.GROUPS_DISABLED_TEXT)
+            return None
 
         bot: Bot = data["bot"]
         bots: TelegramBots = data["bots"]
@@ -633,6 +639,11 @@ async def on_added_to_chat(
         and old_status != ChatMemberStatus.ADMINISTRATOR
     )
     if not joined and not promoted:
+        return
+    if not groups.GROUPS_ENABLED:
+        # Groups are disabled (see ``groups.GROUPS_ENABLED``): say so and leave.
+        if joined:
+            await _leave(bot, event.chat.id, groups.GROUPS_DISABLED_TEXT)
         return
     info = await bots.get_by_tg_id(bot.id)
     if info is None or info.status == BotStatus.DELETED.value:

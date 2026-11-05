@@ -81,6 +81,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     items: [
       { id: "settings", href: "/settings", icon: Settings, labelKey: "admin_nav.settings" },
       { id: "whatsapp", href: "/whatsapp", icon: MessageCircle, labelKey: "admin_nav.whatsapp" },
+      { id: "telegram", href: "/telegram", icon: Send, labelKey: "admin_nav.telegram" },
     ],
   },
 ];

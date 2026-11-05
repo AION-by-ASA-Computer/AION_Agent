@@ -218,6 +218,10 @@ sequenceDiagram
      seguire dal vivo;
    - foto e documenti ricevuti sono passati come allegati del turno, come gli
      upload della chat-ui (vedi [File e foto](#file-e-foto)).
+   - questa logica "sessione vera" (titolo, allegati storici, livello di
+     pensiero nei metadati, run in background, file generati) sta in
+     `src/channels/session_turn.py` ed è condivisa con il canale Telegram
+     (vedi [Telegram - Runbook](../telegram/RUNBOOK.md)).
    - "Sta scrivendo…": Meta lo mostra per 25 secondi al massimo, quindi AION
      lo rinnova ogni 20 secondi finché il turno non finisce (dopo 3 rifiuti di
      fila da Meta smette di riprovare).

@@ -16,6 +16,7 @@ from src.api.cron_schemas import (
     ScheduledRunOut,
 )
 from src.api.ownership import assert_conversation_access, effective_user_id
+from src.api.profile_access import enforce_profile_access
 from src.session_workspace import normalize_session_id
 from src.runtime import cron_db
 from src.runtime.cron_runner import execute_job
@@ -106,8 +107,12 @@ async def get_my_cron_job(job_id: str, uid: str = Depends(_cron_user_id)):
 async def create_my_cron_job(
     body: ScheduledJobCreate,
     uid: str = Depends(_cron_user_id),
+    auth: ChatAuthIdentity = Depends(require_chat_auth),
 ):
     _require_cron()
+    body.profile_slug = await enforce_profile_access(
+        auth.user_row_id, body.profile_slug
+    )
     n = await cron_db.count_jobs_for_user(uid)
     if n >= _max_jobs_per_user():
         raise HTTPException(
@@ -143,10 +148,15 @@ async def patch_my_cron_job(
     job_id: str,
     body: ScheduledJobUpdate,
     uid: str = Depends(_cron_user_id),
+    auth: ChatAuthIdentity = Depends(require_chat_auth),
 ):
     _require_cron()
     await _get_owned(job_id, uid)
     patch = body.model_dump(exclude_unset=True)
+    if patch.get("profile_slug"):
+        patch["profile_slug"] = await enforce_profile_access(
+            auth.user_row_id, patch["profile_slug"]
+        )
     if "session_id" in patch:
         await _require_owned_session(patch.get("session_id"), uid)
     if not patch:

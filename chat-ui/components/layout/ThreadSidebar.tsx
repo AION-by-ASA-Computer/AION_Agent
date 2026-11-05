@@ -26,6 +26,7 @@ import { apiBase } from "@/lib/config";
 import type { ShellSection } from "@/lib/shell/use-conversation-threads";
 import { cn } from "@/lib/cn";
 import { ChatBrand } from "../brand/ChatBrand";
+import { TelegramIcon } from "../brand/TelegramIcon";
 import { WhatsAppIcon } from "../brand/WhatsAppIcon";
 import { SidebarProfileMenu } from "./SidebarProfileMenu";
 import { useStoredToken } from "@/lib/auth/use-stored-auth";
@@ -634,6 +635,11 @@ function ConversationRowInner({
         {conv.metadata?.source === "whatsapp" ? (
           <span className="shrink-0" title={t("sidebar.from_whatsapp")}>
             <WhatsAppIcon label={t("sidebar.from_whatsapp")} />
+          </span>
+        ) : null}
+        {conv.metadata?.source === "telegram" ? (
+          <span className="shrink-0" title={t("sidebar.from_telegram")}>
+            <TelegramIcon label={t("sidebar.from_telegram")} />
           </span>
         ) : null}
         <span className="truncate transition-transform duration-200 group-hover:translate-x-0.5">{displayTitle}</span>

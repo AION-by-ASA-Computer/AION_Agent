@@ -453,3 +453,52 @@ def test_chat_ui_history_get_last_assistant_steps(monkeypatch, tmp_path):
         assert fallback_steps[0]["output"] == "file1\nfile2"
 
     asyncio.run(run())
+
+
+def test_delete_turn_prunes_tool_ledger_of_deleted_turns(monkeypatch, tmp_path):
+    import time
+
+    from src.api.chat_ui import delete_turn_chat_ui
+    from src.runtime.tool_ledger import (
+        LedgerEntry,
+        append_ledger_entry,
+        list_ledger_entries,
+    )
+
+    async def run():
+        await _reset_unified_db(monkeypatch, tmp_path)
+        monkeypatch.setenv("AION_DATA_DIR", str(tmp_path))
+        monkeypatch.setenv("AION_TOOL_LEDGER_ENABLED", "1")
+        bridge = UnifiedHistoryBridge()
+        await bridge.add_message(
+            "conv-l", "user", "turno 1", user_id="u1", message_id="u-1"
+        )
+        await bridge.add_message(
+            "conv-l", "assistant", "ok", user_id="u1", message_id="a-1"
+        )
+        await bridge.add_message(
+            "conv-l", "user", "turno 2", user_id="u1", message_id="u-2"
+        )
+        append_ledger_entry(
+            "conv-l",
+            LedgerEntry(
+                seq=1, ts=1.0, tool="list_hosts", target="{}", ok=True, chars=1
+            ),
+        )
+        append_ledger_entry(
+            "conv-l",
+            LedgerEntry(
+                seq=2,
+                ts=time.time() + 60,
+                tool="list_pending_updates",
+                target="h",
+                ok=True,
+                chars=1,
+            ),
+        )
+
+        out = await delete_turn_chat_ui("conv-l", "u-2", user_id="u1")
+        assert out["message_count"] == 2
+        assert [r["tool"] for r in list_ledger_entries("conv-l")] == ["list_hosts"]
+
+    asyncio.run(run())

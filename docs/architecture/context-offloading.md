@@ -314,6 +314,13 @@ Rows beyond `max_rows` collapse into the "omitted" line. The table is
 **regenerated every turn** rather than stored in history, which is why it
 survives compaction at constant cost.
 
+When a turn is deleted (chat-ui regenerate or edit,
+`DELETE /chat-ui/conversations/{id}/messages/{message_id}`),
+`prune_ledger_since()` drops every row with `ts` at or after the deleted user
+message, together with its offloaded file. Otherwise the next turn's trace
+would list calls the user can no longer see, and the model would read their
+results instead of calling the tool again.
+
 ### Injection
 
 **v1 (Python only, no worker change).** Extend

@@ -7,6 +7,10 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
+# Versione di mcp-remote: deve coincidere con docker/package.mcp-remote.json
+# (tutto il traffico verso i broker remoti passa da qui).
+MCP_REMOTE_VERSION = "0.1.49"
+
 MCP_REMOTE_PROXY_MARKERS = (
     "node_modules/mcp-remote/dist/proxy.js",
     "mcp-remote/dist/proxy.js",
@@ -47,16 +51,19 @@ def resolve_remote_bridge_spawn(config: Dict[str, Any]) -> Tuple[str, List[str]]
     Spawn command for remote-bridge MCP servers.
 
     Prefer local ``node_modules/mcp-remote`` (Docker image); fall back to
-    ``npx -y mcp-remote`` when the package is not installed under /app.
+    ``npx -y mcp-remote@<MCP_REMOTE_VERSION>`` when the package is not installed under /app.
     """
     raw_args = list(config.get("args") or [])
     tail = remote_bridge_tail_args(raw_args)
+    # Broker su rete interna in HTTP: mcp-remote rifiuta http:// non loopback senza flag.
+    if config.get("allow_http") is True and "--allow-http" not in tail:
+        tail.append("--allow-http")
 
     local = mcp_remote_proxy_path()
     if local:
         return ("node", [local, *tail])
     if shutil.which("npx"):
-        return ("npx", ["-y", "mcp-remote", *tail])
+        return ("npx", ["-y", f"mcp-remote@{MCP_REMOTE_VERSION}", *tail])
 
     command = str(config.get("command") or "node")
     return (command, raw_args)
@@ -114,6 +121,9 @@ def build_remote_bridge_registry_config(
         "aion_market_install": "remote",
         "description": description,
     }
-    if auth_type != "none" and env_var:
+    if auth_key and credential_mode == "per_user":
         config["auth_env_var"] = env_var
+    elif auth_key and credential_mode == "org_shared":
+        # Token unico dell'organizzazione: mcp-remote legge ${API_KEY}, non AION_USER_*.
+        config["auth_env_var"] = auth_key
     return config

@@ -388,6 +388,21 @@ webhook + `/v1/me/whatsapp*` in `src/api/v1/whatsapp.py`, `/admin/whatsapp*` in
 `src/api/admin_whatsapp.py`); kill switch `AION_WHATSAPP_FORCE_DISABLE=1`.
 See `docs/integrations/whatsapp.md`.
 
+### Telegram channel
+
+Users chat with personal AION assistants on Telegram (`src/channels/telegram/`,
+long polling via aiogram, `/admin/telegram*` in `src/api/admin_telegram.py`).
+The channel configuration lives **only in the DB** (`tg_settings`, one encrypted
+JSON row per tenant, manager token included), edited from Admin → Telegram via
+`GET/PUT /admin/telegram/settings`; `AION_TELEGRAM_*` env vars are ignored. A save
+restarts only the in-process gateway, never the API container. Logic in
+`src/channels/telegram/settings_store.py`.
+Telegram conversations are regular AION sessions (sidebar, writable from chat-ui,
+live-followable), sharing the turn plumbing with WhatsApp in
+`src/channels/session_turn.py`. Groups are disabled behind
+`GROUPS_ENABLED` in `src/channels/telegram/groups.py` (code kept).
+See `docs/telegram/RUNBOOK.md`.
+
 ### Documentation
 - Single source of truth: `docs/` directory
 - Rendered site: `website/` (Docusaurus)
