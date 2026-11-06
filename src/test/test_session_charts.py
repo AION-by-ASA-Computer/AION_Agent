@@ -51,7 +51,10 @@ def test_timeline_builder_stores_chart_reference_only():
     """The persisted timeline keeps a light {kind: chart, id} segment after the tool step."""
     tb = TimelineBuilder()
     tb.apply_chunk(
-        {"type": "tool_event", "event": {"type": "tool_start", "id": "c1", "name": "render_chart"}}
+        {
+            "type": "tool_event",
+            "event": {"type": "tool_start", "id": "c1", "name": "render_chart"},
+        }
     )
     tb.apply_chunk(
         {
@@ -124,8 +127,12 @@ def test_persist_hydrate_and_delete_conversation(monkeypatch, tmp_path):
     async def scenario():
         await _reset_db(monkeypatch, tmp_path)
         bridge = UnifiedHistoryBridge()
-        await bridge.add_message("conv-c", "user", "grafico cpu", user_id="bob", message_id="u1")
-        await bridge.add_message("conv-c", "assistant", "Ecco", user_id="bob", message_id="a1")
+        await bridge.add_message(
+            "conv-c", "user", "grafico cpu", user_id="bob", message_id="u1"
+        )
+        await bridge.add_message(
+            "conv-c", "assistant", "Ecco", user_id="bob", message_id="a1"
+        )
 
         chart = SessionChartQueue.push("conv-c", _payload(), tool_call_id="t1")
         # Timeline as written by TimelineBuilder: reference only.

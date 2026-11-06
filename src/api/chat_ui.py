@@ -140,7 +140,9 @@ def _hydrate_chart_segments(
             (
                 i
                 for i, s in enumerate(out)
-                if isinstance(s, dict) and s.get("kind") == "tool" and s.get("id") == tcid
+                if isinstance(s, dict)
+                and s.get("kind") == "tool"
+                and s.get("id") == tcid
             ),
             -1,
         )
