@@ -58,10 +58,10 @@ export function WebSourcesBar({ cards, messageId }: { cards: WebSourceCard[]; me
             title={c.title}
             className={cn(
               "group flex shrink-0 items-center gap-1.5 rounded-full border border-border/60 bg-muted/30 px-2.5 py-1 text-xs text-muted-foreground transition-colors",
-              "hover:border-primary/25 hover:bg-muted/50 hover:text-foreground",
+              "hover:border-border hover:bg-muted/50 hover:text-foreground",
             )}
           >
-            <span className="flex size-4 items-center justify-center rounded-full bg-background text-[0.571em] font-bold text-muted-foreground group-hover:text-primary">
+            <span className="flex size-4 items-center justify-center rounded-full bg-background text-[0.571em] font-bold text-muted-foreground group-hover:text-foreground">
               {c.index}
             </span>
             <span className="max-w-[140px] truncate font-medium">{webHostLabel(c.url)}</span>
@@ -95,6 +95,25 @@ function ToolParamsBlock({ input }: { input: unknown }) {
         </pre>
       ) : null}
     </div>
+  );
+}
+
+/**
+ * Neutral globe badge identifying web tools (search / page fetch).
+ * Web results deliberately avoid the brand red (primary), which in this UI
+ * reads as an error: color is reserved for the status dot and real errors.
+ */
+function WebToolIcon({ size = "md" }: { size?: "sm" | "md" }) {
+  return (
+    <span
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-md border border-border/60 bg-background text-muted-foreground",
+        size === "md" ? "size-7" : "size-5",
+      )}
+      aria-hidden
+    >
+      <Globe className={size === "md" ? "size-4" : "size-3"} />
+    </span>
   );
 }
 
@@ -172,7 +191,7 @@ function ToolInvocationCard({
           <ToolCardShell>
             <div className="flex items-center gap-2">
               <StatusDot running />
-              <Search className="size-3.5 shrink-0 text-primary/80" aria-hidden />
+              <Search className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
               <ShimmerText className="text-xs font-medium">{t("chat.tool.web_search_running")}</ShimmerText>
             </div>
             {q ? (
@@ -190,7 +209,7 @@ function ToolInvocationCard({
             <ToolCardShell isError={isError} className="overflow-hidden p-0">
               <div className="flex items-center gap-2 border-b border-border/50 bg-muted/30 px-3.5 py-2.5">
                 <StatusDot running={false} isError={isError} />
-                <Search className="size-4 shrink-0 text-primary/80" aria-hidden />
+                <WebToolIcon />
                 <div className="min-w-0 flex-1">
                   <div className="text-[0.714em] font-semibold uppercase tracking-wide text-muted-foreground">
                     {t("chat.tool.web_search_done")}
@@ -213,16 +232,25 @@ function ToolInvocationCard({
                     .filter((r) => r.url)
                     .slice(0, 20)
                     .map((r, idx) => (
-                      <li key={`${r.url}-${idx}`} className="rounded-lg px-2.5 py-2 text-[0.786em] hover:bg-muted/30">
+                      <li key={`${r.url}-${idx}`}>
                         <a
                           href={r.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="block font-medium text-primary underline-offset-2 hover:underline"
+                          title={r.url}
+                          className="group flex items-start gap-2.5 rounded-lg px-2.5 py-2 text-[0.786em] transition-colors hover:bg-muted/40"
                         >
-                          {truncate(r.title, 120)}
+                          <Globe className="mt-[0.2em] size-3.5 shrink-0 text-muted-foreground/70" aria-hidden />
+                          <span className="min-w-0 flex-1">
+                            <span className="block font-medium text-foreground underline-offset-2 group-hover:underline">
+                              {truncate(r.title || webHostLabel(r.url), 120)}
+                            </span>
+                            <span className="mt-0.5 flex min-w-0 items-center gap-1 text-[0.857em] text-muted-foreground">
+                              <span className="shrink-0 font-medium">{webHostLabel(r.url)}</span>
+                              <span className="truncate opacity-70">{r.url}</span>
+                            </span>
+                          </span>
                         </a>
-                        <div className="mt-0.5 truncate text-[0.714em] text-muted-foreground">{r.url}</div>
                       </li>
                     ))}
                 </ul>
@@ -238,7 +266,7 @@ function ToolInvocationCard({
           <ToolCardShell isError={isError}>
             <div className="flex items-center gap-2 text-muted-foreground">
               <StatusDot running={false} isError={isError} />
-              <Search className="size-3.5 shrink-0 text-primary/80" aria-hidden />
+              <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
               <span className="text-xs font-medium text-foreground">{t("chat.tool.web_search_done")}</span>
               {tokens_in !== undefined && tokens_out !== undefined ? (
                 <span className="ml-auto rounded border border-border/50 bg-background/50 px-1.5 py-0.5 text-[0.643em] font-medium text-muted-foreground">
@@ -258,7 +286,7 @@ function ToolInvocationCard({
           <ToolCardShell>
             <div className="flex items-center gap-2">
               <StatusDot running />
-              <Globe className="size-3.5 shrink-0 text-primary/80" aria-hidden />
+              <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
               <ShimmerText className="text-xs font-medium">{t("chat.tool.web_fetch_running")}</ShimmerText>
             </div>
             {u ? (
@@ -274,7 +302,7 @@ function ToolInvocationCard({
             <ToolCardShell isError={isError}>
               <div className="flex items-center gap-2 border-b border-border/40 pb-2">
                 <StatusDot running={false} isError={isError} />
-                <Globe className="size-4 shrink-0 text-primary/80" aria-hidden />
+                <WebToolIcon size="sm" />
                 <span className="text-[0.714em] font-semibold uppercase tracking-wide text-muted-foreground">
                   {t("chat.tool.web_fetch_done")}
                 </span>
@@ -284,7 +312,7 @@ function ToolInvocationCard({
                   href={effective.url}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className="mt-2 block truncate text-[0.857em] font-medium text-primary underline-offset-2 hover:underline"
+                  className="mt-2 block truncate text-[0.857em] font-medium text-foreground underline-offset-2 hover:underline"
                 >
                   {effective.url}
                 </a>
@@ -300,7 +328,7 @@ function ToolInvocationCard({
           <ToolCardShell isError={isError}>
             <div className="flex items-center gap-2">
               <StatusDot running={false} isError={isError} />
-              <Globe className="size-3.5 shrink-0 text-primary/80" aria-hidden />
+              <Globe className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
               <span className="text-xs font-medium text-foreground">{t("chat.tool.web_fetch_done")}</span>
             </div>
             <p className="mt-1.5 line-clamp-2 text-[0.786em] text-muted-foreground">{line}</p>

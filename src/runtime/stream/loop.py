@@ -568,6 +568,15 @@ class StreamLoop:
         from src.runtime.stream_sync import StreamSync
         from src.memory.context_compressor import count_tokens
 
+        # Chart events (emitted by the MCP wrapper when a charts tool returns a
+        # payload) are display-only: forward them immediately so chat-ui renders
+        # the chart mid-stream. They are not tool calls, so they must not count
+        # towards the tool-event guard nor go through the tool hooks below.
+        _early = chunk.get("event") or {}
+        if isinstance(_early, dict) and _early.get("type") == "chart":
+            yield self._track_sse(chunk)
+            return
+
         self.tool_events += 1
         self.last_progress_at = self.loop.time()
 

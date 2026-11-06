@@ -505,12 +505,28 @@ def _aion_mcp_tool_run(
         mcp_t0 = time.monotonic()
         try:
             result = SerializableMCPTool(server_name, tool_name, session_id)(**prepared)
+            # Chart interception: a tool result shaped like {"query", "data"} is a
+            # chart payload (charts MCP). Store it in the live chart store, then
+            # emit a "chart" tool event right away so chat-ui renders it inline
+            # mid-stream (instead of waiting for the end of the SSE turn). The
+            # LLM only sees a short confirmation, not the raw dataset.
             try:
                 data = json.loads(result)
                 if isinstance(data, dict) and "data" in data and "query" in data:
                     from src.chart_queue import chart_queue
 
-                    chart_queue.push_serialized(session_id, data)
+                    chart = chart_queue.push(session_id, data, tool_call_id=call_id)
+                    loop.call_soon_threadsafe(
+                        tool_event_bus.put_event,
+                        session_id,
+                        {
+                            "type": "chart",
+                            "id": chart["id"],
+                            "tool_call_id": call_id,
+                            "name": tool_name,
+                            "chart": chart,
+                        },
+                    )
                     result = f"[Grafico generato con successo per la query: {data.get('query')}]"
             except Exception:
                 pass

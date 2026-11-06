@@ -178,8 +178,14 @@ class UpdatedResponse(_Open):
 
 
 class ChartOut(_Open):
-    """Grafico in coda; un elemento Redis non decodificabile diventa ``{raw}``."""
+    """Grafico in coda; un elemento Redis non decodificabile diventa ``{raw}``.
 
+    ``id`` identifies the chart across SSE event, timeline segment and the
+    ``session_charts`` row; ``tool_call_id`` is the tool step that produced it.
+    """
+
+    id: Optional[str] = None
+    tool_call_id: Optional[str] = None
     query: Optional[str] = None
     data: Optional[List[Any]] = None
     chart_kind: Optional[str] = None

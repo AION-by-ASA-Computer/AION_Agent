@@ -83,6 +83,74 @@ def _resolve_message_timeline(
     )
 
 
+def _strip_chart_payloads(timeline: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """Keep chart segments as references only before storing a timeline.
+
+    The dataset of a chart lives in ``session_charts``; duplicating it inside
+    ``timeline_json`` (client backup PATCH) would bloat every message row.
+    """
+    out: List[Dict[str, Any]] = []
+    for seg in timeline:
+        if isinstance(seg, dict) and seg.get("kind") == "chart":
+            ref = {"kind": "chart", "id": seg.get("id")}
+            if seg.get("toolCallId"):
+                ref["toolCallId"] = seg.get("toolCallId")
+            out.append(ref)
+        else:
+            out.append(seg)
+    return out
+
+
+def _hydrate_chart_segments(
+    timeline: Optional[List[Dict[str, Any]]],
+    message_charts: List[Dict[str, Any]],
+    charts_by_id: Dict[str, Dict[str, Any]],
+) -> Optional[List[Dict[str, Any]]]:
+    """Inject chart payloads into the ``{"kind": "chart"}`` segments of a timeline.
+
+    * segments reference charts by id (written by ``TimelineBuilder``), so the
+      chart re-appears exactly where the tool ran in the turn;
+    * charts of this message without a segment (legacy timeline, timeline
+      reconstructed from steps) are placed right after their tool step when it
+      is in the timeline, else appended at the end;
+    * segments whose chart is gone (expired from Redis, never persisted) are
+      dropped instead of rendering an empty box.
+    """
+    segs: List[Dict[str, Any]] = list(timeline or [])
+    placed: set = set()
+    out: List[Dict[str, Any]] = []
+    for seg in segs:
+        if isinstance(seg, dict) and seg.get("kind") == "chart":
+            chart = charts_by_id.get(str(seg.get("id") or ""))
+            if chart is None or chart["id"] in placed:
+                continue
+            placed.add(chart["id"])
+            out.append({**seg, "chart": chart})
+        else:
+            out.append(seg)
+    for chart in message_charts:
+        if chart["id"] in placed:
+            continue
+        placed.add(chart["id"])
+        seg = {"kind": "chart", "id": chart["id"], "chart": chart}
+        tcid = chart.get("tool_call_id")
+        if tcid:
+            seg["toolCallId"] = tcid
+        idx = next(
+            (
+                i
+                for i, s in enumerate(out)
+                if isinstance(s, dict) and s.get("kind") == "tool" and s.get("id") == tcid
+            ),
+            -1,
+        )
+        if tcid and idx >= 0:
+            out.insert(idx + 1, seg)
+        else:
+            out.append(seg)
+    return out if (out or timeline is not None) else None
+
+
 router = APIRouter(prefix="/chat-ui", tags=["chat-ui"])
 
 
@@ -634,6 +702,22 @@ async def get_conversation_messages_chat_ui(
         )
         last_msg_id = msgs[-1].id if msgs else None
 
+        # Charts: SQLite rows (persisted at turn end) + live Redis entries (turn
+        # still streaming, or persisted moments ago). Live entries have no
+        # message_id: they are matched through the timeline segment id.
+        from src.chart_queue import chart_queue
+        from src.charts_store import load_conversation_charts
+
+        charts_by_id: Dict[str, Dict[str, Any]] = {}
+        for ch in chart_queue.peek(conv_id):
+            if isinstance(ch, dict) and ch.get("id"):
+                charts_by_id[str(ch["id"])] = ch
+        charts_by_msg: Dict[str, List[Dict[str, Any]]] = {}
+        for ch in await load_conversation_charts(conv_id):
+            charts_by_id[str(ch["id"])] = ch
+            if ch.get("message_id"):
+                charts_by_msg.setdefault(str(ch["message_id"]), []).append(ch)
+
         data = []
 
         for r in msgs:
@@ -668,6 +752,14 @@ async def get_conversation_messages_chat_ui(
             timeline: Optional[List[Dict[str, Any]]] = None
             if nr == "assistant":
                 timeline = _resolve_message_timeline(r, current_steps, current_atts)
+                msg_charts = charts_by_msg.get(r.id, [])
+                if msg_charts or any(
+                    isinstance(sg, dict) and sg.get("kind") == "chart"
+                    for sg in (timeline or [])
+                ):
+                    timeline = _hydrate_chart_segments(
+                        timeline, msg_charts, charts_by_id
+                    )
 
             row: Dict[str, Any] = {
                 "id": r.id,
@@ -872,6 +964,10 @@ async def delete_turn_chat_ui(
             await session.execute(
                 delete(Attachment).where(Attachment.message_id.in_(subsequent_ids))
             )
+            # Delete the charts rendered in the removed turns (no FK on message_id)
+            from src.charts_store import delete_message_charts
+
+            await delete_message_charts(conv_id, subsequent_ids, session=session)
             # Delete the messages
             await session.execute(delete(Message).where(Message.id.in_(subsequent_ids)))
 
@@ -1053,6 +1149,28 @@ async def fork_conversation_chat_ui(
                     created_at=a.created_at,
                 )
                 session.add(new_a)
+
+            # Clone the charts of the copied turns. New ids (PK); the copied
+            # timeline still references the old ids, so the history endpoint
+            # re-places them via toolCallId (tool segment ids are preserved).
+            from src.data.models import SessionChart
+
+            q_charts = select(SessionChart).where(
+                SessionChart.conversation_id == conv_id,
+                SessionChart.message_id.in_(prev_ids),
+            )
+            for ch in (await session.execute(q_charts)).scalars().all():
+                session.add(
+                    SessionChart(
+                        id=str(uuid.uuid4()),
+                        conversation_id=new_conv_id,
+                        tenant_id=tenant,
+                        message_id=msg_id_map.get(ch.message_id or ""),
+                        tool_call_id=ch.tool_call_id,
+                        payload_json=ch.payload_json,
+                        created_at=ch.created_at,
+                    )
+                )
             await session.flush()
 
         # Inserisci il nuovo messaggio utente modificato
@@ -1174,7 +1292,9 @@ async def save_partial_message_chat_ui(
         role = normalize_message_role(body.role)
         timeline_json: Optional[str] = None
         if body.timeline:
-            timeline_json = json.dumps(body.timeline, ensure_ascii=False)
+            timeline_json = json.dumps(
+                _strip_chart_payloads(body.timeline), ensure_ascii=False
+            )
 
         if existing:
             changed = False
@@ -1243,7 +1363,9 @@ async def patch_message_timeline_chat_ui(
         msg = await fetch_message_by_id(session, message_id)
         if not msg or msg.conversation_id != conv_id:
             raise HTTPException(404, "Message not found")
-        msg.timeline_json = json.dumps(body.timeline, ensure_ascii=False)
+        msg.timeline_json = json.dumps(
+            _strip_chart_payloads(body.timeline), ensure_ascii=False
+        )
         await session.commit()
     return {"updated": True, "message_id": message_id}
 
@@ -1372,6 +1494,12 @@ async def delete_conversation_chat_ui(
             session.add(child)
         await session.commit()
         released_ids = [conv_id] + [c.id for c in children]
+
+    # Conversations are soft-deleted (archived_at): drop their chart history
+    # explicitly (SQLite rows + live Redis entries), the FK cascade won't fire.
+    from src.charts_store import delete_conversation_charts
+
+    await delete_conversation_charts(released_ids)
 
     try:
         from src.mcp_manager import mcp_manager
