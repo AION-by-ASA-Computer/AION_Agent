@@ -69,6 +69,23 @@ def _validate_package_names(packages: List[str]) -> List[str]:
     return out
 
 
+def _preinstalled_dirs() -> List[Path]:
+    """Global ``node_modules`` folders listed in ``NODE_PATH``.
+
+    The Docker images (``docker/Dockerfile.backend`` / ``Dockerfile.sandbox``)
+    install the office skill libraries (docx, pptxgenjs) there and set
+    ``NODE_PATH``, which ``require()`` honours and ``build_session_env`` forwards
+    to the session subprocesses. Empty in a local dev setup without NODE_PATH.
+    """
+    raw = os.environ.get("NODE_PATH") or ""
+    return [Path(p) for p in raw.split(os.pathsep) if p.strip()]
+
+
+def is_preinstalled(package: str) -> bool:
+    """True when ``require(package)`` already resolves from a ``NODE_PATH`` folder."""
+    return any((d / package / "package.json").is_file() for d in _preinstalled_dirs())
+
+
 def workspace_dir(session_id: str) -> Path:
     ensure_session_dirs(session_id)
     ws = session_root(session_id) / "workspace"
@@ -82,7 +99,23 @@ def install_npm_packages(
     """
     Run ``npm install <packages>`` under ``data/sessions/<id>/workspace``.
     Does not require ``sandbox_exec_allowlisted`` / exec policy.
+
+    Packages already preinstalled globally (see ``is_preinstalled``) are skipped:
+    when all of them are, nothing runs and no ``workspace/node_modules`` is
+    created, so the session only holds the files the agent actually generates.
     """
+    try:
+        requested = _validate_package_names(packages)
+    except ValueError as e:
+        return f"Validation error: {e}"
+    preinstalled = [p for p in requested if is_preinstalled(p)]
+    if len(preinstalled) == len(requested):
+        return (
+            f"OK: {', '.join(requested)} already preinstalled on the server, nothing to install.\n"
+            f'Run scripts with sandbox_run_node_file(relative_path="workspace/<script>.js").'
+        )
+    packages = [p for p in requested if p not in preinstalled]
+
     if not _npm_install_allowed():
         return (
             "Error: npm install disabled (AION_SANDBOX_ALLOW_NPM_INSTALL=0). "

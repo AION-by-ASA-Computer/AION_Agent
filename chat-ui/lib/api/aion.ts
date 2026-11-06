@@ -1,7 +1,7 @@
 import { apiBase } from "../config";
 import type { AttachmentRef } from "../attachments";
 import { iterateChatChunks, iterateSseJson } from "../sse/parseChatStream";
-import type { ChatChunk, TurnSegment } from "../sse/types";
+import type { ChartPayload, ChatChunk, TurnSegment } from "../sse/types";
 
 export type ProfileRow = {
   name: string;
@@ -335,27 +335,14 @@ export async function consumeChatStream(
   }
 }
 
-export type SessionChart = {
-  query?: string;
-  data?: Array<Record<string, unknown>>;
-  chart_kind?: "line" | "area" | "bar";
-  x_key?: string;
-  series_keys?: string[];
-  stacked?: boolean;
-  y_label?: string;
-  legend_off?: boolean;
-  range_seconds?: number;
-  step_seconds?: number;
-};
-
-export async function fetchSessionCharts(sessionId: string, userId: string, token?: string | null): Promise<SessionChart[]> {
-  const r = await fetch(`${apiBase()}/sessions/${encodeURIComponent(sessionId)}/charts`, {
-    headers: baseUserHeaders(userId, token),
-  });
-  if (!r.ok) return [];
-  const j = (await r.json()) as { charts?: SessionChart[] };
-  return j.charts || [];
-}
+/**
+ * Chart payload from the charts MCP tools. Charts are delivered inline: live via
+ * the `chart` tool event of the /chat SSE stream, and on reload inside the
+ * message `timeline` (`{kind: "chart", chart}` segments) returned by
+ * `GET /chat-ui/conversations/{id}/messages`. The legacy destructive
+ * `GET /sessions/{id}/charts` endpoint is no longer used by chat-ui.
+ */
+export type SessionChart = ChartPayload;
 
 export type SessionFileRow = {
   relative_path?: string;

@@ -39,11 +39,13 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     NODE_PATH="/usr/local/lib/node_modules:/usr/lib/node_modules" \
     NPM_CONFIG_CACHE="/tmp/.npm-cache"
 
+# Office skill Node libraries preinstalled globally, latest at build time like in
+# docker/Dockerfile.backend: docx for Word, pptxgenjs for PowerPoint.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends tini nodejs npm poppler-utils \
  && rm -rf /var/lib/apt/lists/* \
  && npm config set cache /tmp/.npm-cache --global \
- && npm install -g docx \
+ && npm install -g --no-fund --no-audit docx pptxgenjs \
  && groupadd --gid 10001 sandbox \
  && useradd --uid 10001 --gid sandbox --create-home --shell /usr/sbin/nologin sandbox
 

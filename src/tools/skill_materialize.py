@@ -107,13 +107,17 @@ def _merge_fallback_scripts(slug: str, primary_src: Path, dst: Path) -> int:
 
 
 def _seed_pptx_npm(session_id: str) -> str:
-    """Install pptxgenjs into session workspace (Anthropic-aligned create path)."""
+    """Make pptxgenjs available to the session (Anthropic-aligned create path).
+
+    A no-op in the Docker images, where pptxgenjs is preinstalled globally
+    (``install_npm_packages`` skips it); elsewhere it lands in workspace/node_modules.
+    """
     try:
         from src.tools.session_npm import install_npm_packages
 
         npm_out = install_npm_packages(session_id, ["pptxgenjs"])
         if npm_out.startswith("OK:"):
-            return " pptxgenjs seeded in workspace/node_modules."
+            return " pptxgenjs ready."
         return f" pptxgenjs install: {npm_out[:200]}"
     except Exception as e:
         logger.warning("pptx npm seed failed session=%s: %s", session_id[:8], e)

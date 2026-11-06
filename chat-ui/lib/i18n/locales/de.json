@@ -23,7 +23,8 @@
       "tunings": "Tuning & Parameter",
       "runtime": "Runtime",
       "presets": "Presets",
-      "whatsapp": "WhatsApp"
+      "whatsapp": "WhatsApp",
+      "telegram": "Telegram"
     },
     "runtime": {
       "loading": "Runtime-Einstellungen werden geladen…",
@@ -268,6 +269,67 @@
       },
       "list_title": "Ihre Schlüssel"
     },
+    "telegram": {
+      "title": "Telegram",
+      "desc": "Verknüpfe dein Telegram-Konto, um AION vom Smartphone aus zu nutzen. Auf Telegram begonnene Chats erscheinen in der Seitenleiste und lassen sich auch in der Chat UI fortsetzen.",
+      "loading": "Telegram-Status wird geladen…",
+      "retry": "Erneut versuchen",
+      "disabled": "Die Telegram-Integration ist auf diesem Server nicht aktiviert. Wende dich an deinen Administrator.",
+      "status": {
+        "linked": "Verknüpft",
+        "not_linked": "Nicht verknüpft"
+      },
+      "link_title": "Konto verknüpfen",
+      "link_desc": "Jeder AION-Benutzer kann genau ein Telegram-Konto verknüpfen.",
+      "step1": "Klicke auf „Telegram verknüpfen“, um einen Einmal-Link zu erzeugen.",
+      "step2": "Öffne den Link (oder scanne den QR-Code) auf dem Smartphone: Der Chat mit {{bot}} öffnet sich.",
+      "step3": "Tippe in Telegram auf „Starten“: Die Verknüpfung erfolgt sofort.",
+      "link_button": "Telegram verknüpfen",
+      "pairing_hint": "Scanne den QR-Code mit dem Smartphone oder öffne den Link auf dem Gerät, auf dem du Telegram nutzt, und tippe auf „Starten“.",
+      "open_telegram": "In Telegram öffnen",
+      "copy_link": "Link kopieren",
+      "copied": "Kopiert",
+      "waiting": "Warte auf die Bestätigung von Telegram… Der Link läuft um {{time}} ab.",
+      "expired": "Der Link ist ungenutzt abgelaufen. Erzeuge einen neuen.",
+      "regenerate": "Neuen Link erzeugen",
+      "qr_alt": "QR-Code des Telegram-Verknüpfungslinks",
+      "linked_title": "Verknüpftes Konto",
+      "account": "Telegram-Konto",
+      "user_id": "Telegram-Nutzer-ID",
+      "linked_at": "Verknüpft am",
+      "last_seen": "Letzte Aktivität",
+      "never": "Nie",
+      "open_bot": "{{bot}} in Telegram öffnen",
+      "unlink": "Trennen",
+      "cancel": "Abbrechen",
+      "unlink_dialog": {
+        "title": "Telegram trennen?",
+        "desc": "Du kannst AION erst wieder über Telegram nutzen, wenn du das Konto erneut verknüpfst. Bestehende Chats bleiben gespeichert.",
+        "confirm": "Trennen"
+      },
+      "bots_title": "Deine Assistenten",
+      "bots_desc": "Persönliche Assistenten, erstellt über {{bot}} mit /newbot: jeder hat sein eigenes Profil und Projekt und antwortet nur dir.",
+      "bots_empty": "Noch keine Assistenten. Wenn du möchtest, sende /newbot an {{bot}}, um einen zu erstellen.",
+      "bot_open": "Öffnen",
+      "bot_profile": "Profil: {{profile}}",
+      "bot_project": "Projekt: {{project}}",
+      "bot_status_provisioning": "Wird eingerichtet",
+      "bot_status_active": "Aktiv",
+      "bot_status_suspended": "Pausiert",
+      "bot_status_error": "Fehler",
+      "bot_mode_personal": "Persönlich",
+      "bot_mode_shared": "Geteilt",
+      "toast": {
+        "linked": "Telegram-Konto verknüpft",
+        "unlinked": "Telegram-Konto getrennt"
+      },
+      "err": {
+        "unavailable": "Der Telegram-Bot ist noch nicht verbunden. Versuche es in ein paar Sekunden erneut.",
+        "user_token_required": "Melde dich mit deinem Konto an, um die Telegram-Verknüpfung zu verwalten.",
+        "not_linked": "Kein Telegram-Konto verknüpft.",
+        "generic": "Der Vorgang ist fehlgeschlagen. Versuche es erneut."
+      }
+    },
     "subtitle": "Verwalten Sie Profil, Erscheinungsbild, Sicherheit und benutzerdefinierte Anweisungen.",
     "tunings": {
       "desc": "Modellparameter, Generierungssteuerungen, Ausführungsschritte und Laufzeit-Voreinstellungen konfigurieren.",
@@ -285,45 +347,45 @@
     },
     "whatsapp": {
       "title": "WhatsApp",
-      "desc": "Link your WhatsApp to message the assistant straight from your phone.",
-      "loading": "Loading WhatsApp status…",
-      "retry": "Retry",
-      "disabled": "The WhatsApp channel is not active. Contact your administrator.",
-      "link_title": "Link your WhatsApp",
-      "link_desc": "One message to the company number is all it takes: nothing to install.",
-      "link_desc_number": "One message to the company number {{number}} is all it takes: nothing to install.",
-      "step_scan": "Scan the QR code with your phone, or tap “Open WhatsApp” if you are already on your phone.",
-      "step_send": "In WhatsApp, press Send without changing the pre-filled message.",
-      "step_done": "Done: this page updates by itself as soon as the link is confirmed.",
-      "link": "Link WhatsApp",
-      "qr_alt": "QR code to link WhatsApp",
-      "code_label": "Link code",
-      "open": "Open WhatsApp",
-      "waiting": "Waiting for your message…",
-      "expires_in": "Expires in {{time}}",
-      "expired": "This code has expired. Generate a new one to continue.",
-      "regenerate": "Generate new code",
-      "linked_title": "WhatsApp linked",
-      "linked_badge": "Active",
-      "profile_name": "Profile name",
-      "phone": "Number",
-      "linked_at": "Linked on",
-      "linked_hint": "Conversations started from WhatsApp appear in your chat list with the WhatsApp icon.",
-      "unlink": "Unlink",
+      "desc": "Verknüpfen Sie Ihr WhatsApp, um dem Assistenten direkt vom Telefon zu schreiben.",
+      "loading": "WhatsApp-Status wird geladen …",
+      "retry": "Erneut versuchen",
+      "disabled": "Der WhatsApp-Kanal ist nicht aktiv. Wenden Sie sich an Ihren Administrator.",
+      "link_title": "WhatsApp verknüpfen",
+      "link_desc": "Eine Nachricht an die Firmennummer genügt: Sie müssen nichts installieren.",
+      "link_desc_number": "Eine Nachricht an die Firmennummer {{number}} genügt: Sie müssen nichts installieren.",
+      "step_scan": "Scannen Sie den QR-Code mit dem Telefon oder tippen Sie auf „WhatsApp öffnen“, wenn Sie bereits am Telefon sind.",
+      "step_send": "Tippen Sie in WhatsApp auf Senden, ohne die vorausgefüllte Nachricht zu ändern.",
+      "step_done": "Fertig: Diese Seite aktualisiert sich von selbst, sobald die Verknüpfung bestätigt ist.",
+      "link": "WhatsApp verknüpfen",
+      "qr_alt": "QR-Code zum Verknüpfen von WhatsApp",
+      "code_label": "Verknüpfungscode",
+      "open": "WhatsApp öffnen",
+      "waiting": "Warten auf Ihre Nachricht …",
+      "expires_in": "Läuft ab in {{time}}",
+      "expired": "Dieser Code ist abgelaufen. Erzeugen Sie einen neuen, um fortzufahren.",
+      "regenerate": "Neuen Code erzeugen",
+      "linked_title": "WhatsApp verknüpft",
+      "linked_badge": "Aktiv",
+      "profile_name": "Profilname",
+      "phone": "Nummer",
+      "linked_at": "Verknüpft am",
+      "linked_hint": "Aus WhatsApp gestartete Unterhaltungen erscheinen in Ihrer Chatliste mit dem WhatsApp-Symbol.",
+      "unlink": "Trennen",
       "unlink_dialog": {
-        "title": "Unlink WhatsApp?",
-        "desc": "You won't be able to message the assistant from this number until you link it again. Existing conversations stay in your chat list.",
-        "cancel": "Cancel",
-        "confirm": "Unlink",
-        "unlinking": "Unlinking…"
+        "title": "WhatsApp trennen?",
+        "desc": "Sie können dem Assistenten von dieser Nummer nicht mehr schreiben, bis Sie sie erneut verknüpfen. Bestehende Unterhaltungen bleiben in Ihrer Chatliste.",
+        "cancel": "Abbrechen",
+        "confirm": "Trennen",
+        "unlinking": "Wird getrennt …"
       },
       "toast": {
-        "linked": "WhatsApp linked. You can now message the assistant from WhatsApp.",
-        "unlinked": "WhatsApp unlinked."
+        "linked": "WhatsApp verknüpft. Sie können dem Assistenten jetzt aus WhatsApp schreiben.",
+        "unlinked": "WhatsApp getrennt."
       },
       "err": {
-        "disabled": "The WhatsApp channel is not active. Contact your administrator.",
-        "generic": "Something went wrong. Please try again."
+        "disabled": "Der WhatsApp-Kanal ist nicht aktiv. Wenden Sie sich an Ihren Administrator.",
+        "generic": "Etwas ist schiefgelaufen. Bitte versuchen Sie es erneut."
       }
     }
   },
@@ -365,7 +427,8 @@
     "rename": "Umbenennen",
     "search_placeholder": "Unterhaltungen suchen…",
     "theme": "Design",
-    "from_whatsapp": "Conversation from WhatsApp"
+    "from_whatsapp": "Unterhaltung aus WhatsApp",
+    "from_telegram": "Unterhaltung aus Telegram"
   },
   "schedulesPage": {
     "title": "Automationen",
@@ -883,6 +946,19 @@
       "label": "Projekt",
       "none": "Keine Projekte verfügbar",
       "open_panel": "Gedächtnis-Panel öffnen"
+    },
+    "chart": {
+      "untitled": "Diagramm",
+      "no_data": "Keine Daten",
+      "show_table": "Tabelle",
+      "show_chart": "Diagramm",
+      "kind": {
+        "line": "Linie",
+        "area": "Fläche",
+        "bar": "Balken"
+      },
+      "rows": "{{count}} Zeilen",
+      "aria": "Diagramm: {{title}}"
     }
   },
   "login": {

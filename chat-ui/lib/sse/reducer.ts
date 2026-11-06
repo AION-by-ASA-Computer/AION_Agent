@@ -1,4 +1,4 @@
-import type { ChatChunk, TurnSegment, TurnState } from "./types";
+import type { ChartPayload, ChatChunk, TurnSegment, TurnState } from "./types";
 import { feedPlanAwareDisplay, stripPlanBlocksForChatDisplay } from "./planDisplay";
 import {
   generatingTitleForFileTool,
@@ -271,6 +271,25 @@ export function reduceChunk(prev: TurnState, chunk: ChatChunk): TurnState {
     const ev = (chunk.event || {}) as Record<string, unknown>;
     const et = String(ev.type || "");
     const name = String(ev.name ?? "tool");
+
+    if (et === "chart") {
+      // Chart produced by a charts tool: show it right away, inline after the
+      // tool step, while the model keeps streaming its explanation.
+      const id = String(ev.id || "");
+      const chart = ev.chart as ChartPayload | undefined;
+      if (id && chart && !next.segments.some((s) => s.kind === "chart" && s.id === id)) {
+        next.segments = [
+          ...next.segments,
+          {
+            kind: "chart",
+            id,
+            toolCallId: typeof ev.tool_call_id === "string" ? ev.tool_call_id : undefined,
+            chart,
+          },
+        ];
+      }
+      return next;
+    }
 
     if (et === "request_sync") {
       const name = String(ev.tool_name || ev.name || "tool");
@@ -783,6 +802,9 @@ export function segmentsForPersist(segments: TurnSegment[]): TurnSegment[] {
           status: seg.status === "running" ? "done" : seg.status,
         };
       }
+      // Chart segments keep their payload here: these segments also feed the
+      // local message state after the stream ends. The API strips the dataset
+      // before storing timeline_json (it lives in session_charts).
       if (seg.kind === "artifact") {
         if (seg.savedPath || seg.buffer.trim()) {
           return seg;
