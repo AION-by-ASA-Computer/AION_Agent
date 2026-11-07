@@ -577,6 +577,24 @@ export function useHub() {
     }
   };
 
+  /**
+   * Current value of a shared secret stored encrypted behind a `${KEY}` placeholder,
+   * used by Configura to pre-fill the field when the admin clicks "Edit".
+   * Returns null when the backend has no value (or refuses the key).
+   */
+  const loadSharedSecret = async (slug: string, key: string): Promise<string | null> => {
+    try {
+      const res = await apiFetch(
+        `${apiBase()}/admin/mcp/${encodeURIComponent(slug)}/secret/${encodeURIComponent(key)}`,
+      );
+      if (!res.ok) return null;
+      const data = await res.json();
+      return typeof data.value === "string" ? data.value : null;
+    } catch {
+      return null;
+    }
+  };
+
   const applySuggestedEnv = async () => {
     if (!editing || !editingPolicy) return;
     if (editingPolicy.mode !== "per_user" && editingPolicy.mode !== "org_shared") return;
@@ -894,6 +912,7 @@ export function useHub() {
     openConfig,
     closeConfig,
     saveConfig,
+    loadSharedSecret,
     applySuggestedEnv,
     loadPolicyPreview,
     adviseOpen,

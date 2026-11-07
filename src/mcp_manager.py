@@ -1971,6 +1971,43 @@ class MCPManager:
                 server_name,
             )
 
+    async def restart_workers_for_server(self, server_name: str) -> int:
+        """Shut down every pooled stdio worker of ``server_name``, across all sessions.
+
+        Called by the admin API after a server's registry env or credentials change:
+        a pooled worker keeps the env it was spawned with, so without this the open
+        chat sessions keep using the old values until the backend restarts.
+        The next tool call respawns the worker with the current configuration.
+        Returns the number of workers stopped.
+        """
+        async with self._pool_lock:
+            keys = [k for k in self._pool if k[1] == server_name]
+            workers = [self._pool.pop(k) for k in keys]
+
+        for worker in workers:
+            if worker._task and not worker._task.done():
+                worker._task.cancel()
+            try:
+                await asyncio.wait_for(
+                    worker.shutdown(),
+                    timeout=float(os.getenv("AION_MCP_WORKER_SHUTDOWN_TIMEOUT", "15")),
+                )
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "MCP worker '%s' shutdown slow after config change; dropped",
+                    server_name,
+                )
+            except Exception as exc:
+                # The worker is already out of the pool: keep stopping the others.
+                logger.debug("MCP worker '%s' shutdown error: %s", server_name, exc)
+        if workers:
+            logger.info(
+                "MCP config changed: stopped %d pooled worker(s) of '%s'",
+                len(workers),
+                server_name,
+            )
+        return len(workers)
+
     async def restart_workers_for_user(
         self,
         user_id: str,

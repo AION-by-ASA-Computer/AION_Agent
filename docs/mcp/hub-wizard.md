@@ -132,6 +132,13 @@ AION_MCP_USER_HOME_ISOLATION=1
 | «Voce marketplace non trovata» con id `github:…` | Versione backend senza risoluzione locale degli id GitHub | Aggiornare backend: `_find_marketplace_item` costruisce il payload da `github:owner/repo` senza nuova ricerca; in alternativa **Installa da URL GitHub** |
 | Messaggio errore JSON grezzo nel wizard | Risposta FastAPI non parsata in UI | Admin UI usa `readApiErrorMessage` su `detail` — aggiornare `admin-ui` se vedi ancora `{"detail":…}` |
 | L'AI advisor propone `none` ma il server ha env | README enfatizza solo config.toml | La discovery corregge se trova `MCP_EMAIL_*` / simili; verificare install in `mcp_servers/<slug>` |
+| Variabili salvate ma il processo MCP riceve valori vecchi o vuoti | Valore diverso tra registry, DB cifrato e env di spawn | `python scripts/mcp_env_inspect.py <slug>` (in Docker: `docker compose exec backend python scripts/mcp_env_inspect.py <slug>`) mostra le tre viste; i secret appaiono come lunghezza + impronta SHA-256 |
+
+### Come vengono salvate le variabili `org_shared`
+
+- **Installazione:** finiscono nel registry solo le variabili compilate nel wizard. I campi lasciati vuoti non vengono scritti, così il server MCP usa il proprio default (prima diventavano un placeholder `${KEY}` risolto a stringa vuota).
+- **Secret** (nomi con `key`, `token`, `secret`, `password`, `auth`, `pwd`): il valore va cifrato in DB (`user_mcp_credentials`, owner `default` e `org_shared`) e nel registry resta `${KEY}`. Vale sia all'installazione sia quando il secret viene modificato da **Configura** → **Modifica**: il campo parte vuoto e, se lasciato vuoto, il valore salvato non cambia.
+- **Applicazione immediata:** ogni salvataggio (Configura, policy, env suggerito, reinstallazione) svuota la cache degli agenti e chiude i worker MCP in pool di quel server; il turno di chat successivo li riavvia con la configurazione nuova, senza riavviare il backend.
 
 ## Riferimenti
 
