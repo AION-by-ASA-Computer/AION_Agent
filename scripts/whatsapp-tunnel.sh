@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tunnel Cloudflare temporaneo + stack Docker, per collegare WhatsApp senza un dominio.
+# Tunnel Cloudflare temporaneo + stack Docker, per collegare WhatsApp e Telegram
+# (modalità webhook) senza un dominio.
 #
 # 1. apre un quick tunnel (https://<random>.trycloudflare.com) verso Caddy sulla porta HTTP locale;
 # 2. genera un override compose che punta gli URL pubblici del backend al tunnel
@@ -9,6 +10,9 @@
 # 4. stampa URL di callback per Meta e resta in primo piano: Ctrl+C chiude il tunnel.
 #
 # L'URL del tunnel cambia a ogni avvio: va reinserito su Meta (Webhook → Callback URL).
+# Telegram invece non richiede passaggi manuali: con "Ricezione update = Webhook" in
+# Admin → Telegram il backend registra da solo il webhook (setWebhook) all'avvio,
+# usando AION_PUBLIC_API_URL, quindi segue l'URL nuovo a ogni ricreazione del container.
 # Uso: scripts/whatsapp-tunnel.sh [--no-build] [--port N] [--down-on-exit]
 set -euo pipefail
 
@@ -22,7 +26,7 @@ DOWN_ON_EXIT=0
 PORT=""
 
 usage() {
-  sed -n '2,12p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,16p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   cat <<'EOF'
 
 Opzioni:
@@ -163,6 +167,14 @@ cat <<EOF
 
  Verify token: admin-ui → WhatsApp (http://localhost:$PORT/admin/whatsapp)
  Poi su Meta: "Verifica e salva" e sottoscrivi il campo "messages".
+
+ Telegram (webhook): admin-ui → Telegram (http://localhost:$PORT/admin/telegram)
+ → Connessione → "Ricezione degli update" = Webhook, poi Salva. Il backend registra
+ da solo su Telegram, per il manager e per ogni assistente:
+
+   $TUNNEL_URL/api/v1/channels/telegram/webhook/<bot id>
+
+ Lo stato (URL registrato, update in coda, ultimo errore) è nel riquadro Stato.
 
  Chat-ui pubblica: $TUNNEL_URL
  Log del tunnel:   $LOG_FILE

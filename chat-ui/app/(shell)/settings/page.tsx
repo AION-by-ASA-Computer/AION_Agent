@@ -8,6 +8,7 @@ import {
   Loader2,
   MessageCircle,
   Palette,
+  Send,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -19,6 +20,7 @@ import { AppearanceSection } from "@/components/settings/AppearanceSection";
 import { ChangePasswordSection } from "@/components/settings/ChangePasswordSection";
 import { ProfileAvatarEditor } from "@/components/settings/ProfileAvatarEditor";
 import { SettingsNav, type SettingsTab } from "@/components/settings/SettingsNav";
+import { TelegramSection } from "@/components/settings/TelegramSection";
 import { TuningsSettingsSection } from "@/components/settings/TuningsSettingsSection";
 import { UserMdSection } from "@/components/settings/UserMdSection";
 import { WhatsAppSection } from "@/components/settings/WhatsAppSection";
@@ -35,6 +37,7 @@ import {
 } from "@/components/settings/ui";
 import { ShellSectionHeader } from "@/components/layout/ShellSectionHeader";
 import { useStoredToken, useStoredUserId } from "@/lib/auth/use-stored-auth";
+import { getTelegramStatus } from "@/lib/api/telegram";
 import { getWhatsAppStatus } from "@/lib/api/whatsapp";
 import { apiBase } from "@/lib/config";
 import { cn } from "@/lib/cn";
@@ -89,6 +92,7 @@ function tabFromSearchParam(tab: string | null): SettingsTab {
   if (tab === "appearance") return "appearance";
   if (tab === "security") return "security";
   if (tab === "api-keys" || tab === "api_keys" || tab === "apikeys") return "api-keys";
+  if (tab === "telegram") return "telegram";
   if (tab === "whatsapp") return "whatsapp";
   if (tab === "tunings" || tab === "tuning" || tab === "runtime" || tab === "presets") return "tunings";
   return "profile";
@@ -124,24 +128,27 @@ export default function SettingsPage() {
 
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
-  // The WhatsApp tab shows only once the backend confirms the channel is on (404 = not deployed).
+  // Channel tabs (WhatsApp, Telegram) show only once the backend confirms the channel is on
+  // (404 = not deployed), so users never land on a "not active on this server" dead end.
   const [whatsappEnabled, setWhatsappEnabled] = useState(false);
+  const [telegramEnabled, setTelegramEnabled] = useState(false);
 
   const navItems = useMemo(
     () => [
       { id: "profile" as const, label: t("settings.tab.profile"), icon: User },
       { id: "appearance" as const, label: t("settings.tab.appearance"), icon: Palette },
       { id: "security" as const, label: t("settings.tab.security"), icon: ShieldCheck },
-      ...(currentToken
-        ? [{ id: "api-keys" as const, label: t("settings.tab.api_keys"), icon: KeyRound }]
-        : []),
+      ...(currentToken ? [{ id: "api-keys" as const, label: t("settings.tab.api_keys"), icon: KeyRound }] : []),
       ...(currentToken && whatsappEnabled
         ? [{ id: "whatsapp" as const, label: t("settings.tab.whatsapp"), icon: MessageCircle }]
+        : []),
+      ...(currentToken && telegramEnabled
+        ? [{ id: "telegram" as const, label: t("settings.tab.telegram"), icon: Send }]
         : []),
       { id: "instructions" as const, label: t("settings.tab.instructions"), icon: FileText },
       { id: "tunings" as const, label: t("settings.tab.tunings"), icon: SlidersHorizontal },
     ],
-    [t, currentToken, whatsappEnabled],
+    [t, currentToken, whatsappEnabled, telegramEnabled],
   );
 
   const showToast = useCallback((message: string, variant: "success" | "error" = "success") => {
@@ -228,6 +235,26 @@ export default function SettingsPage() {
       })
       .catch(() => {
         // Endpoint missing (404) or unreachable: keep the tab hidden.
+        if (!cancelled) hide();
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mounted, currentToken, currentUserId]);
+
+  useEffect(() => {
+    if (!mounted || !currentToken) return;
+    let cancelled = false;
+    // Same gating as WhatsApp: a `?tab=telegram` deep link falls back to the profile when the channel is off.
+    const hide = () => setActiveTab((tab) => (tab === "telegram" ? "profile" : tab));
+    getTelegramStatus(currentUserId, currentToken)
+      .then((data) => {
+        if (cancelled) return;
+        setTelegramEnabled(data.enabled);
+        if (!data.enabled) hide();
+      })
+      .catch(() => {
+        // Endpoint missing, channel disabled (error) or unreachable: keep the tab hidden.
         if (!cancelled) hide();
       });
     return () => {
@@ -559,8 +586,12 @@ export default function SettingsPage() {
 
             {activeTab === "api-keys" && currentToken ? <ApiKeysSection onToast={showToast} /> : null}
 
+            {/* Messaging channels: each section renders only once the backend confirms its channel is on. */}
             {activeTab === "whatsapp" && currentToken && whatsappEnabled ? (
               <WhatsAppSection onToast={showToast} />
+            ) : null}
+            {activeTab === "telegram" && currentToken && telegramEnabled ? (
+              <TelegramSection onToast={showToast} />
             ) : null}
 
             {activeTab === "instructions" ? (

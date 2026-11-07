@@ -21,7 +21,8 @@ Voice notes (``audio``) are saved the same way, transcribed with the STT engine
 (``voice.transcribe_voice_note``) and start a turn with ``🎤 <transcript>`` as
 the user's text and the audio file attached.
 
-Il turno è registrato in ``_background_runs``: dalla chat-ui si può seguire
+Il turno è registrato in ``_background_runs`` (``session_turn.background_run``,
+condiviso con Telegram): dalla chat-ui si può seguire
 dal vivo come quelli dei cron.
 """
 
@@ -37,6 +38,16 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from typing import Any, AsyncIterator, Dict, List, Optional, Set, Tuple
 
+from src.channels.session_turn import (
+    LiveRun,
+    background_run,
+    collect_new_outputs,
+    conversation_title,
+    resolve_channel_thinking,
+    session_attachments,
+    snapshot_outputs,
+    sync_thinking_metadata,
+)
 from src.data.engine import get_async_session_maker
 from src.data.models import Conversation, User, WhatsAppIdentity
 from src.identity import sanitize_user_id
@@ -687,7 +698,7 @@ async def _replace_placeholder_title(conversation_id: str, text: str) -> None:
     async with get_async_session_maker()() as session:
         conv = await session.get(Conversation, conversation_id)
         if conv is not None and conv.title == VOICE_TITLE_PLACEHOLDER:
-            conv.title = _conversation_title(text) or VOICE_TITLE_PLACEHOLDER
+            conv.title = conversation_title(text) or VOICE_TITLE_PLACEHOLDER
             await session.commit()
 
 
@@ -755,70 +766,13 @@ async def _resolve_profile(user_row_id: str, preferred: Optional[str]) -> str:
 
 
 def _resolve_thinking(cfg: ChannelConfig) -> str:
-    """Turn-level reasoning (``off|min|medium|max``) for a WhatsApp turn.
+    """Turn-level reasoning for a WhatsApp turn, from the channel config.
 
-    Mirrors what chat-ui sends (``thinking_enabled`` + ``reasoning_effort``)
-    via ``resolve_turn_reasoning``, but the level comes from the channel config
-    set in admin-ui instead of the user's composer:
-
-    * ``off``                 → thinking disabled;
-    * ``min|medium|max``      → thinking enabled at that effort (an explicit
-      ``min`` is low-effort thinking, not "off", as in chat-ui);
-    * unset (NULL)            → system default (``AION_DEFAULT_REASONING_EFFORT`` /
-      ``AION_THINKING_ENABLED``), instead of the previously hard-coded medium.
+    Thin wrapper over ``session_turn.resolve_channel_thinking`` (shared with
+    Telegram): ``off`` disables thinking, ``min|medium|max`` enables it at that
+    effort, unset falls back to the system default.
     """
-    from src.runtime.reasoning_effort import resolve_turn_reasoning
-
-    level = (cfg.default_thinking_level or "").strip().lower()
-    if level == "off":
-        return resolve_turn_reasoning(None, False)
-    if level in ("min", "medium", "max"):
-        return resolve_turn_reasoning(level, True)
-    return resolve_turn_reasoning(None, None)
-
-
-async def _sync_thinking_metadata(conversation_id: str, level: str) -> None:
-    """Mirror the turn's thinking level into the conversation metadata.
-
-    chat-ui restores its Thinking toggle/effort from ``metadata.thinking_enabled``
-    / ``metadata.reasoning_effort`` when a conversation is opened and otherwise
-    falls back to the browser's last-used value (usually "medium"). Writing the
-    level used by the WhatsApp turn keeps the chat-ui composer consistent with
-    what the channel actually ran. Called on every turn so a change made in
-    admin-ui reaches already-open conversations too; best-effort (never blocks
-    the reply).
-    """
-    try:
-        async with get_async_session_maker()() as session:
-            conv = await session.get(Conversation, conversation_id)
-            if conv is None:
-                return
-            try:
-                meta = json.loads(conv.metadata_json or "{}")
-            except (TypeError, ValueError):
-                meta = {}
-            if not isinstance(meta, dict):
-                meta = {}
-            patch: Dict[str, object] = {"thinking_enabled": level != "off"}
-            # chat-ui's effort selector only knows min|medium|max: "off" keeps
-            # the previous effort and only flips the toggle.
-            if level != "off":
-                patch["reasoning_effort"] = level
-            if all(meta.get(k) == v for k, v in patch.items()):
-                return
-            meta.update(patch)
-            conv.metadata_json = json.dumps(meta)
-            await session.commit()
-    except Exception:
-        logger.warning("WhatsApp: thinking metadata sync failed", exc_info=True)
-
-
-def _conversation_title(text: str) -> str:
-    """Conversation title from the first message: one line, at most 60 chars."""
-    title = " ".join(text.split())
-    if len(title) > 60:
-        title = title[:57].rstrip() + "…"
-    return title
+    return resolve_channel_thinking(cfg.default_thinking_level)
 
 
 async def _ensure_conversation(
@@ -857,7 +811,7 @@ async def _ensure_conversation(
                 tenant_id=tenant_id,
                 user_id=user_id,
                 profile_slug=profile_slug,
-                title=_conversation_title(first_text) or "WhatsApp",
+                title=conversation_title(first_text) or "WhatsApp",
                 message_count=0,
                 metadata_json=json.dumps({"source": "whatsapp"}),
                 updated_at=datetime.now(timezone.utc),
@@ -895,30 +849,6 @@ async def _resolve_conversation(
     return conversation_id, profile
 
 
-def _session_attachments(
-    conversation_id: str, turn_attachments: List[Dict[str, Any]]
-) -> List[Dict[str, Any]]:
-    """Every upload of the session, as chat-ui sends it in ``attachments``.
-
-    The pipeline lists them to the agent split into "new this turn" (the ones
-    in ``turn_attachments``) and "historical", so earlier photos/documents
-    stay reachable in follow-up questions.
-    """
-    from src.session_workspace import list_dir
-
-    turn_paths = {a.get("relative_path") for a in turn_attachments}
-    historical = [
-        {
-            "relative_path": f["relative_path"],
-            "original_name": f.get("name"),
-            "mime": f.get("mime"),
-        }
-        for f in list_dir(conversation_id, "uploads")
-        if f.get("relative_path") not in turn_paths
-    ]
-    return list(turn_attachments) + historical
-
-
 async def run_turn(
     *,
     tenant_id: str,
@@ -937,37 +867,23 @@ async def run_turn(
     report the files the agent created in ``TurnResult.files``.
     """
     from src.agent_pipeline import AgentPipeline
-    from src.api.v1.chat import BackgroundChatRun, _background_runs, _clamped_runtime
+    from src.api.v1.chat import _clamped_runtime
     from src.main import get_agent, set_event_loop
-    from src.runtime.redis_client import (
-        redis_clear_stream_active,
-        redis_set_stream_active,
-        redis_set_stream_cancel,
-    )
+    from src.runtime.redis_client import redis_set_stream_cancel
 
     uid = sanitize_user_id(user.identifier or user.id)
     turn_attachments = list(turn_attachments or [])
     attachments = await asyncio.to_thread(
-        _session_attachments, conversation_id, turn_attachments
+        session_attachments, conversation_id, turn_attachments
     )
-    outputs_before = await asyncio.to_thread(media.snapshot_outputs, conversation_id)
+    outputs_before = await asyncio.to_thread(snapshot_outputs, conversation_id)
 
     thinking_level = _resolve_thinking(cfg)
-    await _sync_thinking_metadata(conversation_id, thinking_level)
+    await sync_thinking_metadata(conversation_id, thinking_level, channel="WhatsApp")
 
     result = TurnResult(conversation_id=conversation_id)
-    user_message_id = str(uuid.uuid4())
-    assistant_message_id = str(uuid.uuid4())
-    await redis_set_stream_active(
-        conversation_id,
-        assistant_message_id=assistant_message_id,
-        user_message_id=user_message_id,
-        profile_name=profile,
-    )
-    run = BackgroundChatRun(conversation_id)
-    _background_runs[conversation_id] = run
 
-    async def _stream() -> None:
+    async def _stream(live: LiveRun) -> None:
         set_event_loop(asyncio.get_running_loop())
         agent_instance, profile_name = await get_agent(
             profile,
@@ -995,16 +911,14 @@ async def run_turn(
             # Thinking level configured for the channel (reasoning chunks are
             # not forwarded: only "token"/"final" reach the WhatsApp reply).
             reasoning_effort=thinking_level,
-            user_message_id=user_message_id,
-            assistant_message_id=assistant_message_id,
+            user_message_id=live.user_message_id,
+            assistant_message_id=live.assistant_message_id,
             message_source="user_input",
             metadata={"channel": "whatsapp", "wamid": wamid},
             runtime=runtime,
         ):
-            event = {"event": "message", "data": json.dumps(chunk, default=str)}
-            run.history.append(event)
-            for q in list(run.queues):
-                await q.put(event)
+            # Raw chunk to chat-ui clients following the turn live.
+            await live.publish(chunk)
             ctype = str(chunk.get("type") or "")
             if ctype == "token":
                 tokens.append(str(chunk.get("content") or ""))
@@ -1014,19 +928,16 @@ async def run_turn(
                 result.error = str(chunk.get("content") or "error")
         if not result.text:
             result.text = "".join(tokens).strip()
-        outputs_after = await asyncio.to_thread(media.snapshot_outputs, conversation_id)
-        result.files = media.collect_new_outputs(outputs_before, outputs_after)
+        outputs_after = await asyncio.to_thread(snapshot_outputs, conversation_id)
+        result.files = collect_new_outputs(outputs_before, outputs_after)
 
-    try:
-        await asyncio.wait_for(_stream(), timeout=_turn_timeout_s())
-    except asyncio.TimeoutError:
-        logger.warning("WhatsApp turn timed out (conversation %s)", conversation_id)
-        await redis_set_stream_cancel(conversation_id)
-        result.timed_out = True
-    finally:
-        run.is_done = True
-        for q in list(run.queues):
-            await q.put(None)
-        _background_runs.pop(conversation_id, None)
-        await redis_clear_stream_active(conversation_id)
+    # Registered as a chat-ui background run for the whole turn (see
+    # ``session_turn.background_run``), so the conversation can be followed live.
+    async with background_run(conversation_id, profile=profile) as live:
+        try:
+            await asyncio.wait_for(_stream(live), timeout=_turn_timeout_s())
+        except asyncio.TimeoutError:
+            logger.warning("WhatsApp turn timed out (conversation %s)", conversation_id)
+            await redis_set_stream_cancel(conversation_id)
+            result.timed_out = True
     return result

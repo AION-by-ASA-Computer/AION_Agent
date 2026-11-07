@@ -15,6 +15,8 @@ from . import (
     me_api_keys,
     whatsapp,
     voice,
+    me_telegram,
+    telegram_webhook,
 )
 from src.api.cron_user import router as cron_user_router
 
@@ -34,3 +36,6 @@ api_v1_router.include_router(cron_user_router, tags=["v1-cron-jobs"])
 api_v1_router.include_router(me_api_keys.router)
 api_v1_router.include_router(whatsapp.router)
 api_v1_router.include_router(voice.router)
+api_v1_router.include_router(me_telegram.router)
+# Public Telegram webhook (webhook delivery mode): authenticated by the bot secret.
+api_v1_router.include_router(telegram_webhook.router)

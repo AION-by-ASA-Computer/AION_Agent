@@ -20,6 +20,7 @@
       "appearance": "Preferenze",
       "security": "Sicurezza",
       "api_keys": "Chiavi API",
+      "telegram": "Telegram",
       "instructions": "Istruzioni",
       "tunings": "Tuning e parametri",
       "runtime": "Runtime",
@@ -160,6 +161,67 @@
         "generic": "Si è verificato un errore. Riprova."
       },
       "list_title": "Le tue chiavi"
+    },
+    "telegram": {
+      "title": "Telegram",
+      "desc": "Collega il tuo account Telegram per usare AION dal telefono. Le chat fatte da Telegram compaiono nella barra laterale e puoi continuarle anche dalla Chat UI.",
+      "loading": "Caricamento stato Telegram…",
+      "retry": "Riprova",
+      "disabled": "L'integrazione Telegram non è attiva su questo server. Contatta l'amministratore.",
+      "status": {
+        "linked": "Collegato",
+        "not_linked": "Non collegato"
+      },
+      "link_title": "Collega il tuo account",
+      "link_desc": "Ogni utente AION può collegare un solo account Telegram.",
+      "step1": "Premi «Collega Telegram» per generare un link monouso.",
+      "step2": "Apri il link (o inquadra il QR) dal telefono: si apre la chat con {{bot}}.",
+      "step3": "Premi «Avvia» in Telegram: il collegamento è immediato.",
+      "link_button": "Collega Telegram",
+      "pairing_hint": "Inquadra il QR con il telefono oppure apri il link sul dispositivo dove usi Telegram, poi premi «Avvia».",
+      "open_telegram": "Apri in Telegram",
+      "copy_link": "Copia link",
+      "copied": "Copiato",
+      "waiting": "In attesa della conferma da Telegram… Il link scade alle {{time}}.",
+      "expired": "Il link è scaduto senza essere usato. Generane uno nuovo.",
+      "regenerate": "Genera un nuovo link",
+      "qr_alt": "QR code del link di collegamento Telegram",
+      "linked_title": "Account collegato",
+      "account": "Account Telegram",
+      "user_id": "ID utente Telegram",
+      "linked_at": "Collegato il",
+      "last_seen": "Ultima attività",
+      "never": "Mai",
+      "open_bot": "Apri {{bot}} in Telegram",
+      "unlink": "Scollega",
+      "cancel": "Annulla",
+      "unlink_dialog": {
+        "title": "Scollegare Telegram?",
+        "desc": "Da Telegram non potrai più usare AION finché non colleghi di nuovo l'account. Le chat già fatte restano salvate.",
+        "confirm": "Scollega"
+      },
+      "bots_title": "I tuoi assistenti",
+      "bots_desc": "Assistenti personali creati dal bot {{bot}} con /newbot: ognuno ha il suo profilo e progetto, e risponde solo a te.",
+      "bots_empty": "Nessun assistente. Quando vuoi, scrivi /newbot a {{bot}} per crearne uno.",
+      "bot_open": "Apri",
+      "bot_profile": "Profilo: {{profile}}",
+      "bot_project": "Progetto: {{project}}",
+      "bot_status_provisioning": "In configurazione",
+      "bot_status_active": "Attivo",
+      "bot_status_suspended": "Sospeso",
+      "bot_status_error": "Errore",
+      "bot_mode_personal": "Personale",
+      "bot_mode_shared": "Condiviso",
+      "toast": {
+        "linked": "Account Telegram collegato",
+        "unlinked": "Account Telegram scollegato"
+      },
+      "err": {
+        "unavailable": "Il bot Telegram non è ancora connesso. Riprova tra qualche secondo.",
+        "user_token_required": "Accedi con il tuo account per gestire il collegamento Telegram.",
+        "not_linked": "Nessun account Telegram collegato.",
+        "generic": "Operazione non riuscita. Riprova."
+      }
     },
     "section": {
       "profile": {
@@ -365,7 +427,8 @@
       "logout": "Esci",
       "admin_panel": "Pannello admin"
     },
-    "from_whatsapp": "Conversazione da WhatsApp"
+    "from_whatsapp": "Conversazione da WhatsApp",
+    "from_telegram": "Conversazione da Telegram"
   },
   "schedulesPage": {
     "title": "Automazioni",
