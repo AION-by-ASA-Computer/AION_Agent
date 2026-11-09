@@ -33,7 +33,8 @@
     "theme_light": "Switch to light theme",
     "theme_dark": "Switch to dark theme",
     "whatsapp": "WhatsApp",
-    "telegram": "Telegram"
+    "telegram": "Telegram",
+    "service_accounts": "Service accounts"
   },
   "admin_dashboard": {
     "title": "Overview",
@@ -2645,6 +2646,177 @@
       "bot_owner_reassigned": "Owner reassigned",
       "quota_changed": "Quota changed",
       "user_purged": "AION user deleted"
+    }
+  },
+  "admin_service_accounts": {
+    "title": "Service accounts",
+    "subtitle": "Non-human accounts for integrations and scripts. They sign in only with API keys you create here, and every key expires.",
+    "add": "New service account",
+    "search": "Search service accounts…",
+    "loading": "Loading service accounts…",
+    "error": "Couldn't load the service accounts.",
+    "retry": "Try again",
+    "never_used": "Never used",
+    "count_one": "{{count}} service account",
+    "count_other": "{{count}} service accounts",
+    "count_filtered": "{{shown}} of {{total}}",
+    "keys_badge_title": "{{active}} active API keys out of {{max}} allowed",
+    "cols": {
+      "account": "Account",
+      "status": "Status",
+      "keys": "Keys",
+      "last_used": "Last used",
+      "memory": "Memory",
+      "actions": "Actions"
+    },
+    "filter": {
+      "aria": "Filter by {{col}}",
+      "clear": "Clear filter",
+      "search": "Search…",
+      "all": "All"
+    },
+    "status": {
+      "active": "Active",
+      "disabled": "Disabled"
+    },
+    "ltm": {
+      "on": "On",
+      "off": "Off"
+    },
+    "row": {
+      "keys": "API keys of {{name}}",
+      "profiles": "Profile access for {{name}}",
+      "edit": "Edit {{name}}",
+      "delete": "Delete {{name}}",
+      "enable": "Enable {{name}}",
+      "disable": "Disable {{name}}"
+    },
+    "empty": {
+      "title": "No service accounts yet",
+      "body": "A service account lets an integration, script or scheduled job talk to AION without a person behind it.",
+      "point_keys": "It has no password, SSO or 2FA: it authenticates only with API keys, and each key has an expiry date.",
+      "point_scopes": "Each key carries only the scopes you grant (chat, conversations, files) and can be revoked at any time.",
+      "point_memory": "Long-term memory is off by default, so automated traffic doesn't fill it up.",
+      "search": "No service account matches these filters.",
+      "clear_filters": "Clear filters"
+    },
+    "form": {
+      "title_new": "New service account",
+      "title_edit": "Edit service account",
+      "optional": "Optional",
+      "display_name": "Name",
+      "display_name_placeholder": "Nightly report",
+      "slug": "Identifier",
+      "slug_hint": "Lowercase letters, digits, dots, dashes and underscores (2-61 characters). It can't be changed later.",
+      "slug_invalid": "Use 2-61 lowercase letters, digits, \".\", \"-\" or \"_\", starting with a letter or digit.",
+      "description": "Description",
+      "description_placeholder": "What uses this account and who owns it",
+      "description_hint": "Helps other admins know what the account is for.",
+      "ltm": "Long-term memory",
+      "ltm_hint": "Let AION remember facts across this account's conversations. Usually not needed for integrations.",
+      "keys_title": "API keys",
+      "keys_description": "Limits for the keys of this account. Every key expires.",
+      "max_keys": "Active keys allowed",
+      "max_days": "Maximum key lifetime (days)",
+      "range_hint": "From {{min}} to {{max}}",
+      "range_error": "Enter a whole number from {{min}} to {{max}}",
+      "limits_existing": "New limits apply to keys created from now on; existing keys keep their expiry.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "create": "Create",
+      "saving": "Saving…"
+    },
+    "keys": {
+      "title": "API keys · {{name}}",
+      "close": "Close",
+      "policy": "{{active}} of {{max}} active keys · up to {{days}} days each",
+      "new": "New key",
+      "account_disabled": "This account is disabled: its keys don't work and no new key can be created until it's enabled again.",
+      "quota_full": "This account already has {{max}} active keys. Revoke one or raise the limit to create another.",
+      "error": "Couldn't load the keys.",
+      "empty_title": "No keys yet",
+      "empty_body": "Create a key to let the integration authenticate. You'll see the full key only once.",
+      "status": {
+        "active": "Active",
+        "expired": "Expired",
+        "revoked": "Revoked"
+      },
+      "revoke": "Revoke",
+      "revoke_confirm": "Revoke now? Calls using it will fail.",
+      "revoke_aria": "Revoke {{name}}",
+      "created_on": "Created {{date}}",
+      "expires_on": "Expires {{date}}",
+      "expired_on": "Expired {{date}}",
+      "revoked_on": "Revoked {{date}}",
+      "last_used": "Last used {{date}}",
+      "never_used": "Never used",
+      "name": "Key name",
+      "name_hint": "Where the key is used, e.g. the server or job name.",
+      "name_placeholder": "reporting-server",
+      "days": "Expires in (days)",
+      "days_hint": "Up to {{max}} · on {{date}}",
+      "scopes": "Scopes",
+      "scopes_required": "Choose at least one scope.",
+      "create": "Create key"
+    },
+    "new_key": {
+      "title": "Copy your new API key",
+      "body": "This is the only time the full key is shown. Store it somewhere safe, such as a secrets manager.",
+      "usage": "Send it as",
+      "usage_or": "or in the header",
+      "once": "It will not be shown again.",
+      "copy": "Copy key",
+      "copied": "Copied",
+      "done": "I've saved it"
+    },
+    "scopes": {
+      "chat": "Chat with the agent",
+      "conversations_read": "Read conversations",
+      "conversations_write": "Manage conversations",
+      "files_read": "Read files",
+      "files_write": "Upload files"
+    },
+    "errors": {
+      "user_exists": "{{identifier}} already exists. Choose another identifier.",
+      "invalid_scopes": "One or more scopes aren't allowed for this account.",
+      "invalid_expiration": "The expiry must be between 1 and {{days}} days.",
+      "api_key_quota_exceeded": "This account already has {{max}} active keys."
+    },
+    "profiles": {
+      "title": "Profile access",
+      "body": "Choose which profiles {{name}} can use.",
+      "hint": "With nothing selected, the account can use every profile.",
+      "clear": "Clear selection",
+      "selected": "{{count}} selected",
+      "all": "All profiles",
+      "none": "No profiles exist yet.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving…"
+    },
+    "delete": {
+      "title": "Delete this service account?",
+      "body": "{{name}} and all its API keys will be permanently removed. Integrations using it will stop working. This cannot be undone.",
+      "confirm_label": "Type {{name}} to confirm",
+      "cancel": "Cancel",
+      "confirm": "Delete",
+      "deleting": "Deleting…"
+    },
+    "toast": {
+      "load_failed": "Couldn't load the service accounts: {{error}}",
+      "save_failed": "Couldn't save: {{error}}",
+      "delete_failed": "Couldn't delete: {{error}}",
+      "profiles_load_failed": "Couldn't load profile access: {{error}}",
+      "profiles_saved": "Profile access saved",
+      "created": "Service account created. Now create an API key for it.",
+      "updated": "Service account updated",
+      "deleted": "Service account deleted",
+      "enabled": "{{name}} enabled",
+      "disabled": "{{name}} disabled: its keys stop working",
+      "keys_load_failed": "Couldn't load the keys: {{error}}",
+      "key_create_failed": "Couldn't create the key: {{error}}",
+      "key_revoked": "Key \"{{name}}\" revoked",
+      "key_revoke_failed": "Couldn't revoke the key: {{error}}"
     }
   }
 }

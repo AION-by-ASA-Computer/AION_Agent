@@ -100,6 +100,10 @@ async def resolve_user(
                 .scalars()
                 .first()
             )
+            # A service account can never sign in, also through an SSO
+            # identity attached to it by hand in the DB.
+            if user is not None and getattr(user, "account_type", "human") == "service":
+                raise ValueError("user_not_found")
             if user:
                 user.last_active_at = now
                 identity.access_token_encrypted = access_token_encrypted

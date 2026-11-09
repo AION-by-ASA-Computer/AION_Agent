@@ -95,6 +95,20 @@ class User(Base):
     api_key_max_ttl_days: Mapped[int] = mapped_column(
         Integer, default=90, server_default="90", nullable=False
     )
+    # Service accounts (migration g5b6c7d035): ``"human"`` for people,
+    # ``"service"`` for non-human accounts managed by admins that can only
+    # authenticate with API keys (no password, SSO, 2FA or channels). Extra
+    # service settings (description, ltm_enabled, created_by) live in
+    # ``metadata["service"]``; see ``src/data/service_accounts.py``.
+    account_type: Mapped[str] = mapped_column(
+        String(16), default="human", server_default="human", nullable=False, index=True
+    )
+    # Reversible deactivation: while set, every API key of the account is
+    # rejected (``api_key_owner_disabled``) but the keys are kept, so
+    # re-enabling the account restores the integration without rotating keys.
+    disabled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     __table_args__ = (
         UniqueConstraint("tenant_id", "identifier", name="uq_users_tenant_identifier"),

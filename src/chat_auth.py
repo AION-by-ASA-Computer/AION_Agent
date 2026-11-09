@@ -66,6 +66,12 @@ async def authenticate_user_password(
         if not u:
             return None
 
+        # Service accounts never log in (API keys only), even if a password
+        # hash ended up on the row by mistake (e.g. a manual SQL update).
+        if getattr(u, "account_type", "human") == "service":
+            logger.warning("Password login refused for service account %s", key)
+            return None
+
         ph = u.password_hash
         if not ph:
             logger.warning("User %s has no password_hash in DB", key)
