@@ -159,8 +159,9 @@ async def list_service_accounts() -> Dict[str, Any]:
                 last_used[uid] = ts
             for uid, slug in (
                 await session.execute(
-                    select(UserProfileAccess.user_id, UserProfileAccess.profile_slug)
-                    .where(UserProfileAccess.user_id.in_(ids))
+                    select(
+                        UserProfileAccess.user_id, UserProfileAccess.profile_slug
+                    ).where(UserProfileAccess.user_id.in_(ids))
                 )
             ).all():
                 profiles.setdefault(uid, []).append(slug)

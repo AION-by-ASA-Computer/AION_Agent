@@ -130,7 +130,9 @@ def test_create_account_and_key_acts_as_service_identity(env):
     assert acc["disabled"] is False
     assert acc["created_by"] == "boss"
 
-    key = _create_key(env, acc["id"], scopes=["conversations:read", "conversations:write"])
+    key = _create_key(
+        env, acc["id"], scopes=["conversations:read", "conversations:write"]
+    )
     assert key.status_code == 201, key.text
     secret = key.json()["key"]
     assert secret.startswith("aion_")
@@ -171,7 +173,9 @@ def test_create_validation(env):
     res = _create_account(env, slug="svc-ci-bot")  # prefix is accepted and stripped
     assert res.status_code == 409
     assert res.json()["detail"]["code"] == "user_exists"
-    assert _create_account(env, slug="other", api_key_max_ttl_days=366).status_code == 422
+    assert (
+        _create_account(env, slug="other", api_key_max_ttl_days=366).status_code == 422
+    )
 
 
 def test_key_policy_enforced(env):
@@ -196,7 +200,9 @@ def test_disable_enable_and_revoke(env):
     assert c.get("/profiles", headers=_key(secret["key"])).status_code == 200
 
     res = c.patch(
-        f"/admin/service-accounts/{acc['id']}", headers=env["admin"], json={"disabled": True}
+        f"/admin/service-accounts/{acc['id']}",
+        headers=env["admin"],
+        json={"disabled": True},
     )
     assert res.json()["disabled"] is True
     res = c.get("/profiles", headers=_key(secret["key"]))
@@ -204,7 +210,9 @@ def test_disable_enable_and_revoke(env):
     assert res.json()["detail"]["code"] == "api_key_owner_disabled"
 
     c.patch(
-        f"/admin/service-accounts/{acc['id']}", headers=env["admin"], json={"disabled": False}
+        f"/admin/service-accounts/{acc['id']}",
+        headers=env["admin"],
+        json={"disabled": False},
     )
     assert c.get("/profiles", headers=_key(secret["key"])).status_code == 200
 
@@ -250,7 +258,9 @@ def test_users_endpoints_keep_service_accounts_apart(env):
 
     users = c.get("/admin/users", headers=env["admin"]).json()["users"]
     assert "svc-ci-bot" not in [u["identifier"] for u in users]
-    users = c.get("/admin/users?include_service=1", headers=env["admin"]).json()["users"]
+    users = c.get("/admin/users?include_service=1", headers=env["admin"]).json()[
+        "users"
+    ]
     row = next(u for u in users if u["identifier"] == "svc-ci-bot")
     assert row["account_type"] == "service"
 
@@ -262,7 +272,9 @@ def test_users_endpoints_keep_service_accounts_apart(env):
     assert res.status_code == 422
     assert res.json()["detail"]["code"] == "identifier_reserved"
 
-    res = c.put(f"/admin/users/{acc['id']}", headers=env["admin"], json={"roles": ["admin"]})
+    res = c.put(
+        f"/admin/users/{acc['id']}", headers=env["admin"], json={"roles": ["admin"]}
+    )
     assert res.status_code == 409
     assert res.json()["detail"]["code"] == "service_account_use_dedicated_endpoint"
     res = c.post(f"/admin/users/{acc['id']}/password-link", headers=env["admin"])
@@ -271,7 +283,9 @@ def test_users_endpoints_keep_service_accounts_apart(env):
 
     # Human ids are not service accounts on the dedicated endpoints.
     res = c.patch(
-        f"/admin/service-accounts/{env['alice']}", headers=env["admin"], json={"disabled": True}
+        f"/admin/service-accounts/{env['alice']}",
+        headers=env["admin"],
+        json={"disabled": True},
     )
     assert res.status_code == 404
 

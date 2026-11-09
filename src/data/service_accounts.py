@@ -67,7 +67,9 @@ class InvalidServiceSlugError(ValueError):
 
 def is_service(user: Optional[User]) -> bool:
     """True when ``user`` is a service account (``None`` → False)."""
-    return bool(user is not None and getattr(user, "account_type", None) == ACCOUNT_TYPE_SERVICE)
+    return bool(
+        user is not None and getattr(user, "account_type", None) == ACCOUNT_TYPE_SERVICE
+    )
 
 
 def is_reserved_identifier(identifier: Optional[str]) -> bool:
@@ -84,7 +86,7 @@ def identifier_for_slug(slug: str) -> str:
     """
     s = (slug or "").strip().lower()
     if s.startswith(SERVICE_PREFIX):
-        s = s[len(SERVICE_PREFIX):]
+        s = s[len(SERVICE_PREFIX) :]
     if not SLUG_RE.match(s):
         raise InvalidServiceSlugError(slug)
     return SERVICE_PREFIX + s
@@ -225,10 +227,14 @@ async def service_ltm_enabled(identifier: Optional[str]) -> Optional[bool]:
         async with get_async_session_maker()() as session:
             u = (
                 await session.execute(
-                    select(User).where(User.tenant_id == tenant_id, User.identifier == ident)
+                    select(User).where(
+                        User.tenant_id == tenant_id, User.identifier == ident
+                    )
                 )
             ).scalar_one_or_none()
-        value: Optional[bool] = service_meta(u)["ltm_enabled"] if is_service(u) else None
+        value: Optional[bool] = (
+            service_meta(u)["ltm_enabled"] if is_service(u) else None
+        )
     except Exception:
         value = False
     _LTM_CACHE[ident] = (now + _LTM_CACHE_TTL_SEC, value)
