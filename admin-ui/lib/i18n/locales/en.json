@@ -2646,5 +2646,62 @@
       "quota_changed": "Quota changed",
       "user_purged": "AION user deleted"
     }
+  },
+  "update": {
+    "banner": {
+      "title": "New version {{version}} available",
+      "title_local": "New local build available",
+      "installed": "(installed: {{version}})",
+      "changelog": "Changelog",
+      "how_to": "How to update",
+      "update_now": "Update now",
+      "dismiss_aria": "Dismiss update notification"
+    },
+    "confirm": {
+      "title": "Update AION",
+      "cancel": "Cancel",
+      "loading_plan": "Working out the updates to apply…",
+      "chain_label": "These will be applied in sequence:",
+      "release_notes": "Release notes",
+      "local_hop": "build from local code",
+      "warning_downtime": "Each step restarts the services: AION will be unavailable for a few minutes.",
+      "warning_backup": "An automatic data backup is taken before every step.",
+      "warning_keep_open": "You can close this page: the update keeps going, and reopening it shows the progress.",
+      "starting": "Starting…",
+      "confirm": "Update",
+      "error_running": "An update is already running.",
+      "error_no_update": "There is no update to apply.",
+      "error_unavailable": "The update service (aion-updater) is not available.",
+      "error_generic": "The update failed."
+    },
+    "progress": {
+      "title_running": "Updating",
+      "title_succeeded": "Update complete",
+      "title_failed": "Update failed",
+      "reloading": "Reloading the page with the new version…",
+      "services_restarting": "Services restarting…",
+      "hop_done": "done",
+      "hop_running": "in progress",
+      "hop_failed": "failed",
+      "hop_pending": "pending",
+      "failed_hint": "Versions already applied stay installed: \"Retry\" resumes from the failed step.",
+      "backup_hint": "Data backup: {{path}}",
+      "show_log": "Show log",
+      "close": "Close",
+      "retry": "Retry",
+      "reload": "Reload now",
+      "phase": {
+        "starting": "Starting…",
+        "plan": "Working out the steps…",
+        "backup": "Backing up data…",
+        "fetch": "Downloading configuration…",
+        "build": "Building local images…",
+        "pull": "Downloading images…",
+        "migrate": "Migrating data…",
+        "restart": "Restarting services…",
+        "health": "Checking service health…",
+        "done": "Done"
+      }
+    }
   }
 }

@@ -9,6 +9,12 @@ quando è disponibile un aggiornamento.
 Nessuna autenticazione GitHub richiesta: l'API pubblica consente 60 req/ora
 per IP. La cache in-memory di 5 minuti garantisce al massimo ~12 chiamate/ora
 indipendentemente dal numero di admin connessi.
+
+Se il sidecar aion-updater è raggiungibile (deploy GHCR con il profilo
+"updater"), target e disponibilità arrivano dal suo piano di hop
+(``src/api/admin_update.fetch_update_plan``): così il banner coincide con ciò
+che il pulsante "Aggiorna ora" applicherà, anche in modalità build locale
+(hop finale "local"). Docs: docs/deployment/self-update.md
 """
 
 import logging
@@ -35,8 +41,13 @@ router = APIRouter()
 
 class VersionCheckResponse(BaseModel):
     current: str
+    # Versione target: ultima release, oppure "local" in modalità build locale.
     latest: str
     update_available: bool
+    # True se il sidecar aion-updater risponde: l'admin-ui mostra "Aggiorna ora".
+    self_update_supported: bool = False
+    # "github" | "hybrid-local" (piano del sidecar); None senza sidecar.
+    update_mode: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -131,21 +142,35 @@ async def version_check() -> VersionCheckResponse:
         return _cache["data"]
 
     current = _read_current_version()
-    latest = await _fetch_latest_release()
+    # Import locale: evita un ciclo admin -> version_check -> admin_update.
+    from src.api.admin_update import fetch_update_plan
 
-    result = VersionCheckResponse(
-        current=current,
-        latest=latest,
-        update_available=_semver_gt(latest, current),
-    )
+    plan = await fetch_update_plan()
+    if plan is not None:
+        # Il piano del sidecar è la fonte autoritativa: è calcolato da
+        # install.sh sul .env reale, la stessa logica che applicherà l'upgrade.
+        result = VersionCheckResponse(
+            current=str(plan.get("current") or current),
+            latest=str(plan.get("target") or plan.get("current") or current),
+            update_available=bool(plan.get("update_available")),
+            self_update_supported=True,
+            update_mode=plan.get("mode"),
+        )
+    else:
+        latest = await _fetch_latest_release()
+        result = VersionCheckResponse(
+            current=current,
+            latest=latest,
+            update_available=_semver_gt(latest, current),
+        )
 
     _cache["data"] = result
     _cache["ts"] = now
 
     logger.debug(
         "version_check: current=%s latest=%s update_available=%s",
-        current,
-        latest,
+        result.current,
+        result.latest,
         result.update_available,
     )
 

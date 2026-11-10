@@ -26,6 +26,13 @@ Flusso:
   2. Sincronizza mcp_servers_std/ → /app/mcp_servers/ (merge non-distruttivo)
   3. Esegue scripts/upgrades/<to_version>.py se presente (con UpgradeContext)
   4. Aggiorna AION_VERSION=<to_version> in /app/.env
+
+Hop verso una build locale (``--to local``, modalità ibrida dell'updater):
+non esiste un ``scripts/upgrades/local.py``, quindi il runner esegue in ordine
+semver tutti gli script ``scripts/upgrades/<X.Y.Z>.py`` con versione maggiore
+di ``--from``. Sono gli script non ancora rilasciati presenti nel clone: così lo
+script della prossima release viene esercitato nel flusso reale prima del tag.
+Vedi docs/deployment/self-update.md.
 """
 from __future__ import annotations
 
@@ -86,6 +93,57 @@ def _sync_dir(src: Path, dst: Path, label: str) -> None:
 # ---------------------------------------------------------------------------
 # Esecuzione script per-versione
 # ---------------------------------------------------------------------------
+
+
+# Target speciale usato dall'hop finale della modalità ibrida (build dal clone).
+LOCAL_TARGET = "local"
+
+
+def _parse_semver(value: str) -> tuple[int, ...] | None:
+    """Parsa 'X.Y.Z' in una tupla di interi; None se non è una semver stabile."""
+    try:
+        parts = tuple(int(x) for x in value.split("."))
+    except ValueError:
+        return None
+    return parts if len(parts) == 3 else None
+
+
+def _pending_local_scripts(from_version: str) -> list[str]:
+    """Versioni degli script ``scripts/upgrades/<X.Y.Z>.py`` da eseguire verso ``local``.
+
+    Restituisce, in ordine semver crescente, le versioni maggiori di
+    ``from_version``: sono gli script non ancora rilasciati nel clone. Se
+    ``from_version`` non è una semver (es. già ``local``) non si può sapere
+    quali script siano già stati applicati, quindi non se ne esegue nessuno:
+    gli script devono comunque essere idempotenti (vedi scripts/upgrades/README.md).
+    """
+    base = _parse_semver(from_version)
+    if base is None:
+        return []
+    found: list[tuple[tuple[int, ...], str]] = []
+    for path in (ROOT / "scripts" / "upgrades").glob("*.py"):
+        parsed = _parse_semver(path.stem)
+        if parsed is not None and parsed > base:
+            found.append((parsed, path.stem))
+    return [name for _, name in sorted(found)]
+
+
+def _run_version_scripts(from_version: str, to_version: str, dry_run: bool) -> None:
+    """Esegue gli script per-versione dell'hop ``from_version`` → ``to_version``.
+
+    Per un hop di release è il solo ``<to_version>.py``; per l'hop verso
+    ``local`` sono tutti gli script non rilasciati (``_pending_local_scripts``).
+    """
+    if to_version != LOCAL_TARGET:
+        _run_version_script(to_version, dry_run)
+        return
+    pending = _pending_local_scripts(from_version)
+    if not pending:
+        print(f"[runner] Nessuno script non rilasciato dopo {from_version} — no-op.")
+        return
+    print(f"[runner] Hop verso build locale: script da eseguire {', '.join(pending)}")
+    for version in pending:
+        _run_version_script(version, dry_run)
 
 
 def _run_version_script(to_version: str, dry_run: bool) -> None:
@@ -199,7 +257,7 @@ def main() -> None:
 
     # 3. Script per-versione
     print("\n[runner] === Step 3: script per-versione ===")
-    _run_version_script(args.to_version, args.dry_run)
+    _run_version_scripts(args.from_version, args.to_version, args.dry_run)
 
     # 4. Aggiorna AION_VERSION nel .env
     print("\n[runner] === Step 4: aggiorna AION_VERSION ===")

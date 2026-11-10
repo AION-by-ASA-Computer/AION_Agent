@@ -2646,5 +2646,62 @@
       "quota_changed": "Kontingent geändert",
       "user_purged": "AION-Nutzer gelöscht"
     }
+  },
+  "update": {
+    "banner": {
+      "title": "Neue Version {{version}} verfügbar",
+      "title_local": "Neuer lokaler Build verfügbar",
+      "installed": "(installiert: {{version}})",
+      "changelog": "Changelog",
+      "how_to": "Aktualisierungsanleitung",
+      "update_now": "Jetzt aktualisieren",
+      "dismiss_aria": "Update-Hinweis schließen"
+    },
+    "confirm": {
+      "title": "AION aktualisieren",
+      "cancel": "Abbrechen",
+      "loading_plan": "Anzuwendende Updates werden ermittelt…",
+      "chain_label": "Werden nacheinander angewendet:",
+      "release_notes": "Versionshinweise",
+      "local_hop": "Build aus lokalem Code",
+      "warning_downtime": "Jeder Schritt startet die Dienste neu: AION ist einige Minuten nicht erreichbar.",
+      "warning_backup": "Vor jedem Schritt wird automatisch ein Datenbackup erstellt.",
+      "warning_keep_open": "Sie können die Seite schließen: Das Update läuft weiter, und beim erneuten Öffnen sehen Sie den Fortschritt.",
+      "starting": "Wird gestartet…",
+      "confirm": "Aktualisieren",
+      "error_running": "Es läuft bereits ein Update.",
+      "error_no_update": "Es gibt kein Update anzuwenden.",
+      "error_unavailable": "Der Update-Dienst (aion-updater) ist nicht verfügbar.",
+      "error_generic": "Das Update ist fehlgeschlagen."
+    },
+    "progress": {
+      "title_running": "Update läuft",
+      "title_succeeded": "Update abgeschlossen",
+      "title_failed": "Update fehlgeschlagen",
+      "reloading": "Seite wird mit der neuen Version neu geladen…",
+      "services_restarting": "Dienste werden neu gestartet…",
+      "hop_done": "abgeschlossen",
+      "hop_running": "läuft",
+      "hop_failed": "fehlgeschlagen",
+      "hop_pending": "ausstehend",
+      "failed_hint": "Bereits angewendete Versionen bleiben installiert: „Erneut versuchen“ setzt beim fehlgeschlagenen Schritt fort.",
+      "backup_hint": "Datenbackup: {{path}}",
+      "show_log": "Log anzeigen",
+      "close": "Schließen",
+      "retry": "Erneut versuchen",
+      "reload": "Jetzt neu laden",
+      "phase": {
+        "starting": "Wird gestartet…",
+        "plan": "Schritte werden ermittelt…",
+        "backup": "Daten werden gesichert…",
+        "fetch": "Konfiguration wird heruntergeladen…",
+        "build": "Lokale Images werden gebaut…",
+        "pull": "Images werden heruntergeladen…",
+        "migrate": "Daten werden migriert…",
+        "restart": "Dienste werden neu gestartet…",
+        "health": "Dienststatus wird geprüft…",
+        "done": "Fertig"
+      }
+    }
   }
 }

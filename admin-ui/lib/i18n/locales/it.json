@@ -2646,5 +2646,62 @@
       "quota_changed": "Quota modificata",
       "user_purged": "Utente AION eliminato"
     }
+  },
+  "update": {
+    "banner": {
+      "title": "Nuova versione {{version}} disponibile",
+      "title_local": "Nuova build locale disponibile",
+      "installed": "(installata: {{version}})",
+      "changelog": "Changelog",
+      "how_to": "Come aggiornare",
+      "update_now": "Aggiorna ora",
+      "dismiss_aria": "Chiudi notifica aggiornamento"
+    },
+    "confirm": {
+      "title": "Aggiorna AION",
+      "cancel": "Annulla",
+      "loading_plan": "Calcolo degli aggiornamenti da applicare…",
+      "chain_label": "Verranno applicati in sequenza:",
+      "release_notes": "Note di rilascio",
+      "local_hop": "build dal codice locale",
+      "warning_downtime": "Ogni passaggio riavvia i servizi: AION resterà non disponibile per qualche minuto.",
+      "warning_backup": "Prima di ogni passaggio viene creato un backup automatico dei dati.",
+      "warning_keep_open": "Puoi chiudere la pagina: l'aggiornamento prosegue comunque, e riaprendola vedrai l'avanzamento.",
+      "starting": "Avvio…",
+      "confirm": "Aggiorna",
+      "error_running": "Un aggiornamento è già in corso.",
+      "error_no_update": "Nessun aggiornamento da applicare.",
+      "error_unavailable": "Il servizio di aggiornamento (aion-updater) non è disponibile.",
+      "error_generic": "Aggiornamento non riuscito."
+    },
+    "progress": {
+      "title_running": "Aggiornamento in corso",
+      "title_succeeded": "Aggiornamento completato",
+      "title_failed": "Aggiornamento non riuscito",
+      "reloading": "Ricarico la pagina con la nuova versione…",
+      "services_restarting": "Servizi in riavvio…",
+      "hop_done": "completato",
+      "hop_running": "in corso",
+      "hop_failed": "non riuscito",
+      "hop_pending": "in attesa",
+      "failed_hint": "Le versioni già applicate restano installate: \"Riprova\" riparte dal passaggio non riuscito.",
+      "backup_hint": "Backup dei dati: {{path}}",
+      "show_log": "Mostra log",
+      "close": "Chiudi",
+      "retry": "Riprova",
+      "reload": "Ricarica ora",
+      "phase": {
+        "starting": "Avvio…",
+        "plan": "Calcolo dei passaggi…",
+        "backup": "Backup dei dati…",
+        "fetch": "Download della configurazione…",
+        "build": "Build delle immagini locali…",
+        "pull": "Download delle immagini…",
+        "migrate": "Migrazione dei dati…",
+        "restart": "Riavvio dei servizi…",
+        "health": "Verifica dello stato dei servizi…",
+        "done": "Completato"
+      }
+    }
   }
 }

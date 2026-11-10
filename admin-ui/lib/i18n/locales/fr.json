@@ -2646,5 +2646,62 @@
       "quota_changed": "Quota modifié",
       "user_purged": "Utilisateur AION supprimé"
     }
+  },
+  "update": {
+    "banner": {
+      "title": "Nouvelle version {{version}} disponible",
+      "title_local": "Nouveau build local disponible",
+      "installed": "(installée : {{version}})",
+      "changelog": "Changelog",
+      "how_to": "Comment mettre à jour",
+      "update_now": "Mettre à jour",
+      "dismiss_aria": "Fermer la notification de mise à jour"
+    },
+    "confirm": {
+      "title": "Mettre à jour AION",
+      "cancel": "Annuler",
+      "loading_plan": "Calcul des mises à jour à appliquer…",
+      "chain_label": "Elles seront appliquées dans l'ordre :",
+      "release_notes": "Notes de version",
+      "local_hop": "build depuis le code local",
+      "warning_downtime": "Chaque étape redémarre les services : AION sera indisponible pendant quelques minutes.",
+      "warning_backup": "Une sauvegarde automatique des données est faite avant chaque étape.",
+      "warning_keep_open": "Vous pouvez fermer la page : la mise à jour continue, et en la rouvrant vous verrez la progression.",
+      "starting": "Démarrage…",
+      "confirm": "Mettre à jour",
+      "error_running": "Une mise à jour est déjà en cours.",
+      "error_no_update": "Aucune mise à jour à appliquer.",
+      "error_unavailable": "Le service de mise à jour (aion-updater) n'est pas disponible.",
+      "error_generic": "La mise à jour a échoué."
+    },
+    "progress": {
+      "title_running": "Mise à jour en cours",
+      "title_succeeded": "Mise à jour terminée",
+      "title_failed": "La mise à jour a échoué",
+      "reloading": "Rechargement de la page avec la nouvelle version…",
+      "services_restarting": "Redémarrage des services…",
+      "hop_done": "terminé",
+      "hop_running": "en cours",
+      "hop_failed": "échec",
+      "hop_pending": "en attente",
+      "failed_hint": "Les versions déjà appliquées restent installées : « Réessayer » reprend à l'étape en échec.",
+      "backup_hint": "Sauvegarde des données : {{path}}",
+      "show_log": "Afficher le log",
+      "close": "Fermer",
+      "retry": "Réessayer",
+      "reload": "Recharger",
+      "phase": {
+        "starting": "Démarrage…",
+        "plan": "Calcul des étapes…",
+        "backup": "Sauvegarde des données…",
+        "fetch": "Téléchargement de la configuration…",
+        "build": "Build des images locales…",
+        "pull": "Téléchargement des images…",
+        "migrate": "Migration des données…",
+        "restart": "Redémarrage des services…",
+        "health": "Vérification de l'état des services…",
+        "done": "Terminé"
+      }
+    }
   }
 }

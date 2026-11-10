@@ -160,6 +160,58 @@ services:
       timeout: 3s
       retries: 5
 
+  # Sidecar che applica gli aggiornamenti richiesti dall'admin-ui (pulsante
+  # "Aggiorna ora"): esegue `install.sh upgrade` sullo stack tramite il socket
+  # Docker. Docs: docs/deployment/self-update.md
+  #
+  # Sicurezza: /var/run/docker.sock equivale a root sull'host. Il servizio non
+  # pubblica porte (solo aion_net), accetta solo richieste con
+  # AION_UPDATER_TOKEN ed esegue un unico comando. Si disattiva togliendo
+  # "updater" da COMPOSE_PROFILES nel .env.
+  #
+  # Le chiavi AION_HOST_* sono scritte da install.sh (_ensure_updater_env); i
+  # default servono solo a rendere valido il file quando il profilo è spento.
+  updater:
+    image: ghcr.io/aion-by-asa-computer/aion-updater:${AION_VERSION:-latest}
+    profiles: ["updater"]
+    restart: unless-stopped
+    init: true
+    # Hostname fisso: install.sh lo scrive nel lock data/.upgrade.lock e lo usa
+    # per riconoscere i lock lasciati da un'istanza precedente dell'updater.
+    hostname: aion-updater
+    # UID/GID dell'utente di deploy: i file scritti (.env, data/, backup)
+    # restano suoi; il GID del socket Docker dà accesso al daemon.
+    user: "${AION_HOST_UID:-1000}:${AION_HOST_GID:-1000}"
+    group_add:
+      - "${AION_HOST_DOCKER_GID:-0}"
+    # Stesso path dell'host: install.sh usa $PWD nei `docker run -v` e compose
+    # risolve i path relativi rispetto a questa directory.
+    working_dir: ${AION_HOST_INSTALL_DIR:-/nonexistent}
+    environment:
+      AION_UPDATER_TOKEN: ${AION_UPDATER_TOKEN:-}
+      AION_HOST_INSTALL_DIR: ${AION_HOST_INSTALL_DIR:-/nonexistent}
+      # compose espande `~/.wren` (volume del backend) con l'HOME del client:
+      # deve essere quella dell'host.
+      HOME: ${AION_HOST_HOME:-/tmp}
+      # `localhost` qui non è l'host: health check diretto sul backend.
+      AION_UPGRADE_HEALTH_URL: http://backend:8001/health
+      # Sandbox: pull dell'immagine via API compatibile Docker del socket Podman.
+      AION_PODMAN_REMOTE: "1"
+      AION_PODMAN_SOCKET: /run/podman/podman.sock
+      # Immagine in esecuzione: usata per l'helper che ricrea l'updater a fine upgrade.
+      AION_UPDATER_SELF_IMAGE: ghcr.io/aion-by-asa-computer/aion-updater:${AION_VERSION:-latest}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${AION_HOST_INSTALL_DIR:-/nonexistent}:${AION_HOST_INSTALL_DIR:-/nonexistent}
+      - ${AION_PODMAN_SOCKET_HOST:-/run/user/1000/podman/podman.sock}:/run/podman/podman.sock
+      # Modalità ibrida (build locali): clone del repository allo stesso path,
+      # contesto delle build dell'hop finale "local". Senza AION_LOCAL_REPO_DIR
+      # viene montata una directory innocua (scripts/) in un path inutilizzato.
+      - ${AION_LOCAL_REPO_DIR:-./scripts}:${AION_LOCAL_REPO_DIR:-/opt/aion-updater/no-local-repo}:ro
+    expose:
+      - "8090"
+    networks: [ aion_net ]
+
 networks:
   aion_net:
     driver: bridge
