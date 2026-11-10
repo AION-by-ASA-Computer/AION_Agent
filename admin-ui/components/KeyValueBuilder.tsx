@@ -10,7 +10,15 @@ export interface KeyValueBuilderProps {
   env: Record<string, string>;
   onChange: (nextEnv: Record<string, string>) => void;
   disabled?: boolean;
+  /**
+   * Resolve the real value behind a `${KEY}` placeholder (encrypted store), so
+   * "Edit" can show the current secret. Returns null when it cannot be read.
+   */
+  loadSecret?: (key: string) => Promise<string | null>;
 }
+
+/** True for a value that is exactly one `${VAR}` reference. */
+const isPlaceholder = (v: string) => /^\$\{[^${}]+\}$/.test(v.trim());
 
 const SECRET_KEY_REGEX = /(KEY|SECRET|TOKEN|PASSWORD|PASS|AUTH|PRIVATE|CREDENTIAL|APIKEY|API_KEY)/i;
 
@@ -23,7 +31,7 @@ const monoInput = cn(inputCls, "font-mono text-[13px]");
 const iconBtn =
   "focus-ring inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-50";
 
-export function KeyValueBuilder({ env, onChange, disabled = false }: KeyValueBuilderProps) {
+export function KeyValueBuilder({ env, onChange, disabled = false, loadSecret }: KeyValueBuilderProps) {
   const t = useT();
   const k = "admin_hub.editors.kv";
   const entries = Object.entries(env || {}).map(([key, v]) => ({ key, value: String(v ?? "") }));
@@ -31,6 +39,12 @@ export function KeyValueBuilder({ env, onChange, disabled = false }: KeyValueBui
   // Secrets currently in "replace" mode, and inputs whose value is revealed.
   const [editingSecrets, setEditingSecrets] = useState<Record<string, boolean>>({});
   const [visibleSecrets, setVisibleSecrets] = useState<Record<string, boolean>>({});
+  // Secret replacement: what the admin is typing (shown in the input), the value
+  // stored before "Edit" (kept in `env` until the secret really changes) and the
+  // current secret behind a placeholder, loaded to pre-fill the input.
+  const [secretDrafts, setSecretDrafts] = useState<Record<string, string>>({});
+  const [originalSecrets, setOriginalSecrets] = useState<Record<string, string>>({});
+  const [currentSecrets, setCurrentSecrets] = useState<Record<string, string>>({});
 
   const emit = (list: { key: string; value: string }[]) => {
     const next: Record<string, string> = {};
@@ -48,6 +62,16 @@ export function KeyValueBuilder({ env, onChange, disabled = false }: KeyValueBui
       delete next[oldKey];
       next[newKey] = true;
       setEditingSecrets(next);
+      // Carry the in-progress replacement over to the renamed key.
+      const rename = (p: Record<string, string>) => {
+        if (!(oldKey in p)) return p;
+        const moved = { ...p, [newKey]: p[oldKey] };
+        delete moved[oldKey];
+        return moved;
+      };
+      setSecretDrafts(rename);
+      setOriginalSecrets(rename);
+      setCurrentSecrets(rename);
     }
   };
 
@@ -77,7 +101,58 @@ export function KeyValueBuilder({ env, onChange, disabled = false }: KeyValueBui
     }
   };
 
-  const toggleEdit = (key: string) => setEditingSecrets((p) => ({ ...p, [key]: !p[key] }));
+  /**
+   * Enter or leave "edit" mode for a stored secret.
+   * The input is pre-filled with the current secret (masked, revealable with the
+   * eye): for a `${KEY}` placeholder it is loaded from the encrypted store through
+   * `loadSecret`, never shown as the placeholder text itself — typing next to a
+   * hidden placeholder produced "${KEY}newpass", which reached the MCP server as a
+   * literal. The stored value stays in `env` until the secret really changes, so
+   * saving untouched or emptied never blanks it; leaving the edit restores it.
+   */
+  const toggleEdit = (key: string) => {
+    const index = entries.findIndex((e) => e.key === key);
+    const drop = (p: Record<string, string>) => {
+      const next = { ...p };
+      delete next[key];
+      return next;
+    };
+    if (!editingSecrets[key]) {
+      const stored = index >= 0 ? entries[index].value : "";
+      setOriginalSecrets((p) => ({ ...p, [key]: stored }));
+      if (isPlaceholder(stored)) {
+        // Start empty, then fill in the real secret as soon as it is loaded.
+        setSecretDrafts((p) => ({ ...p, [key]: "" }));
+        const ref = stored.trim().slice(2, -1);
+        void loadSecret?.(ref).then((current) => {
+          if (current == null) return;
+          setCurrentSecrets((p) => ({ ...p, [key]: current }));
+          // Keep whatever the admin already typed while the request was running.
+          setSecretDrafts((p) => (key in p && p[key] === "" ? { ...p, [key]: current } : p));
+        });
+      } else {
+        // Legacy plaintext in the registry: it is the current secret itself.
+        setCurrentSecrets((p) => ({ ...p, [key]: stored }));
+        setSecretDrafts((p) => ({ ...p, [key]: stored }));
+      }
+    } else {
+      if (index >= 0 && key in originalSecrets) handleValueChange(index, originalSecrets[key]);
+      setOriginalSecrets(drop);
+      setSecretDrafts(drop);
+      setCurrentSecrets(drop);
+    }
+    setEditingSecrets((p) => ({ ...p, [key]: !p[key] }));
+  };
+
+  /**
+   * Typing into a secret in edit mode. Only a new, non-empty value replaces the
+   * stored one; an empty draft or the unchanged current secret keep it as it was.
+   */
+  const handleSecretDraftChange = (index: number, key: string, draft: string) => {
+    setSecretDrafts((p) => ({ ...p, [key]: draft }));
+    const changed = draft !== "" && draft !== currentSecrets[key];
+    handleValueChange(index, changed ? draft : originalSecrets[key] ?? "");
+  };
   const toggleVisible = (key: string) => setVisibleSecrets((p) => ({ ...p, [key]: !p[key] }));
 
   return (
@@ -138,10 +213,24 @@ export function KeyValueBuilder({ env, onChange, disabled = false }: KeyValueBui
                       <>
                         <input
                           type={isSecret && !visible ? "password" : "text"}
-                          value={entry.value}
+                          value={editingThis ? secretDrafts[entry.key] ?? "" : entry.value}
                           disabled={disabled}
-                          onChange={(e) => handleValueChange(index, e.target.value)}
-                          placeholder={isSecret ? t(`${k}.secret_ph`) : isDynamicUser ? "${AION_USER_…}" : t(`${k}.value_ph`)}
+                          onChange={(e) =>
+                            editingThis
+                              ? handleSecretDraftChange(index, entry.key, e.target.value)
+                              : handleValueChange(index, e.target.value)
+                          }
+                          // Replace mode starts empty: say so, and put the cursor there.
+                          autoFocus={editingThis}
+                          placeholder={
+                            editingThis
+                              ? t(`${k}.secret_replace_ph`)
+                              : isSecret
+                                ? t(`${k}.secret_ph`)
+                                : isDynamicUser
+                                  ? "${AION_USER_…}"
+                                  : t(`${k}.value_ph`)
+                          }
                           aria-label={t(`${k}.value_ph`)}
                           className={cn(monoInput, isSecret && "pr-20")}
                         />
@@ -156,7 +245,7 @@ export function KeyValueBuilder({ env, onChange, disabled = false }: KeyValueBui
                             >
                               {visible ? <EyeOff className="h-3.5 w-3.5" aria-hidden /> : <Eye className="h-3.5 w-3.5" aria-hidden />}
                             </button>
-                            {hasValue && (
+                            {editingThis && (
                               <button type="button" onClick={() => toggleEdit(entry.key)} className={iconBtn} aria-label={t(`${k}.cancel_edit`)}>
                                 <span aria-hidden>✕</span>
                               </button>
