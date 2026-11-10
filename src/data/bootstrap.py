@@ -124,6 +124,17 @@ async def _patch_sqlite_columns(engine: AsyncEngine, conn) -> None:
             ),
         ):
             await _sqlite_add_column_if_missing(conn, "users", col, ddl)
+        # Service accounts (g5b6c7d035): same reason as the users.roles block.
+        for col, ddl in (
+            ("account_type", "account_type VARCHAR(16) NOT NULL DEFAULT 'human'"),
+            ("disabled_at", "disabled_at DATETIME"),
+        ):
+            await _sqlite_add_column_if_missing(conn, "users", col, ddl)
+        await _sqlite_create_index_if_missing(
+            conn,
+            "ix_users_account_type",
+            "CREATE INDEX IF NOT EXISTS ix_users_account_type ON users(account_type)",
+        )
     if await _sqlite_table_exists(conn, "api_keys"):
         await _sqlite_add_column_if_missing(
             conn, "api_keys", "user_id", "user_id VARCHAR(64)"

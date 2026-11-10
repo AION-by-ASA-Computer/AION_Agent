@@ -766,6 +766,14 @@ async def _resolve_chat_identity(
 
             async with get_async_session_maker()() as session:
                 u = await session.get(User, user_row_id)
+            # Service accounts authenticate only with API keys: a chat token
+            # for one (never issued by /auth/login, but possible via a leaked
+            # secret) is refused so it cannot reach chat-token-only endpoints.
+            if u is not None and getattr(u, "account_type", "human") == "service":
+                raise HTTPException(
+                    403,
+                    detail={"code": "service_account_token_not_allowed"},
+                )
             if u is not None and u.temp_password_expires_at is not None:
                 raise HTTPException(
                     403,
