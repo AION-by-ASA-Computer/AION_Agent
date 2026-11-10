@@ -37,11 +37,24 @@ html[data-theme="dark"],
   --ring: 0 72% 50%; /* Ring matches brand primary */
   --success: 160 60% 45%;
   --warning: 30 80% 55%;
-  --chart-1: 0 72% 52%;
-  --chart-2: 160 60% 45%;
-  --chart-3: 30 80% 55%;
-  --chart-4: 280 65% 60%;
-  --chart-5: 340 75% 55%;
+  /* Categorical chart palette (fixed order, series N -> slot N). Same 8 hues in
+     both themes, stepped per surface; order validated for adjacent-pair CVD
+     separation (dataviz validate_palette, light #fff / dark #161618). */
+  --chart-1: 0 76% 59%; /* brand red */
+  --chart-2: 213 77% 56%; /* blue */
+  --chart-3: 159 73% 36%; /* aqua */
+  --chart-4: 40 100% 39%; /* yellow */
+  --chart-5: 338 61% 58%; /* magenta */
+  --chart-6: 120 100% 26%; /* green */
+  --chart-7: 247 69% 72%; /* violet */
+  --chart-8: 17 70% 50%; /* orange */
+  /* Code / file artifact surfaces (CodeArtifactBlock): GitHub-dark look. */
+  --code-bg: 216 28% 7%;
+  --code-header-bg: 215 21% 11%;
+  --code-border: 215 14% 20%;
+  --code-fg: 210 17% 82%;
+  --code-title: 210 60% 96%;
+  --code-muted: 212 9% 58%;
   --sidebar-background: 240 8% 6.5%; /* Darker recessed sidebar (#111113) */
   --sidebar-foreground: 240 4.8% 95.9%;
   --sidebar-primary: 0 72% 50%;
@@ -75,11 +88,24 @@ html[data-theme="light"] {
   --ring: 0 72% 46%;
   --success: 160 75% 27%;
   --warning: 30 90% 36%;
-  --chart-1: 0 72% 46%;
-  --chart-2: 0 65% 48%;
-  --chart-3: 160 55% 36%;
-  --chart-4: 280 50% 48%;
-  --chart-5: 40 70% 48%;
+  /* Categorical chart palette (fixed order, series N -> slot N). Same 8 hues in
+     both themes, stepped per surface; order validated for adjacent-pair CVD
+     separation (dataviz validate_palette, light #fff / dark #161618). */
+  --chart-1: 0 66% 50%; /* brand red */
+  --chart-2: 213 68% 50%; /* blue */
+  --chart-3: 159 73% 40%; /* aqua */
+  --chart-4: 41 100% 46%; /* yellow */
+  --chart-5: 337 70% 70%; /* magenta */
+  --chart-6: 120 100% 26%; /* green */
+  --chart-7: 248 62% 58%; /* violet */
+  --chart-8: 17 82% 56%; /* orange */
+  /* Code / file artifact surfaces (CodeArtifactBlock): light, aligned to card/muted. */
+  --code-bg: 0 0% 98.5%;
+  --code-header-bg: 0 0% 95.5%;
+  --code-border: 0 0% 88%;
+  --code-fg: 0 0% 18%;
+  --code-title: 0 0% 9%;
+  --code-muted: 0 0% 42%;
   --sidebar-background: 0 0% 98%;
   --sidebar-foreground: 0 0% 12%;
   --sidebar-primary: 0 72% 46%;

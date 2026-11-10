@@ -946,6 +946,19 @@
       "label": "Project",
       "none": "No projects available",
       "open_panel": "Open memory panel"
+    },
+    "chart": {
+      "untitled": "Chart",
+      "no_data": "No data",
+      "show_table": "Table",
+      "show_chart": "Chart",
+      "kind": {
+        "line": "Line",
+        "area": "Area",
+        "bar": "Bar"
+      },
+      "rows": "{{count}} rows",
+      "aria": "Chart: {{title}}"
     }
   },
   "login": {

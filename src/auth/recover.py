@@ -46,6 +46,14 @@ async def _set_password(identifier: str, password: str | None) -> int:
         if not user:
             print(f"User not found: {identifier}", file=sys.stderr)
             return 1
+        # Service accounts have no password by design (API keys only): the
+        # break-glass CLI is for people, not integrations.
+        if getattr(user, "account_type", "human") == "service":
+            print(
+                f"{identifier} is a service account: it cannot have a password",
+                file=sys.stderr,
+            )
+            return 1
         user.password_hash = hash_password(plain)
         user.must_change_password = True
         user.temp_password_expires_at = None

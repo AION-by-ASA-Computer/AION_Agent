@@ -121,7 +121,7 @@
       },
       "ChartOut": {
         "additionalProperties": true,
-        "description": "Grafico in coda; un elemento Redis non decodificabile diventa ``{raw}``.",
+        "description": "Grafico in coda; un elemento Redis non decodificabile diventa ``{raw}``.\n\n``id`` identifies the chart across SSE event, timeline segment and the\n``session_charts`` row; ``tool_call_id`` is the tool step that produced it.",
         "properties": {
           "chart_kind": {
             "anyOf": [
@@ -145,6 +145,17 @@
               }
             ],
             "title": "Data"
+          },
+          "id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Id"
           },
           "legend_off": {
             "anyOf": [
@@ -231,6 +242,17 @@
               }
             ],
             "title": "Step Seconds"
+          },
+          "tool_call_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Tool Call Id"
           },
           "x_key": {
             "anyOf": [

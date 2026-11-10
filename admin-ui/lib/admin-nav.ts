@@ -71,6 +71,7 @@ export const ADMIN_NAV: AdminNavGroup[] = [
     labelKey: "admin_nav.groups.access",
     items: [
       { id: "users", href: "/users", icon: Users, labelKey: "admin_nav.users" },
+      { id: "service-accounts", href: "/service-accounts", icon: Bot, labelKey: "admin_nav.service_accounts" },
       { id: "security", href: "/security", icon: ShieldCheck, labelKey: "admin_nav.security" },
     ],
   },

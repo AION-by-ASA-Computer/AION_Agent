@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, Copy, DownloadIcon, ExternalLink, Loader2 } from "lucide-react";
+import { Check, Copy, DownloadIcon, Loader2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/cn";
 
@@ -43,15 +43,10 @@ export function CodeArtifactBlock({
   streaming?: boolean;
   className?: string;
 }) {
-  const [displayedCode, setDisplayedCode] = useState(code);
   const [isOpen, setIsOpen] = useState(defaultOpen);
-  const [isLoading, setIsLoading] = useState(false);
-  const [fetchError, setFetchError] = useState<string | null>(null);
-
-  // Sync displayedCode if code prop changes (essential during live stream)
-  useEffect(() => {
-    setDisplayedCode(code);
-  }, [code]);
+  // Result of the on-demand download, keyed by URL so a different file never
+  // reuses another file's content. `text` may legitimately be "" (empty file).
+  const [fetched, setFetched] = useState<{ url: string; text?: string; error?: string } | null>(null);
 
   // Sync isOpen if defaultOpen prop changes
   useEffect(() => {
@@ -60,49 +55,46 @@ export function CodeArtifactBlock({
     }
   }, [defaultOpen]);
 
-  const isPlaceholder = useMemo(() => {
-    return displayedCode.startsWith("[File:") && displayedCode.endsWith("]");
-  }, [displayedCode]);
+  // History / reloaded artifacts carry no content (empty buffer or a
+  // "[File: …]" placeholder): the file is downloaded from the session
+  // workspace (`savedPath`, e.g. workspace/data.json) when the block is opened.
+  // Live-streamed artifacts already have their content in `code`.
+  const codeIsPlaceholder = code.startsWith("[File:") && code.endsWith("]");
+  const needsFetch =
+    Boolean(downloadUrl) && (codeIsPlaceholder || (!code.trim() && Boolean(savedPath)));
+  const fetchResult = fetched && fetched.url === downloadUrl ? fetched : null;
 
-  const needsFetch = useMemo(() => {
-    if (!downloadUrl) return false;
-    if (isPlaceholder) return true;
-    return !displayedCode.trim() && Boolean(savedPath);
-  }, [downloadUrl, displayedCode, isPlaceholder, savedPath]);
+  // Everything below is derived (no mirrored state): the previous version kept
+  // `isLoading` in state and in the effect deps, so setting it re-ran the
+  // effect whose cleanup cancelled the in-flight request → endless spinner.
+  const displayedCode =
+    needsFetch && fetchResult?.text !== undefined ? fetchResult.text : code;
+  const fetchError = needsFetch && fetchResult?.error ? fetchResult.error : null;
+  const isLoading = isOpen && needsFetch && !fetchResult;
+  const isPlaceholder = displayedCode.startsWith("[File:") && displayedCode.endsWith("]");
 
-  // Fetch the actual file content when expanded and it's a placeholder
+  // Download the file content once per URL when the block is open. Closing the
+  // block mid-download aborts it; reopening starts a fresh request. Errors are
+  // not retried automatically (the "Riprova" button clears the result).
   useEffect(() => {
-    if (isOpen && needsFetch && downloadUrl && !isLoading) {
-      let cancelled = false;
-      setIsLoading(true);
-      setFetchError(null);
-
-      fetch(downloadUrl)
-        .then((res) => {
-          if (!res.ok) {
-            throw new Error(`HTTP error! status: ${res.status}`);
-          }
-          return res.text();
-        })
-        .then((text) => {
-          if (!cancelled) {
-            setDisplayedCode(text);
-            setIsLoading(false);
-          }
-        })
-        .catch((err) => {
-          if (!cancelled) {
-            console.error("Error fetching artifact content:", err);
-            setFetchError("Impossibile caricare il contenuto del file.");
-            setIsLoading(false);
-          }
-        });
-
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [isOpen, needsFetch, downloadUrl, isLoading]);
+    if (!isOpen || !needsFetch || !downloadUrl || fetchResult) return;
+    const ac = new AbortController();
+    const url = downloadUrl;
+    fetch(url, { signal: ac.signal, cache: "no-store" })
+      .then((res) => {
+        if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        }
+        return res.text();
+      })
+      .then((text) => setFetched({ url, text }))
+      .catch((err) => {
+        if (ac.signal.aborted) return;
+        console.error("Error fetching artifact content:", err);
+        setFetched({ url, error: "Impossibile caricare il contenuto del file." });
+      });
+    return () => ac.abort();
+  }, [isOpen, needsFetch, downloadUrl, fetchResult]);
 
   const [highlight, setHighlight] = useState<{ key: string; html: string } | null>(null);
   const [copied, setCopied] = useState(false);
@@ -123,7 +115,9 @@ export function CodeArtifactBlock({
         const { codeToHtml } = await import("shiki/bundle/web");
         const rendered = await codeToHtml(displayedCode, {
           lang,
-          theme: "github-dark-default",
+          // Dual theme: colors resolved in CSS per active theme (globals.css).
+          themes: { light: "github-light-default", dark: "github-dark-default" },
+          defaultColor: false,
         });
         if (!cancelled) setHighlight({ key: highlightKey, html: rendered });
       } catch {
@@ -149,23 +143,24 @@ export function CodeArtifactBlock({
     <details
       id={id}
       className={cn(
-        "overflow-hidden rounded-xl border border-border bg-[#0d1117] text-xs shadow-sm ring-1 ring-white/5",
+        // Colors come from the --code-* theme tokens (light/dark), not fixed hex.
+        "aion-code-surface overflow-hidden rounded-xl border border-[hsl(var(--code-border))] bg-[hsl(var(--code-bg))] text-xs shadow-sm",
         className
       )}
       open={isOpen}
       onToggle={(e) => setIsOpen(e.currentTarget.open)}
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-white/10 bg-[#161b22] px-3.5 py-2 text-[#c9d1d9]">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 border-b border-[hsl(var(--code-border))] bg-[hsl(var(--code-header-bg))] px-3.5 py-2 text-[hsl(var(--code-fg))]">
         <div className="min-w-0">
-          <div className="truncate text-[0.857em] font-semibold text-[#f0f6fc]">{title}</div>
-          <div className="mt-0.5 truncate font-mono text-[0.714em] text-[#8b949e]">
+          <div className="truncate text-[0.857em] font-semibold text-[hsl(var(--code-title))]">{title}</div>
+          <div className="mt-0.5 truncate font-mono text-[0.714em] text-[hsl(var(--code-muted))]">
             {savedPath || lang}
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {downloadUrl ? (
             <a
-              className="focus-ring inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[0.786em] text-[#c9d1d9] hover:bg-white/10 transition-all duration-200 active:scale-[0.98]"
+              className="focus-ring inline-flex items-center gap-1 rounded-lg border border-[hsl(var(--code-border))] bg-[hsl(var(--code-bg))] px-2.5 py-1 text-[0.786em] text-[hsl(var(--code-fg))] hover:bg-[hsl(var(--code-border))] transition-all duration-200 active:scale-[0.98]"
               href={downloadUrl}
               target="_blank"
               rel="noreferrer"
@@ -178,7 +173,7 @@ export function CodeArtifactBlock({
           {displayedCode && !isPlaceholder && !isLoading ? (
             <button
               type="button"
-              className="focus-ring inline-flex items-center gap-1 rounded-lg border border-white/10 bg-white/5 px-2.5 py-1 text-[0.786em] text-[#c9d1d9] hover:bg-white/10 transition-all duration-200 active:scale-[0.98]"
+              className="focus-ring inline-flex items-center gap-1 rounded-lg border border-[hsl(var(--code-border))] bg-[hsl(var(--code-bg))] px-2.5 py-1 text-[0.786em] text-[hsl(var(--code-fg))] hover:bg-[hsl(var(--code-border))] transition-all duration-200 active:scale-[0.98]"
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
@@ -194,14 +189,21 @@ export function CodeArtifactBlock({
 
       <div className="max-h-[520px] overflow-auto">
         {isLoading ? (
-          <div className="flex items-center gap-2 p-4 text-[#8b949e] font-mono text-[0.857em]">
+          <div className="flex items-center gap-2 p-4 text-[hsl(var(--code-muted))] font-mono text-[0.857em]">
             <Loader2 className="animate-spin text-primary shrink-0" size={14} />
             Caricamento contenuto file...
           </div>
         ) : fetchError ? (
-          <div className="p-4 text-rose-400 font-mono text-[0.857em] flex flex-col gap-1">
-            <span className="font-semibold text-rose-300">Errore di caricamento</span>
+          <div className="p-4 text-destructive font-mono text-[0.857em] flex flex-col gap-1">
+            <span className="font-semibold">Errore di caricamento</span>
             <span>{fetchError}</span>
+            <button
+              type="button"
+              onClick={() => setFetched(null)}
+              className="mt-2 w-fit text-primary hover:underline text-[0.786em]"
+            >
+              Riprova
+            </button>
             {downloadUrl && (
               <a
                 href={downloadUrl}
@@ -219,16 +221,16 @@ export function CodeArtifactBlock({
             dangerouslySetInnerHTML={{ __html: html }}
           />
         ) : (
-          <pre className="m-0 whitespace-pre-wrap break-words p-4 font-mono text-[0.857em] leading-relaxed text-[#c9d1d9]">
+          <pre className="m-0 whitespace-pre-wrap break-words p-4 font-mono text-[0.857em] leading-relaxed text-[hsl(var(--code-fg))]">
             {displayedCode || "Artifact in attesa di contenuto..."}
           </pre>
         )}
       </div>
 
       {execution ? (
-        <div className="border-t border-white/10 bg-black/20">
-          <div className="px-3 py-2 text-[0.786em] font-medium text-[#8b949e]">Risultato esecuzione</div>
-          <pre className="m-0 max-h-56 overflow-auto whitespace-pre-wrap p-4 pt-0 font-mono text-[0.786em] leading-relaxed text-[#c9d1d9]">
+        <div className="border-t border-[hsl(var(--code-border))] bg-[hsl(var(--code-header-bg))]">
+          <div className="px-3 py-2 text-[0.786em] font-medium text-[hsl(var(--code-muted))]">Risultato esecuzione</div>
+          <pre className="m-0 max-h-56 overflow-auto whitespace-pre-wrap p-4 pt-0 font-mono text-[0.786em] leading-relaxed text-[hsl(var(--code-fg))]">
             {execution}
           </pre>
         </div>

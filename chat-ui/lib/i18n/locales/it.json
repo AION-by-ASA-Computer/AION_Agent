@@ -946,6 +946,19 @@
       "label": "Progetto",
       "none": "Nessun progetto disponibile",
       "open_panel": "Apri pannello memoria"
+    },
+    "chart": {
+      "untitled": "Grafico",
+      "no_data": "Nessun dato",
+      "show_table": "Tabella",
+      "show_chart": "Grafico",
+      "kind": {
+        "line": "Linee",
+        "area": "Area",
+        "bar": "Barre"
+      },
+      "rows": "{{count}} righe",
+      "aria": "Grafico: {{title}}"
     }
   },
   "login": {

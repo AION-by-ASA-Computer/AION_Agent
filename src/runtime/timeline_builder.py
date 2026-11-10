@@ -65,6 +65,22 @@ class TimelineBuilder:
             et = str(ev.get("type") or "")
             name = str(ev.get("name") or "tool")
 
+            if et == "chart":
+                # Chart produced by a charts tool: keep only a reference in the
+                # persisted timeline (the dataset lives in session_charts and is
+                # re-injected by the chat-ui history endpoint), so the periodic
+                # timeline_json flushes stay small.
+                cid = str(ev.get("id") or "").strip()
+                if cid and not any(
+                    s.get("kind") == "chart" and s.get("id") == cid
+                    for s in self.segments
+                ):
+                    seg: Dict[str, Any] = {"kind": "chart", "id": cid}
+                    if ev.get("tool_call_id"):
+                        seg["toolCallId"] = str(ev["tool_call_id"])
+                    self.segments.append(seg)
+                return
+
             if et == "request_sync":
                 sync_name = str(ev.get("tool_name") or ev.get("name") or "tool")
                 tid = f"sync:{sync_name}"

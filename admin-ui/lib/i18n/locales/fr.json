@@ -33,7 +33,8 @@
     "theme_light": "Passer au thème clair",
     "theme_dark": "Passer au thème sombre",
     "whatsapp": "WhatsApp",
-    "telegram": "Telegram"
+    "telegram": "Telegram",
+    "service_accounts": "Comptes de service"
   },
   "admin_dashboard": {
     "title": "Vue d'ensemble",
@@ -2702,6 +2703,177 @@
         "health": "Vérification de l'état des services…",
         "done": "Terminé"
       }
+    }
+  },
+  "admin_service_accounts": {
+    "title": "Comptes de service",
+    "subtitle": "Comptes non humains pour les intégrations et les scripts. Ils se connectent uniquement avec les clés API créées ici, et chaque clé expire.",
+    "add": "Nouveau compte de service",
+    "search": "Rechercher des comptes de service…",
+    "loading": "Chargement des comptes de service…",
+    "error": "Impossible de charger les comptes de service.",
+    "retry": "Réessayer",
+    "never_used": "Jamais utilisé",
+    "count_one": "{{count}} compte de service",
+    "count_other": "{{count}} comptes de service",
+    "count_filtered": "{{shown}} sur {{total}}",
+    "keys_badge_title": "{{active}} clés API actives sur {{max}} autorisées",
+    "cols": {
+      "account": "Compte",
+      "status": "Statut",
+      "keys": "Clés",
+      "last_used": "Dernière utilisation",
+      "memory": "Mémoire",
+      "actions": "Actions"
+    },
+    "filter": {
+      "aria": "Filtrer par {{col}}",
+      "clear": "Effacer le filtre",
+      "search": "Rechercher…",
+      "all": "Tous"
+    },
+    "status": {
+      "active": "Actif",
+      "disabled": "Désactivé"
+    },
+    "ltm": {
+      "on": "Activée",
+      "off": "Désactivée"
+    },
+    "row": {
+      "keys": "Clés API de {{name}}",
+      "profiles": "Accès aux profils pour {{name}}",
+      "edit": "Modifier {{name}}",
+      "delete": "Supprimer {{name}}",
+      "enable": "Activer {{name}}",
+      "disable": "Désactiver {{name}}"
+    },
+    "empty": {
+      "title": "Aucun compte de service",
+      "body": "Un compte de service permet à une intégration, un script ou une tâche planifiée de dialoguer avec AION sans personne derrière.",
+      "point_keys": "Il n'a ni mot de passe, ni SSO, ni 2FA : il s'authentifie uniquement par clés API, et chaque clé a une date d'expiration.",
+      "point_scopes": "Chaque clé ne porte que les autorisations accordées (chat, conversations, fichiers) et peut être révoquée à tout moment.",
+      "point_memory": "La mémoire à long terme est désactivée par défaut, pour que le trafic automatisé ne la remplisse pas.",
+      "search": "Aucun compte de service ne correspond à ces filtres.",
+      "clear_filters": "Effacer les filtres"
+    },
+    "form": {
+      "title_new": "Nouveau compte de service",
+      "title_edit": "Modifier le compte de service",
+      "optional": "Facultatif",
+      "display_name": "Nom",
+      "display_name_placeholder": "Rapport nocturne",
+      "slug": "Identifiant",
+      "slug_hint": "Minuscules, chiffres, points, tirets et underscores (2 à 61 caractères). Non modifiable ensuite.",
+      "slug_invalid": "Utilisez 2 à 61 minuscules, chiffres, « . », « - » ou « _ », en commençant par une lettre ou un chiffre.",
+      "description": "Description",
+      "description_placeholder": "Ce qui utilise ce compte et qui en est responsable",
+      "description_hint": "Aide les autres administrateurs à comprendre à quoi sert le compte.",
+      "ltm": "Mémoire à long terme",
+      "ltm_hint": "Permet à AION de retenir des informations entre les conversations de ce compte. Rarement utile pour les intégrations.",
+      "keys_title": "Clés API",
+      "keys_description": "Limites pour les clés de ce compte. Chaque clé expire.",
+      "max_keys": "Clés actives autorisées",
+      "max_days": "Durée de vie maximale d'une clé (jours)",
+      "range_hint": "De {{min}} à {{max}}",
+      "range_error": "Saisissez un nombre entier de {{min}} à {{max}}",
+      "limits_existing": "Les nouvelles limites s'appliquent aux clés créées désormais ; les clés existantes gardent leur expiration.",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "create": "Créer",
+      "saving": "Enregistrement…"
+    },
+    "keys": {
+      "title": "Clés API · {{name}}",
+      "close": "Fermer",
+      "policy": "{{active}} clés actives sur {{max}} · jusqu'à {{days}} jours chacune",
+      "new": "Nouvelle clé",
+      "account_disabled": "Ce compte est désactivé : ses clés ne fonctionnent pas et aucune nouvelle clé ne peut être créée tant qu'il n'est pas réactivé.",
+      "quota_full": "Ce compte a déjà {{max}} clés actives. Révoquez-en une ou augmentez la limite pour en créer une autre.",
+      "error": "Impossible de charger les clés.",
+      "empty_title": "Aucune clé",
+      "empty_body": "Créez une clé pour que l'intégration puisse s'authentifier. La clé complète ne sera affichée qu'une seule fois.",
+      "status": {
+        "active": "Active",
+        "expired": "Expirée",
+        "revoked": "Révoquée"
+      },
+      "revoke": "Révoquer",
+      "revoke_confirm": "Révoquer maintenant ? Les appels qui l'utilisent échoueront.",
+      "revoke_aria": "Révoquer {{name}}",
+      "created_on": "Créée le {{date}}",
+      "expires_on": "Expire le {{date}}",
+      "expired_on": "Expirée le {{date}}",
+      "revoked_on": "Révoquée le {{date}}",
+      "last_used": "Dernière utilisation {{date}}",
+      "never_used": "Jamais utilisée",
+      "name": "Nom de la clé",
+      "name_hint": "Où la clé est utilisée, par ex. le nom du serveur ou de la tâche.",
+      "name_placeholder": "serveur-rapports",
+      "days": "Expire dans (jours)",
+      "days_hint": "Jusqu'à {{max}} · le {{date}}",
+      "scopes": "Autorisations",
+      "scopes_required": "Choisissez au moins une autorisation.",
+      "create": "Créer la clé"
+    },
+    "new_key": {
+      "title": "Copiez votre nouvelle clé API",
+      "body": "C'est la seule fois où la clé complète est affichée. Conservez-la en lieu sûr, par exemple dans un gestionnaire de secrets.",
+      "usage": "Envoyez-la comme",
+      "usage_or": "ou dans l'en-tête",
+      "once": "Elle ne sera plus affichée.",
+      "copy": "Copier la clé",
+      "copied": "Copiée",
+      "done": "Je l'ai enregistrée"
+    },
+    "scopes": {
+      "chat": "Discuter avec l'agent",
+      "conversations_read": "Lire les conversations",
+      "conversations_write": "Gérer les conversations",
+      "files_read": "Lire les fichiers",
+      "files_write": "Téléverser des fichiers"
+    },
+    "errors": {
+      "user_exists": "{{identifier}} existe déjà. Choisissez un autre identifiant.",
+      "invalid_scopes": "Une ou plusieurs autorisations ne sont pas permises pour ce compte.",
+      "invalid_expiration": "L'expiration doit être comprise entre 1 et {{days}} jours.",
+      "api_key_quota_exceeded": "Ce compte a déjà {{max}} clés actives."
+    },
+    "profiles": {
+      "title": "Accès aux profils",
+      "body": "Choisissez les profils que {{name}} peut utiliser.",
+      "hint": "Sans sélection, le compte peut utiliser tous les profils.",
+      "clear": "Effacer la sélection",
+      "selected": "{{count}} sélectionnés",
+      "all": "Tous les profils",
+      "none": "Aucun profil pour l'instant.",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "saving": "Enregistrement…"
+    },
+    "delete": {
+      "title": "Supprimer ce compte de service ?",
+      "body": "{{name}} et toutes ses clés API seront supprimés définitivement. Les intégrations qui l'utilisent cesseront de fonctionner. Action irréversible.",
+      "confirm_label": "Saisissez {{name}} pour confirmer",
+      "cancel": "Annuler",
+      "confirm": "Supprimer",
+      "deleting": "Suppression…"
+    },
+    "toast": {
+      "load_failed": "Impossible de charger les comptes de service : {{error}}",
+      "save_failed": "Impossible d'enregistrer : {{error}}",
+      "delete_failed": "Impossible de supprimer : {{error}}",
+      "profiles_load_failed": "Impossible de charger l'accès aux profils : {{error}}",
+      "profiles_saved": "Accès aux profils enregistré",
+      "created": "Compte de service créé. Créez maintenant une clé API.",
+      "updated": "Compte de service mis à jour",
+      "deleted": "Compte de service supprimé",
+      "enabled": "{{name}} activé",
+      "disabled": "{{name}} désactivé : ses clés ne fonctionnent plus",
+      "keys_load_failed": "Impossible de charger les clés : {{error}}",
+      "key_create_failed": "Impossible de créer la clé : {{error}}",
+      "key_revoked": "Clé « {{name}} » révoquée",
+      "key_revoke_failed": "Impossible de révoquer la clé : {{error}}"
     }
   }
 }

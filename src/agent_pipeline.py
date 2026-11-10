@@ -1443,10 +1443,22 @@ class AgentPipeline:
             from src.runtime.timeline_builder import TimelineBuilder
 
             timeline_builder = TimelineBuilder()
+            # Charts streamed in this turn (SSE "chart" tool events). Copied to
+            # SQLite (session_charts) at the end of the turn so they survive a
+            # reload / chat switch; Redis only holds them for the live view.
+            turn_charts: List[Dict[str, Any]] = []
 
             def _track_sse(out: Dict[str, Any]) -> Dict[str, Any]:
                 if isinstance(out, dict) and out.get("type"):
                     timeline_builder.apply_chunk(out)
+                    if out.get("type") == "tool_event":
+                        _ev = out.get("event") or {}
+                        if (
+                            isinstance(_ev, dict)
+                            and _ev.get("type") == "chart"
+                            and isinstance(_ev.get("chart"), dict)
+                        ):
+                            turn_charts.append(_ev["chart"])
                 return out
 
             from src.runtime.turn_message_ids import ensure_turn_message_ids
@@ -2902,6 +2914,12 @@ class AgentPipeline:
                                 await _flush_assistant_stream_content()
                             elif chunk.get("type") == "stream_end":
                                 is_streaming = False
+                            elif chunk.get("type") == "tool_event" and (
+                                (chunk.get("event") or {}).get("type") == "chart"
+                            ):
+                                # Display-only chart event (see StreamLoop):
+                                # forward immediately, not counted as a tool event.
+                                yield _track_sse(chunk)
                             elif chunk.get("type") == "tool_event":
                                 tool_events += 1
                                 last_progress_at = loop.time()
@@ -4198,6 +4216,21 @@ class AgentPipeline:
                 and not cancel_checker_task.done()
             ):
                 cancel_checker_task.cancel()
+            # End of the SSE turn (also on error / cancel): copy the charts shown
+            # live from Redis into SQLite, linked to the assistant message, so the
+            # chat history can re-render them inline after a reload.
+            _charts_to_persist = locals().get("turn_charts") or []
+            if _charts_to_persist:
+                try:
+                    from src.charts_store import persist_turn_charts
+
+                    await persist_turn_charts(
+                        self.session_id,
+                        locals().get("assistant_message_id"),
+                        _charts_to_persist,
+                    )
+                except Exception as chart_err:
+                    logger.warning("Failed to persist turn charts: %s", chart_err)
             await redis_clear_stream_active(self.session_id)
             reset_web_search_request_context(_web_tok)
             if span:

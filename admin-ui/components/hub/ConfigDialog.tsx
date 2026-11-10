@@ -286,7 +286,12 @@ export function ConfigDialog({ hub }: { hub: Hub }) {
               )}
 
               {editingPolicy.mode === "org_shared" && (
-                <KeyValueBuilder env={v.env || {}} onChange={(env) => setValues({ env, rawAllEnvText: JSON.stringify(env, null, 2) })} disabled={hub.busy} />
+                <KeyValueBuilder
+                  env={v.env || {}}
+                  onChange={(env) => setValues({ env, rawAllEnvText: JSON.stringify(env, null, 2) })}
+                  disabled={hub.busy}
+                  loadSecret={(key) => hub.loadSharedSecret(editing.name, key)}
+                />
               )}
 
               {editingPolicy.mode === "per_user" && (

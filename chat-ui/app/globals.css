@@ -42,6 +42,9 @@
   --color-chart-3: hsl(var(--chart-3));
   --color-chart-4: hsl(var(--chart-4));
   --color-chart-5: hsl(var(--chart-5));
+  --color-chart-6: hsl(var(--chart-6));
+  --color-chart-7: hsl(var(--chart-7));
+  --color-chart-8: hsl(var(--chart-8));
 }
 
 @layer base {
@@ -368,4 +371,44 @@ html[data-theme="light"] .agent-shimmer-text {
   .auth-enter {
     animation: auth-enter 420ms cubic-bezier(0.16, 1, 0.3, 1) backwards;
   }
+}
+
+/*
+ * Inline chat charts (components/chat/SessionCharts.tsx).
+ * The chat column is an inline-size container; assistant messages sit inside it
+ * left-aligned with a 1.25rem (px-5) gutter and a narrower max-width. Charts
+ * break out of the message width to span the whole column minus the same
+ * gutter on both sides, so they are centered on the chat column and follow its
+ * width when side panels open/close. Outside the column (task view, previews)
+ * the container is absent and the chart keeps `w-full`.
+ * Unlayered on purpose: must win over the Tailwind `w-full` utility.
+ */
+.aion-chat-column {
+  container: aion-chat-column / inline-size;
+}
+
+@container aion-chat-column (min-width: 1px) {
+  .aion-chart-block {
+    width: calc(100cqw - 2.5rem);
+    max-width: none;
+  }
+}
+
+/*
+ * Theme-aware code surfaces (components/chat/CodeArtifactBlock.tsx).
+ * Shiki renders with dual themes (github-light-default / github-dark-default)
+ * and `defaultColor: false`, so every token carries --shiki-light/--shiki-dark;
+ * pick the one matching the active theme (dark is the default when
+ * data-theme is unset, see styles/theme-tokens.css).
+ */
+.aion-code-surface .shiki,
+.aion-code-surface .shiki span {
+  color: var(--shiki-light);
+}
+
+html[data-theme="dark"] .aion-code-surface .shiki,
+html[data-theme="dark"] .aion-code-surface .shiki span,
+:root:not([data-theme]) .aion-code-surface .shiki,
+:root:not([data-theme]) .aion-code-surface .shiki span {
+  color: var(--shiki-dark);
 }

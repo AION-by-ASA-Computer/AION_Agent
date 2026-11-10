@@ -71,6 +71,7 @@ from .admin_diagnostics import router as diagnostics_router
 from .admin_sso import router as admin_sso_router
 from .admin_whatsapp import router as admin_whatsapp_router
 from .admin_stt import router as admin_stt_router
+from .admin_service_accounts import router as admin_service_accounts_router
 from ..runtime.redis_client import redis_status
 from ..data.engine import get_async_session_maker
 from ..mcp_connector_catalog import (
@@ -82,6 +83,11 @@ from ..data.user_password import (
     create_invited_user,
 )
 from ..data import api_keys as api_keys_db
+from ..data.service_accounts import (
+    ACCOUNT_TYPE_SERVICE,
+    is_reserved_identifier,
+    is_service,
+)
 from ..data.models import (
     Conversation,
     Message,
@@ -300,6 +306,8 @@ router.include_router(diagnostics_router)
 router.include_router(admin_sso_router)
 router.include_router(admin_whatsapp_router)
 router.include_router(admin_stt_router)
+# /admin/service-accounts: non-human accounts used by integrations via API keys.
+router.include_router(admin_service_accounts_router)
 
 
 def _project_root() -> Path:
@@ -1584,6 +1592,8 @@ async def admin_update_mcp_integration(server_slug: str, body: McpIntegrationUpd
             force_replace_schema_env=True,
         )
 
+    # The credential mode decides where placeholders are resolved from at spawn.
+    await _invalidate_mcp_runtime(server_slug)
     return {"ok": True}
 
 
@@ -2300,6 +2310,7 @@ async def admin_apply_suggested_env(
     )
     if not result.get("ok"):
         raise HTTPException(status_code=404, detail=result.get("error", "Failed"))
+    await _invalidate_mcp_runtime(server_slug)
     return result
 
 
@@ -2598,6 +2609,82 @@ class ZeroInstallRequest(BaseModel):
     enabled_tools: Optional[List[str]] = None
 
 
+# Substrings that mark an env var name as a secret (same heuristic used by the
+# install wizard since the first version; kept identical so behaviour is stable).
+_SECRET_ENV_HINTS = ("key", "token", "secret", "password", "auth", "pwd")
+
+
+def _is_secret_env_key(key: str, secret_keys: Optional[List[str]] = None) -> bool:
+    """True when ``key`` must be stored encrypted instead of in the registry YAML."""
+    if secret_keys and key in secret_keys:
+        return True
+    return any(hint in key.lower() for hint in _SECRET_ENV_HINTS)
+
+
+def _is_env_placeholder(value: Any) -> bool:
+    """True for a value that is exactly one ``${VAR}`` reference.
+
+    Mixed values such as ``Bearer ${TOKEN}`` are templates, not placeholders, and
+    are left untouched by the secret handling below.
+    """
+    s = str(value or "").strip()
+    return s.startswith("${") and s.endswith("}") and "${" not in s[2:]
+
+
+async def _store_org_shared_secrets(
+    server_slug: str,
+    env: Dict[str, Any],
+    secret_keys: Optional[List[str]] = None,
+) -> Dict[str, Any]:
+    """Move literal secret values of an org_shared server into the encrypted store.
+
+    Each literal secret is saved for both the ``default`` and ``org_shared`` owners
+    (the lookup order of ``get_credential``) and replaced in the returned env by a
+    ``${KEY}`` placeholder, so the registry YAML never holds the plaintext and the
+    value read at spawn time is always the one saved last from the admin UI.
+    Non-secret values and existing placeholders are returned unchanged.
+    """
+    from ..runtime.credential_store import set_credential
+
+    out: Dict[str, Any] = {}
+    for key, value in (env or {}).items():
+        key_clean = str(key).strip()
+        if not key_clean:
+            continue
+        val_str = "" if value is None else str(value).strip()
+        if (
+            val_str
+            and "${" not in val_str
+            and _is_secret_env_key(key_clean, secret_keys)
+        ):
+            for owner in ("default", "org_shared"):
+                await set_credential(
+                    owner, server_slug, key_clean, val_str, tenant_id="default"
+                )
+            out[key_clean] = f"${{{key_clean}}}"
+        else:
+            out[key_clean] = value
+    return out
+
+
+async def _invalidate_mcp_runtime(server_slug: str) -> None:
+    """Make the next chat turn use the server's current registry env and secrets.
+
+    Drops the cached agents and stops the pooled stdio workers of the server: both
+    keep the configuration they were built with, which is why a change saved from
+    MCP Hub used to apply only after a backend restart.
+    """
+    from ..main import clear_agent_cache
+
+    clear_agent_cache()
+    try:
+        await mcp_manager.restart_workers_for_server(server_slug)
+    except Exception:
+        # The saved config is already persisted: a failed shutdown must not fail
+        # the request, the idle cleanup will reap the worker later.
+        logger.exception("Failed to stop pooled workers of MCP '%s'", server_slug)
+
+
 @router.post("/market/install-zero")
 async def install_zero_endpoint(body: ZeroInstallRequest):
     """Installa un MCP server in modalità Zero-Install o Remote-Bridge salvando i secret cifrati in aion.db."""
@@ -2811,10 +2898,7 @@ async def install_zero_endpoint(body: ZeroInstallRequest):
         args = ["-y", clean_pkg]
 
     cred_mode = (body.credential_mode or "").strip().lower()
-    from ..mcp_integration_sync import (
-        suggest_registry_env_for_per_user,
-        suggest_registry_env_for_org_shared,
-    )
+    from ..mcp_integration_sync import suggest_registry_env_for_per_user
 
     # Costruisci schema_fields
     schema_fields: List[Dict[str, Any]] = []
@@ -2864,28 +2948,17 @@ async def install_zero_endpoint(body: ZeroInstallRequest):
         # In modalità per_user utilizziamo rigorosamente lo standard ${AION_USER_<SLUG_PREFIX>__<KEY>}
         env_dict = suggest_registry_env_for_per_user(slug, schema_fields)
     elif cred_mode == "org_shared":
-        # In modalità org_shared: placeholder ${KEY} per i secret, o valore letterale per i non-secret se specificato
-        env_dict = suggest_registry_env_for_org_shared(schema_fields)
-        for k, val in body.envs.items():
-            key_clean = str(k).strip()
-            val_str = str(val).strip()
-            if not key_clean or not val_str:
-                continue
-            is_secret = key_clean in body.secret_keys or any(
-                x in key_clean.lower()
-                for x in ("key", "token", "secret", "password", "auth", "pwd")
-            )
-            if is_secret:
-                # Salva cifrato in DB sia per "default" che per "org_shared"
-                await set_credential(
-                    "default", slug, key_clean, val_str, tenant_id="default"
-                )
-                await set_credential(
-                    "org_shared", slug, key_clean, val_str, tenant_id="default"
-                )
-                env_dict[key_clean] = f"${{{key_clean}}}"
-            else:
-                env_dict[key_clean] = val_str
+        # Only the variables the admin filled in reach the registry: secrets go to
+        # the encrypted store behind a ${KEY} placeholder, the rest stay literal.
+        # Fields left empty are omitted so the MCP server applies its own default:
+        # writing a ${KEY} placeholder for them left "${KEY}" visible in Configura
+        # and resolved it to an empty string at spawn, overriding that default.
+        filled = {
+            str(k).strip(): str(v).strip()
+            for k, v in body.envs.items()
+            if str(k).strip() and str(v).strip()
+        }
+        env_dict = await _store_org_shared_secrets(slug, filled, body.secret_keys)
     else:
         # None
         env_dict = {}
@@ -2909,9 +2982,8 @@ async def install_zero_endpoint(body: ZeroInstallRequest):
     mcp_manager._registry_local[slug] = config
     mcp_manager._rebuild_merged()
     mcp_manager.save_registry()
-    from ..main import clear_agent_cache
-
-    clear_agent_cache()
+    # A reinstall over an existing slug must not keep workers spawned with the old env.
+    await _invalidate_mcp_runtime(slug)
 
     # Determina la modalità delle credenziali (org_shared vs per_user)
     cred_mode = (body.credential_mode or "").strip().lower()
@@ -3600,6 +3672,36 @@ async def probe_candidate_endpoint(body: CandidateProbeBody):
         await mcp_manager.release_session("mcp-probe-candidate")
 
 
+@router.get("/mcp/{name}/secret/{key}")
+async def get_mcp_shared_secret(name: str, key: str):
+    """Return the stored value of a shared (org_shared) secret of an MCP server.
+
+    Used by MCP Hub → Configura when the admin clicks "Edit" on a secret: the
+    registry only holds a ``${KEY}`` placeholder, the value lives encrypted in
+    ``user_mcp_credentials``. Admin-only like every ``/admin/*`` route, and limited
+    to variables the server's registry env actually references, so it cannot be
+    used to read arbitrary credentials of other servers or users.
+    """
+    from ..runtime.credential_store import get_credential
+
+    cfg = mcp_manager._registry.get(name)
+    if cfg is None:
+        raise HTTPException(status_code=404, detail="MCP not found")
+    env = cfg.get("env") or {}
+    placeholder = f"${{{key}}}"
+    if not any(str(v).strip() == placeholder for v in env.values()):
+        raise HTTPException(status_code=404, detail="Secret not referenced by this MCP")
+    # "default" first, then "org_shared": the same lookup the MCP spawn uses.
+    value = await get_credential("default", name, key, tenant_id="default")
+    if value is None:
+        # Not in the store: the placeholder is filled from the backend .env.
+        value = os.environ.get(key)
+    if value is None:
+        raise HTTPException(status_code=404, detail="Secret not set")
+    logger.info("Admin read shared secret %s of MCP '%s'", key, name)
+    return {"key": key, "value": value}
+
+
 @router.put("/mcp/{name}")
 async def update_mcp_config(name: str, config: MCPUpdate):
     """Updates configuration for an existing MCP server."""
@@ -3656,6 +3758,15 @@ async def update_mcp_config(name: str, config: MCPUpdate):
                     if cleaned != args:
                         update_data["args"] = cleaned
 
+        # Shared credentials edited from Configura: a secret typed in the dialog
+        # goes to the encrypted store (where install-zero put it) behind a ${KEY}
+        # placeholder. Writing it as a literal into the registry left the stale
+        # encrypted copy in the DB and the plaintext in mcp_registry.local.yaml.
+        if effective_mode == "org_shared" and isinstance(update_data.get("env"), dict):
+            update_data["env"] = await _store_org_shared_secrets(
+                name, update_data["env"]
+            )
+
     try:
         updated = mcp_manager.update_server_config(name, update_data)
     except KeyError:
@@ -3663,6 +3774,7 @@ async def update_mcp_config(name: str, config: MCPUpdate):
     from ..mcp_integration_sync import sync_mcp_server_config_from_registry
 
     await sync_mcp_server_config_from_registry(name)
+    await _invalidate_mcp_runtime(name)
     return {"status": "success", "config": updated}
 
 
@@ -3905,8 +4017,13 @@ def _confirmed_on(idents, provider: Optional[str], since) -> bool:
 
 
 @router.get("/users")
-async def list_users():
-    """List all users in the unified database."""
+async def list_users(include_service: bool = False):
+    """List users in the unified database.
+
+    Service accounts are hidden by default (they have their own page and
+    endpoints under ``/admin/service-accounts``); pickers that must also
+    offer them (e.g. SQL project members) pass ``?include_service=1``.
+    """
     from ..data.models import User, UserSsoIdentity
     from ..data.user_password import get_roles
     from ..auth.sso.login_mode import get_login_settings
@@ -3922,6 +4039,8 @@ async def list_users():
     links = await active_links_by_user(tenant)
     async with get_async_session_maker()() as session:
         q = select(User).order_by(User.created_at.desc())
+        if not include_service:
+            q = q.where(User.account_type != ACCOUNT_TYPE_SERVICE)
         rows = (await session.execute(q)).scalars().all()
         active_keys = await api_keys_db.count_active_by_user(session)
         identities: Dict[str, list] = {}
@@ -3993,6 +4112,7 @@ async def list_users():
                     "api_keys_active": active_keys.get(r.id, 0),
                     "created_at": r.created_at,
                     "last_active_at": r.last_active_at,
+                    "account_type": r.account_type or "human",
                     **auth_info(r),
                 }
                 for r in rows
@@ -4018,6 +4138,10 @@ async def create_user(
     from ..notifications.smtp_settings import smtp_configured
     from .public_urls import chat_base_url
 
+    # The "svc-" prefix is reserved for service accounts, so an identifier
+    # always tells which kind of account it is (and LTM gating can rely on it).
+    if is_reserved_identifier(body.identifier):
+        raise HTTPException(status_code=422, detail={"code": "identifier_reserved"})
     # Con SSO attivo gli account nascono solo al primo login SSO
     # (vedi signup policy): niente nuovi utenti con password.
     settings = await get_login_settings(body.tenant_id or "default")
@@ -4180,6 +4304,13 @@ async def update_user(
         u = await session.get(User, user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
+        # Service accounts must never get roles, email or API-key toggles from
+        # the people form: they are edited only via /admin/service-accounts.
+        if is_service(u):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "service_account_use_dedicated_endpoint"},
+            )
 
         if (
             body.roles is not None

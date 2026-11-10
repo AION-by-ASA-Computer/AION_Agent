@@ -20,6 +20,7 @@ import { linkErrorText } from "@/components/sso/setupLinks";
 import { MigrationUsers } from "@/components/sso/MigrationUsers";
 import { TempPasswordsDialog, type TempPassword } from "@/components/sso/TempPasswordsDialog";
 import { TwoFactorPanel } from "@/components/sso/TwoFactorPanel";
+import { ProfilesDialog, type ProfileRow } from "@/components/users/ProfilesDialog";
 
 const k = "admin_users";
 const GRIDS: Record<string, string> = {
@@ -71,12 +72,6 @@ const methodsOf = (u: UserRow) => (u.login_method ? [u.login_method] : []);
 type MigrationState = "pending" | "exempt" | "migrated" | "";
 const migrationOf = (u: UserRow): MigrationState =>
   u.migration_pending ? "pending" : u.sso_migration_exempt ? "exempt" : u.login_method && u.login_method !== "password" ? "migrated" : "";
-
-interface ProfileRow {
-  slug: string;
-  name: string;
-  description?: string;
-}
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -501,73 +496,6 @@ function UserFormDialog({
           </button>
         </div>
       </form>
-    </Dialog>
-  );
-}
-
-function ProfilesDialog({
-  user,
-  profiles,
-  initial,
-  busy,
-  t,
-  onSave,
-  onClose,
-}: {
-  user: UserRow;
-  profiles: ProfileRow[];
-  initial: string[];
-  busy: boolean;
-  t: T;
-  onSave: (slugs: string[]) => void;
-  onClose: () => void;
-}) {
-  const [selected, setSelected] = useState<string[]>(initial);
-  const toggle = (slug: string) => setSelected((s) => (s.includes(slug) ? s.filter((x) => x !== slug) : [...s, slug]));
-
-  return (
-    <Dialog title={t(`${k}.profiles.title`)} closeLabel={t(`${k}.profiles.cancel`)} onClose={onClose} className="max-w-xl">
-      <div className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground">{t(`${k}.profiles.body`, { name: nameOf(user) })}</p>
-
-        <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
-          <span>{selected.length === 0 ? t(`${k}.profiles.all`) : t(`${k}.profiles.selected`, { count: selected.length })}</span>
-          {selected.length > 0 && (
-            <button type="button" onClick={() => setSelected([])} className="focus-ring rounded-md font-medium underline underline-offset-4 hover:text-foreground">
-              {t(`${k}.profiles.clear`)}
-            </button>
-          )}
-        </div>
-
-        <ul className="-mx-1 flex max-h-[22rem] flex-col gap-0.5 overflow-y-auto px-1">
-          {profiles.map((p) => {
-            const on = selected.includes(p.slug);
-            return (
-              <li key={p.slug}>
-                <label className={cn("flex cursor-pointer items-start gap-3 rounded-xl px-3 py-2.5 transition-colors", on ? "bg-secondary" : "hover:bg-secondary/60")}>
-                  <input type="checkbox" checked={on} onChange={() => toggle(p.slug)} className="focus-ring mt-1 h-4 w-4 shrink-0 accent-foreground" />
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium">{p.name}</span>
-                    {p.description && <span className="mt-0.5 block text-xs text-muted-foreground">{p.description}</span>}
-                  </span>
-                </label>
-              </li>
-            );
-          })}
-        </ul>
-        {profiles.length === 0 && <p className="py-6 text-center text-sm text-muted-foreground">{t(`${k}.profiles.none`)}</p>}
-        <p className="text-xs text-muted-foreground">{t(`${k}.profiles.hint`)}</p>
-
-        <div className="flex justify-end gap-2">
-          <button type="button" className={ghostBtn} onClick={onClose}>
-            {t(`${k}.profiles.cancel`)}
-          </button>
-          <button type="button" className={solidBtn} disabled={busy} onClick={() => onSave(selected)}>
-            {busy && <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
-            {busy ? t(`${k}.profiles.saving`) : t(`${k}.profiles.save`)}
-          </button>
-        </div>
-      </div>
     </Dialog>
   );
 }
@@ -1205,7 +1133,7 @@ export default function UsersPage() {
 
       {profileUser && (
         <ProfilesDialog
-          user={profileUser.user}
+          name={nameOf(profileUser.user)}
           profiles={allProfiles}
           initial={profileUser.initial}
           busy={saving}

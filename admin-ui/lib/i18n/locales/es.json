@@ -33,7 +33,8 @@
     "theme_light": "Cambiar al tema claro",
     "theme_dark": "Cambiar al tema oscuro",
     "whatsapp": "WhatsApp",
-    "telegram": "Telegram"
+    "telegram": "Telegram",
+    "service_accounts": "Cuentas de servicio"
   },
   "admin_dashboard": {
     "title": "Resumen",
@@ -2702,6 +2703,177 @@
         "health": "Comprobando el estado de los servicios…",
         "done": "Completado"
       }
+    }
+  },
+  "admin_service_accounts": {
+    "title": "Cuentas de servicio",
+    "subtitle": "Cuentas no humanas para integraciones y scripts. Solo inician sesión con las claves API que crees aquí, y todas las claves caducan.",
+    "add": "Nueva cuenta de servicio",
+    "search": "Buscar cuentas de servicio…",
+    "loading": "Cargando cuentas de servicio…",
+    "error": "No se pudieron cargar las cuentas de servicio.",
+    "retry": "Reintentar",
+    "never_used": "Nunca usada",
+    "count_one": "{{count}} cuenta de servicio",
+    "count_other": "{{count}} cuentas de servicio",
+    "count_filtered": "{{shown}} de {{total}}",
+    "keys_badge_title": "{{active}} claves API activas de {{max}} permitidas",
+    "cols": {
+      "account": "Cuenta",
+      "status": "Estado",
+      "keys": "Claves",
+      "last_used": "Último uso",
+      "memory": "Memoria",
+      "actions": "Acciones"
+    },
+    "filter": {
+      "aria": "Filtrar por {{col}}",
+      "clear": "Quitar filtro",
+      "search": "Buscar…",
+      "all": "Todos"
+    },
+    "status": {
+      "active": "Activa",
+      "disabled": "Desactivada"
+    },
+    "ltm": {
+      "on": "Activada",
+      "off": "Desactivada"
+    },
+    "row": {
+      "keys": "Claves API de {{name}}",
+      "profiles": "Acceso a perfiles de {{name}}",
+      "edit": "Editar {{name}}",
+      "delete": "Eliminar {{name}}",
+      "enable": "Activar {{name}}",
+      "disable": "Desactivar {{name}}"
+    },
+    "empty": {
+      "title": "Aún no hay cuentas de servicio",
+      "body": "Una cuenta de servicio permite que una integración, un script o una tarea programada hable con AION sin una persona detrás.",
+      "point_keys": "No tiene contraseña, SSO ni 2FA: se autentica solo con claves API, y cada clave tiene fecha de caducidad.",
+      "point_scopes": "Cada clave lleva solo los permisos que concedas (chat, conversaciones, archivos) y puede revocarse en cualquier momento.",
+      "point_memory": "La memoria a largo plazo está desactivada por defecto, para que el tráfico automático no la llene.",
+      "search": "Ninguna cuenta de servicio coincide con estos filtros.",
+      "clear_filters": "Quitar filtros"
+    },
+    "form": {
+      "title_new": "Nueva cuenta de servicio",
+      "title_edit": "Editar cuenta de servicio",
+      "optional": "Opcional",
+      "display_name": "Nombre",
+      "display_name_placeholder": "Informe nocturno",
+      "slug": "Identificador",
+      "slug_hint": "Minúsculas, dígitos, puntos, guiones y guiones bajos (2-61 caracteres). No se puede cambiar después.",
+      "slug_invalid": "Usa de 2 a 61 minúsculas, dígitos, \".\", \"-\" o \"_\", empezando por una letra o un dígito.",
+      "description": "Descripción",
+      "description_placeholder": "Qué usa esta cuenta y quién es responsable",
+      "description_hint": "Ayuda a otros administradores a saber para qué sirve la cuenta.",
+      "ltm": "Memoria a largo plazo",
+      "ltm_hint": "Permite que AION recuerde datos entre las conversaciones de esta cuenta. Normalmente no hace falta para integraciones.",
+      "keys_title": "Claves API",
+      "keys_description": "Límites para las claves de esta cuenta. Todas las claves caducan.",
+      "max_keys": "Claves activas permitidas",
+      "max_days": "Duración máxima de la clave (días)",
+      "range_hint": "De {{min}} a {{max}}",
+      "range_error": "Introduce un número entero de {{min}} a {{max}}",
+      "limits_existing": "Los nuevos límites se aplican a las claves creadas a partir de ahora; las existentes mantienen su caducidad.",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "create": "Crear",
+      "saving": "Guardando…"
+    },
+    "keys": {
+      "title": "Claves API · {{name}}",
+      "close": "Cerrar",
+      "policy": "{{active}} de {{max}} claves activas · hasta {{days}} días cada una",
+      "new": "Nueva clave",
+      "account_disabled": "Esta cuenta está desactivada: sus claves no funcionan y no se pueden crear nuevas hasta que se reactive.",
+      "quota_full": "Esta cuenta ya tiene {{max}} claves activas. Revoca una o sube el límite para crear otra.",
+      "error": "No se pudieron cargar las claves.",
+      "empty_title": "Aún no hay claves",
+      "empty_body": "Crea una clave para que la integración se autentique. La clave completa solo se mostrará una vez.",
+      "status": {
+        "active": "Activa",
+        "expired": "Caducada",
+        "revoked": "Revocada"
+      },
+      "revoke": "Revocar",
+      "revoke_confirm": "¿Revocar ahora? Las llamadas que la usan fallarán.",
+      "revoke_aria": "Revocar {{name}}",
+      "created_on": "Creada el {{date}}",
+      "expires_on": "Caduca el {{date}}",
+      "expired_on": "Caducó el {{date}}",
+      "revoked_on": "Revocada el {{date}}",
+      "last_used": "Último uso {{date}}",
+      "never_used": "Nunca usada",
+      "name": "Nombre de la clave",
+      "name_hint": "Dónde se usa, por ejemplo el nombre del servidor o de la tarea.",
+      "name_placeholder": "servidor-informes",
+      "days": "Caduca en (días)",
+      "days_hint": "Hasta {{max}} · el {{date}}",
+      "scopes": "Permisos",
+      "scopes_required": "Elige al menos un permiso.",
+      "create": "Crear clave"
+    },
+    "new_key": {
+      "title": "Copia tu nueva clave API",
+      "body": "Es la única vez que se muestra la clave completa. Guárdala en un lugar seguro, como un gestor de secretos.",
+      "usage": "Envíala como",
+      "usage_or": "o en la cabecera",
+      "once": "No se volverá a mostrar.",
+      "copy": "Copiar clave",
+      "copied": "Copiada",
+      "done": "Ya la he guardado"
+    },
+    "scopes": {
+      "chat": "Chatear con el agente",
+      "conversations_read": "Leer conversaciones",
+      "conversations_write": "Gestionar conversaciones",
+      "files_read": "Leer archivos",
+      "files_write": "Subir archivos"
+    },
+    "errors": {
+      "user_exists": "{{identifier}} ya existe. Elige otro identificador.",
+      "invalid_scopes": "Uno o más permisos no están permitidos para esta cuenta.",
+      "invalid_expiration": "La caducidad debe estar entre 1 y {{days}} días.",
+      "api_key_quota_exceeded": "Esta cuenta ya tiene {{max}} claves activas."
+    },
+    "profiles": {
+      "title": "Acceso a perfiles",
+      "body": "Elige qué perfiles puede usar {{name}}.",
+      "hint": "Sin selección, la cuenta puede usar todos los perfiles.",
+      "clear": "Quitar selección",
+      "selected": "{{count}} seleccionados",
+      "all": "Todos los perfiles",
+      "none": "Aún no hay perfiles.",
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "saving": "Guardando…"
+    },
+    "delete": {
+      "title": "¿Eliminar esta cuenta de servicio?",
+      "body": "{{name}} y todas sus claves API se eliminarán definitivamente. Las integraciones que la usan dejarán de funcionar. No se puede deshacer.",
+      "confirm_label": "Escribe {{name}} para confirmar",
+      "cancel": "Cancelar",
+      "confirm": "Eliminar",
+      "deleting": "Eliminando…"
+    },
+    "toast": {
+      "load_failed": "No se pudieron cargar las cuentas de servicio: {{error}}",
+      "save_failed": "No se pudo guardar: {{error}}",
+      "delete_failed": "No se pudo eliminar: {{error}}",
+      "profiles_load_failed": "No se pudo cargar el acceso a perfiles: {{error}}",
+      "profiles_saved": "Acceso a perfiles guardado",
+      "created": "Cuenta de servicio creada. Ahora crea una clave API.",
+      "updated": "Cuenta de servicio actualizada",
+      "deleted": "Cuenta de servicio eliminada",
+      "enabled": "{{name}} activada",
+      "disabled": "{{name}} desactivada: sus claves dejan de funcionar",
+      "keys_load_failed": "No se pudieron cargar las claves: {{error}}",
+      "key_create_failed": "No se pudo crear la clave: {{error}}",
+      "key_revoked": "Clave \"{{name}}\" revocada",
+      "key_revoke_failed": "No se pudo revocar la clave: {{error}}"
     }
   }
 }

@@ -115,7 +115,13 @@ async def authenticate_api_key(token: str) -> ApiKeyPrincipal:
         if row.expires_at is None or _as_utc(row.expires_at) <= now:
             raise _reject("api_key_expired", "API key expired")
         owner = await session.get(User, row.user_id) if row.user_id else None
-        if owner is None or not owner.can_create_api_keys:
+        # ``disabled_at`` is the reversible switch of service accounts: keys are
+        # kept but refused until an admin re-enables the account.
+        if (
+            owner is None
+            or not owner.can_create_api_keys
+            or getattr(owner, "disabled_at", None) is not None
+        ):
             raise _reject("api_key_owner_disabled", "API key owner is not enabled")
 
         principal = ApiKeyPrincipal(
