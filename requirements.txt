@@ -27,7 +27,8 @@ greenlet>=3.0.0
 mcp[cli]>=1.28.1,<2.0.0
 fastmcp>=3.2.0,<4.0.0
 mcp-haystack>=0.1.0
-tiktoken>=0.7.0
+# tiktoken 0.7.x has no Python 3.13 wheel and its sdist (PyO3 0.20) cannot build on 3.13.
+tiktoken>=0.8.0
 apscheduler>=3.11.3
 python-frontmatter>=1.1.0
 croniter>=2.0.0
@@ -61,7 +62,8 @@ opentelemetry-instrumentation-httpx>=0.46b0
 prometheus-fastapi-instrumentator>=6.0.0
 structlog>=24.1.0
 mcp-server-openmetadata
-openlit
+# Floor needed: without it uv backtracks to openlit 1.26 (tiktoken<0.8, old OpenTelemetry).
+openlit>=1.40
 json-repair>=0.60.1
 opik
 pydantic-settings>=2.0.0
