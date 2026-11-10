@@ -27,7 +27,10 @@ greenlet>=3.0.0
 mcp[cli]>=1.28.1,<2.0.0
 fastmcp>=3.2.0,<4.0.0
 mcp-haystack>=0.1.0
-tiktoken>=0.7.0
+# >=0.8.0: first release with Python 3.13 wheels. With a lower floor the resolver
+# backtracks to openlit 1.26 -> tiktoken 0.7.0, which must be compiled with Rust
+# (not in the image) and breaks `docker build` of the backend.
+tiktoken>=0.8.0
 apscheduler>=3.11.3
 python-frontmatter>=1.1.0
 croniter>=2.0.0

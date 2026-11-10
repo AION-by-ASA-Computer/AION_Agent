@@ -27,12 +27,17 @@
 # must end "failed"; the script then removes the failure trigger and retries,
 # which must resume from the local hop only.
 #
+# While the upgrade runs, the full run log (data/updater/logs/upgrade-<ts>.log:
+# pulls, the local docker build, upgrade_runner output) is streamed with a "  | "
+# prefix, interleaved with the phase changes read from status.json. --quiet
+# shows only the phase changes (and the last log lines on failure).
+#
 # Once a release that ships the updater exists, prefer starting from it and
 # pressing "Update now" in http://localhost/admin (step 4 is then unnecessary).
 # Docs: docs/deployment/self-update.md
 #
 # Usage:
-#   scripts/dev/test-self-update.sh --from 1.6.0 [--dir <path>] [--fail-first] [--cleanup]
+#   scripts/dev/test-self-update.sh --from 1.6.0 [--dir <path>] [--fail-first] [--cleanup] [--quiet]
 
 set -euo pipefail
 
@@ -42,12 +47,15 @@ FROM=""
 DIR="${HOME}/.aion-selfupdate-test"
 FAIL_FIRST=0
 CLEANUP=0
+# 0 = stream the full upgrade log (pulls, local docker build, migrations) live.
+QUIET=0
 TIMEOUT_SEC=3600
 TEST_SCRIPT="$REPO/scripts/upgrades/99.99.99.py"
 UPDATER_IMAGE="ghcr.io/aion-by-asa-computer/aion-updater:local"
 
 usage() {
-    sed -n '2,37p' "$0" | sed 's/^# \{0,1\}//'
+    # Print the header comment block (line 2 up to the first non-comment line).
+    awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"
     exit "${1:-0}"
 }
 
@@ -57,6 +65,7 @@ while [[ $# -gt 0 ]]; do
         --dir) DIR="$2"; shift 2 ;;
         --fail-first) FAIL_FIRST=1; shift ;;
         --cleanup) CLEANUP=1; shift ;;
+        --quiet) QUIET=1; shift ;;
         --help|-h) usage 0 ;;
         *) echo "Unknown option: $1"; usage 1 ;;
     esac
@@ -114,25 +123,60 @@ PY
     )
 }
 
+# PID of the background `tail -F` streaming the current run's log (see wait_for_run).
+TAIL_PID=""
+
+# Stop streaming the run log, if a tail is running.
+stop_log_follow() {
+    if [ -n "$TAIL_PID" ]; then
+        # Children first (tail, awk), then the subshell that holds the pipeline.
+        pkill -P "$TAIL_PID" 2>/dev/null || true
+        kill "$TAIL_PID" 2>/dev/null || true
+        wait "$TAIL_PID" 2>/dev/null || true
+        TAIL_PID=""
+    fi
+}
+
 # Follow status.json until the run ends; prints phase changes. Echoes the final state.
+# Unless --quiet, it also streams the run's full log (install.sh output: pulls,
+# docker build of the local hop, upgrade_runner) as it is written. Everything
+# except the final state goes to stderr, because callers capture stdout.
 wait_for_run() {
-    local status="$DIR/data/updater/status.json" last="" start now line
+    local status="$DIR/data/updater/status.json" last="" start now line logfile="" followed=""
     start=$(date +%s)
     while :; do
         if [ -f "$status" ]; then
             line=$(python3 -c 'import json,sys; s=json.load(open(sys.argv[1])); print(s.get("state",""), s.get("hop_to") or "-", s.get("phase",""))' "$status" 2>/dev/null || true)
+            # Each run (and each retry) writes a new log file: (re)attach the tail to it.
+            # The path is a host path: the sidecar mounts the install dir at the same path.
+            if [ "$QUIET" = "0" ]; then
+                logfile=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("log_file") or "")' "$status" 2>/dev/null || true)
+                if [ -n "$logfile" ] && [ "$logfile" != "$followed" ]; then
+                    stop_log_follow
+                    echo "  [info] streaming $logfile" >&2
+                    # Pipeline in a background subshell; TAIL_PID is the subshell and
+                    # stop_log_follow kills its children (tail, awk) too. Not process
+                    # substitution: on macOS bash 3.2 its output is lost inside $(...).
+                    # awk+fflush instead of `sed -u`, which macOS sed does not support.
+                    ( tail -n +1 -F "$logfile" 2>/dev/null | awk '{ print "  | " $0; fflush() }' >&2 ) &
+                    TAIL_PID=$!
+                    followed="$logfile"
+                fi
+            fi
             if [ -n "$line" ] && [ "$line" != "$last" ]; then
                 echo "  [$(date +%H:%M:%S)] state/hop/phase: $line" >&2
                 last="$line"
             fi
             case "$line" in
-                succeeded*) echo succeeded; return 0 ;;
-                failed*) echo failed; return 0 ;;
+                # Give tail a moment to flush the last lines before stopping it.
+                succeeded*) sleep 1; stop_log_follow; echo succeeded; return 0 ;;
+                failed*) sleep 1; stop_log_follow; echo failed; return 0 ;;
             esac
         fi
         now=$(date +%s)
-        [ $((now - start)) -lt "$TIMEOUT_SEC" ] || { echo timeout; return 0; }
-        sleep 5
+        [ $((now - start)) -lt "$TIMEOUT_SEC" ] || { stop_log_follow; echo timeout; return 0; }
+        # Poll faster when streaming so phase lines stay close to the log lines.
+        if [ "$QUIET" = "0" ]; then sleep 2; else sleep 5; fi
     done
 }
 
@@ -215,8 +259,12 @@ if [ "$FAIL_FIRST" = "1" ]; then
 fi
 
 [ "$result" = "succeeded" ] || {
-    echo "[info] Last log lines:"
-    tail -n 40 "$(ls -t "$DIR"/data/updater/logs/*.log | head -n1)" || true
+    # The streamed log already showed everything; repeat the tail only in --quiet mode.
+    if [ "$QUIET" = "1" ]; then
+        echo "[info] Last log lines:"
+        tail -n 40 "$(ls -t "$DIR"/data/updater/logs/*.log | head -n1)" || true
+    fi
+    echo "[info] Full log: $(ls -t "$DIR"/data/updater/logs/*.log | head -n1)"
     fail "upgrade ended with: $result"
 }
 
