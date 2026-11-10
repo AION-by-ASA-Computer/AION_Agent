@@ -3792,7 +3792,13 @@ async def get_stats():
     profiles = profile_manager.list_profiles()
 
     skill_registry.reload()
-    skills_count = len(skill_registry.get_all_names())
+    skills_count = len(
+        [
+            name
+            for name in skill_registry.get_all_names()
+            if (skill_registry.get_meta(name) or {}).get("status") == "verified"
+        ]
+    )
 
     mcp_count = len(mcp_manager._registry)
 

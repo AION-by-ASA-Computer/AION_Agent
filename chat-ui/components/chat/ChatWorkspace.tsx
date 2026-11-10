@@ -140,6 +140,7 @@ import { fetchSqlProjects, type SqlProject } from "@/lib/api/query-memory";
 import {
   hasMnemosTools,
   hasSqlQueryMemory,
+  hasWebResearch,
   showProjectMemoryUi,
 } from "@/lib/memory/profile-capabilities";
 import { WebSourcesBar } from "@/components/chat/WebResearchViews";
@@ -734,6 +735,10 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   const [profile, setProfile] = useState<string>(() => {
     return readStoredDefaultProfileSlug() || "generic_assistant";
   });
+  // Conversation whose profile is final (profile list loaded + conversation
+  // details read). Until then `profile` may still be a provisional default, and
+  // warming the agent with it would build an agent for the wrong profile.
+  const [profileResolvedFor, setProfileResolvedFor] = useState<string | null>(null);
   const [favoriteProfileSlug, setFavoriteProfileSlug] = useState<string | null>(() =>
     readStoredDefaultProfileSlug(),
   );
@@ -832,6 +837,15 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     () => showProjectMemoryUi(activeProfileRow),
     [activeProfileRow]
   );
+  // The web search toggle exists only when the profile carries the
+  // web_research native group (the backend drops the tools otherwise). While
+  // profiles are still loading (no row yet) keep the control visible.
+  // Deep Research mode is NOT gated here: the backend enables trigger_research
+  // in that mode for every profile (src/runtime/deep_research_tools.py).
+  const profileHasWebResearch = useMemo(
+    () => (activeProfileRow ? hasWebResearch(activeProfileRow) : true),
+    [activeProfileRow]
+  );
 
   const [projectCreateOpen, setProjectCreateOpen] = useState(false);
   const [isSavingInfo, setIsSavingInfo] = useState(false);
@@ -907,6 +921,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const [thinkingEnabled, setThinkingEnabled] = useState(false);
   const [reasoningEffort, setReasoningEffort] = useState<"min" | "medium" | "max">("medium");
+  // Deep Research mode is available on every profile, so the stored mode is
+  // sent as is.
   const [agentMode, setAgentMode] = useState<AgentMode>("normal");
   const [researchAdoptId, setResearchAdoptId] = useState<string | null>(null);
   const [researchAdoptQuery, setResearchAdoptQuery] = useState<string | null>(null);
@@ -971,8 +987,11 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   }, [refreshMcpAlerts]);
 
   // Pre-warm MCP + agent cache; surface integration errors instead of a silent stall.
+  // Runs only once the conversation's profile is final, so the backend builds
+  // the agent for the selected profile and never for a provisional default.
   useEffect(() => {
     if (!conversationId || !userId || !activeProfileSlug) return;
+    if (profileResolvedFor !== conversationId) return;
     prepareAbortRef.current?.abort();
     const ac = new AbortController();
     prepareAbortRef.current = ac;
@@ -1033,7 +1052,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     return () => {
       ac.abort();
     };
-  }, [conversationId, activeProfileSlug, userId, token, agentMode, refreshMcpAlerts, selectedProvider]);
+  }, [conversationId, activeProfileSlug, profileResolvedFor, userId, token, agentMode, refreshMcpAlerts, selectedProvider]);
 
   const handleToggleThinking = useCallback((enabled: boolean) => {
     setThinkingEnabled(enabled);
@@ -1104,8 +1123,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       ).catch((err) => console.error("Error saving agent mode preference to DB:", err));
     }
   }, [conversationId, messages.length, userId, token]);
-
-
 
   // Stati e logica per i nuovi menù popover "+", "Profilo", "Thinking" e "Agent Mode"
   const [isPlusOpen, setIsPlusOpen] = useState(false);
@@ -2923,6 +2940,9 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     setContextBudgetOpen(false);
     setLastContextBudget(null);
 
+    // The profile below is provisional until the details fetch settles.
+    setProfileResolvedFor(null);
+
     // Reset immediato al profilo predefinito utente (o fallback) per le nuove chat
     const defaultProfile = resolveDefaultProfileSlug(profiles, favoriteProfileSlugRef.current) || favoriteProfileSlugRef.current || "generic_assistant";
     setProfile(defaultProfile);
@@ -3006,9 +3026,15 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             }
           }
         }
+        // Profile is final only when the profile list is loaded too (otherwise
+        // the default above may change once profiles arrive).
+        if (profiles.length > 0) setProfileResolvedFor(cid);
       })
       .catch((err) => {
         console.debug("Could not fetch conversation details (new conversation):", err);
+        if (activeConversationRef.current === cid && profiles.length > 0) {
+          setProfileResolvedFor(cid);
+        }
       });
   }, [conversationId, userId, token, profiles]);
 
@@ -4194,7 +4220,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           }}
           className={cn(
             "focus-ring inline-flex size-9 sm:size-9.5 items-center justify-center rounded-full border shadow-2xs backdrop-blur-md transition-all duration-200 active:scale-95",
-            isPlusOpen || !webSearchEnabled || thinkingEnabled || agentMode !== "normal" || selectedProvider
+            isPlusOpen || (profileHasWebResearch && !webSearchEnabled) || thinkingEnabled || agentMode !== "normal" || selectedProvider
               ? "border-primary/40 bg-primary/10 text-primary shadow-xs"
               : "border-black/[0.08] bg-muted/40 text-muted-foreground hover:bg-muted/70 hover:text-foreground dark:border-white/[0.12] dark:bg-card/80 dark:hover:bg-card/95"
           )}
@@ -4665,6 +4691,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
               )}
             </div>
 
+            {/* Web search toggle only for profiles with the web_research group. */}
+            {profileHasWebResearch && (
             <div className="relative" onMouseLeave={() => setIsWebSearchSubOpen(false)}>
               <button
                 type="button"
@@ -4753,6 +4781,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 </div>
               ) : null}
             </div>
+            )}
 
             <div className="relative" onMouseLeave={() => setIsThinkingSubOpen(false)}>
               <button
@@ -5247,7 +5276,7 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
             }}
           />
 
-          {(webRestrictHosts.length > 0 || !webSearchEnabled) && (
+          {profileHasWebResearch && (webRestrictHosts.length > 0 || !webSearchEnabled) && (
             <div className="flex flex-wrap gap-2 px-1 pt-0.5 text-[0.786em] text-muted-foreground" aria-live="polite">
               {!webSearchEnabled ? (
                 <span className="rounded-full border border-amber-500/40 bg-amber-500/15 dark:bg-amber-500/10 px-2 py-0.5 font-medium text-amber-700 dark:text-amber-200">

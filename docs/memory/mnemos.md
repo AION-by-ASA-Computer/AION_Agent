@@ -31,6 +31,19 @@ Notes support **supersede chains**, **confidence** (0–1), **valid_from / valid
 
 `memory_wake` runs **server-side** at turn start (injected in user prefix).
 
+### Per-profile gating
+
+Everything above is tied to the `mnemos` entry in the profile's `native_tool_groups`
+(admin-ui → Profiles → Tools → Built-in). A profile **without** `mnemos`:
+
+- gets no `memory_recall` / `memory_note` / `memory_forget` tools;
+- gets no wake-up injection of stored notes at turn start;
+- is skipped by post-turn extraction, pre-compaction flush and STM batch promotion,
+  so its conversations are not written to long-term memory.
+
+Callers that run outside a profile (benchmarks, maintenance jobs) keep the
+always-on behaviour.
+
 ## Recall pipeline
 
 ```mermaid

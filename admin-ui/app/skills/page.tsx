@@ -107,8 +107,12 @@ export default function SkillsPage() {
   const showEmpty = s.listLoaded && s.names.length === 0 && !selected;
 
   return (
-    <div className="mx-auto flex max-w-[84rem] flex-col gap-6">
-      <header className="flex flex-col gap-4 pt-2 sm:flex-row sm:items-end">
+    // Desktop (lg+): the page is exactly one viewport tall (shell header 3.5rem + content padding 3rem = 6.5rem,
+    // same as Diagnostics), so the list and the editor scroll inside their own panels and the page stays still.
+    // The min-height keeps the editor usable on short screens (the shell then scrolls). Below lg the layout
+    // is a single column and falls back to natural page scrolling.
+    <div className="mx-auto flex max-w-[84rem] flex-col gap-6 lg:h-[calc(100dvh-6.5rem)] lg:min-h-[36rem]">
+      <header className="flex shrink-0 flex-col gap-4 pt-2 sm:flex-row sm:items-end">
         <div className="min-w-0 flex-1">
           <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] sm:text-[28px]">{t(`${k}.title`)}</h1>
           <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.subtitle`)}</p>
@@ -145,9 +149,12 @@ export default function SkillsPage() {
           </div>
         </div>
       ) : (
-        <div className="grid items-start gap-6 lg:grid-cols-[17rem_minmax(0,1fr)]">
+        // lg+: one grid row bounded to the remaining height (minmax(0,1fr) + min-h-0), items stretched so both
+        // columns get exactly that height and can scroll internally instead of growing the page.
+        <div className="grid items-start gap-6 lg:min-h-0 lg:flex-1 lg:grid-cols-[17rem_minmax(0,1fr)] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch">
           {/* ───────── List ───────── */}
-          <aside className={cn("flex flex-col gap-3", editing && selected && "hidden lg:flex")}>
+          {/* lg+: search and import/export stay pinned, only the <nav> in between scrolls. */}
+          <aside className={cn("flex flex-col gap-3 lg:min-h-0", editing && selected && "hidden lg:flex")}>
             <SearchField value={query} onChange={setQuery} placeholder={t(`${k}.list.search`)} />
 
             {!s.listLoaded ? (
@@ -156,7 +163,7 @@ export default function SkillsPage() {
                 {t(`${k}.loading`)}
               </div>
             ) : (
-              <nav aria-label={t(`${k}.list.aria`)}>
+              <nav aria-label={t(`${k}.list.aria`)} className="lg:-mx-1 lg:min-h-0 lg:flex-1 lg:overflow-y-auto lg:px-1">
                 <ul className="flex flex-col gap-0.5">
                   {selected && !isPersisted && (
                     <li>
@@ -200,7 +207,7 @@ export default function SkillsPage() {
               </nav>
             )}
 
-            <div className="mt-1 flex flex-wrap gap-1 border-t border-border/50 pt-3">
+            <div className="mt-1 flex shrink-0 flex-wrap gap-1 border-t border-border/50 pt-3">
               <button type="button" className={ghostBtn} onClick={() => open(() => s.importFile(() => setEditing(true)))}>
                 <Upload className="h-3.5 w-3.5" aria-hidden />
                 {t(`${k}.import`)}
@@ -215,15 +222,20 @@ export default function SkillsPage() {
           </aside>
 
           {/* ───────── Editor ───────── */}
-          <section className={cn("min-w-0", !(editing && selected) && "hidden lg:block")} aria-busy={s.loadingSkill}>
+          {/* lg+: a flex column filling the grid row; the toolbar and the metadata fields stay fixed and the
+              Markdown editor (fill mode) takes the remaining height, scrolling its content internally. */}
+          <section
+            className={cn("min-w-0 lg:flex lg:min-h-0 lg:flex-col", !(editing && selected) && "hidden lg:flex")}
+            aria-busy={s.loadingSkill}
+          >
             {!selected ? (
               <div className="rounded-3xl border border-dashed border-border px-6 py-20 text-center">
                 <h2 className="text-lg font-semibold tracking-[-0.015em]">{t(`${k}.pick.title`)}</h2>
                 <p className="mt-1.5 text-sm text-muted-foreground">{t(`${k}.pick.body`)}</p>
               </div>
             ) : (
-              <div className={cn("flex flex-col gap-4 transition-opacity", s.loadingSkill && "opacity-60")}>
-                <div className="flex flex-wrap items-center gap-2">
+              <div className={cn("flex flex-col gap-4 transition-opacity lg:min-h-0 lg:flex-1", s.loadingSkill && "opacity-60")}>
+                <div className="flex shrink-0 flex-wrap items-center gap-2">
                   <button type="button" className={cn(ghostBtn, "-ml-2 lg:hidden")} onClick={() => guard(() => setEditing(false))}>
                     <ArrowLeft className="h-4 w-4" aria-hidden />
                     {t(`${k}.list.back`)}
@@ -267,8 +279,9 @@ export default function SkillsPage() {
                   </div>
                 </div>
 
-                <div className="rounded-3xl border border-border/70 bg-card">
-                  <div className="grid gap-4 p-5 sm:p-6 lg:grid-cols-2">
+                {/* overflow-hidden clips the scrolling area to the card's rounded corners. */}
+                <div className="rounded-3xl border border-border/70 bg-card lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-hidden">
+                  <div className="grid shrink-0 gap-4 p-5 sm:p-6 lg:grid-cols-2">
                     <label className="flex flex-col gap-1.5">
                       <span className="text-sm font-medium">{t(`${k}.editor.name`)}</span>
                       <input
@@ -307,7 +320,7 @@ export default function SkillsPage() {
                     </label>
                   </div>
 
-                  <div className="flex items-center gap-2 border-t border-border/60 px-5 sm:px-6">
+                  <div className="flex shrink-0 items-center gap-2 border-t border-border/60 px-5 sm:px-6">
                     <h2 className="flex h-12 min-w-0 flex-1 items-center text-sm font-medium">{t(`${k}.editor.content`)}</h2>
                     <button
                       type="button"
@@ -323,7 +336,7 @@ export default function SkillsPage() {
 
                   {aiOpen && (
                     <form
-                      className="flex flex-col gap-2 border-t border-border/60 bg-secondary/30 p-3 sm:flex-row sm:p-4"
+                      className="flex shrink-0 flex-col gap-2 border-t border-border/60 bg-secondary/30 p-3 sm:flex-row sm:p-4"
                       onSubmit={(e) => {
                         e.preventDefault();
                         void runRefine();
@@ -344,11 +357,14 @@ export default function SkillsPage() {
                     </form>
                   )}
 
-                  <div className="border-t border-border/60 p-4 sm:p-5">
+                  {/* overflow-y-auto is a safety net for very short screens, where the editor's floor height
+                      no longer fits: the area scrolls instead of the editor overflowing the card. */}
+                  <div className="border-t border-border/60 p-4 sm:p-5 lg:flex lg:min-h-0 lg:flex-1 lg:flex-col lg:overflow-y-auto">
                     <BlockMarkdownEditor
                       value={selected.content}
                       onChange={(v) => s.update({ content: v })}
                       height={520}
+                      fill
                       placeholder={t(`${k}.editor.content_placeholder`)}
                       allowTasks={false}
                     />

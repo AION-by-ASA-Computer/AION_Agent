@@ -30,7 +30,7 @@ graph TD
     I --> J[Save to data/deep_research/session_id.json]
 ```
 
-1. **Probing**: The engine verifies connection to the LLM model and checks active search providers (Tavily, Brave, or SearXNG).
+1. **Probing**: The engine verifies connection to the LLM model and checks active search providers (Tavily, Brave, or SearXNG). A failed probe (unreachable endpoint, rejected key, unknown model) ends the job with status `error` and the reason, instead of running every phase on empty LLM output.
 2. **Planning**: An LLM agent plans a search strategy for the current round and translates the research goal into specific search queries.
 3. **Searching**: Queries are executed using the configured search providers.
 4. **Reading / Page Extraction**: The engine scrapes the retrieved URLs in parallel to extract text and findings, filtering out low-quality or irrelevant content.
@@ -43,13 +43,17 @@ graph TD
 
 The AION system supports a dedicated **Deep Research Mode** (represented by a **violet** theme in the Chat UI), distinct from normal chat mode and the orange-themed **Plan Mode**.
 
+Deep Research Mode is available on **every profile**: the chat-ui selector is always shown and the backend adds `trigger_research` / `manage_research` to the agent in this mode even when the profile has no Deep Research connector (see [Availability rules](#availability-rules)).
+
 When the agent is placed in Deep Research Mode:
-- **System Prompt Modifications**: The system prompt is appended with instructions to use the `trigger_research` tool and direct the user to the progress anchor, instead of doing manual quick lookups.
+- **System Prompt Modifications**: The system prompt (rebuilt every turn by `refresh_agent_turn_context`) tells the model that its first and only action is `trigger_research` with the user's request as `topic`: no clarifying questions, no planning, no answer from its own knowledge (the research pipeline does all of that). After the tool returns it only replies with the progress anchor; on a tool error it reports the error.
+- **Resident tools**: `trigger_research` / `manage_research` have their full schema on the first model call (never deferred behind `tool_search`), so the first step can be the tool call.
 - **Tool Blocking**: To enforce the autonomous loop, standard tools that modify the environment, execute code, or perform basic single-step lookups are blocked. These include:
   - `web_search` and `web_fetch_page` (replaced by the autonomous loop)
   - Plan execution tools (`draft_execution_plan`, `get_execution_plan`, `update_execution_plan`, `mark_task_completed`)
   - Sandbox command execution and file editors (`sandbox_write_workspace_file`, `sandbox_edit_workspace_file`, `sandbox_exec_allowlisted`, etc.)
   - Subagent delegation (`delegate_to_subagent`)
+  - Skill tools (`skill_view`, `skill_search`, `skill_list`), which otherwise distracted the model before starting the job
 
 ### Mode Comparison Matrix
 
@@ -79,12 +83,16 @@ Configure the deep research engine using the following keys in your `.env` file:
 | `AION_DEEP_RESEARCH_EXTRACTION_TIMEOUT` | `90` | `15` to `3600` | Hard timeout in seconds for downloading and parsing a single webpage. |
 | `AION_DEEP_RESEARCH_EXTRACTION_CONCURRENCY` | `3` | `1` to `12` | Number of webpages extracted in parallel during a round. |
 | `AION_DEEP_RESEARCH_BLOCKED_TOOLS` | *(Default list)* | Comma-separated strings | List of tool names to block when resolved agent mode is `deep_research`. |
+| `AION_DEEP_RESEARCH_LLM_STREAM` | `1` | `0` or `1` | Stream the research LLM calls. Keeps long generations (the final report) alive through gateways that close silent requests after 60 s with HTTP 504. |
+| `AION_DEEP_RESEARCH_THINKING_BUDGET` | `512` | Integer, `0` = off | `thinking_token_budget` sent to vLLM-style endpoints and **added** to each call's `max_tokens`, so reasoning models still write visible text (short calls such as the 20-token category check were otherwise eaten by reasoning). Dropped automatically if the endpoint answers 400. |
+| `AION_DEEP_RESEARCH_REPORT_TIMEOUT` | `600` | Integer ≥ `60` | Total seconds allowed to write the final report (and its optional expansion). |
+| `AION_DEEP_RESEARCH_LENGTH_RETRY_TOKENS` | `8192` | Integer, `0` = off | When an answer is empty with `finish_reason=length` (the model reasoned until `max_tokens`, typical on long page-extraction prompts where the router ignores the thinking budget), the call is retried once with this many extra tokens. |
 
 ---
 
 ## Agent Tools
 
-When `AION_DEEP_RESEARCH_ENABLED=1`, the following two in-process tools are registered to standard profiles:
+When `AION_DEEP_RESEARCH_ENABLED=1`, the following two in-process tools are registered according to the [Availability rules](#availability-rules):
 
 ### 1. `trigger_research`
 
@@ -122,13 +130,97 @@ Lists, retrieves, or deletes saved research reports from the user's library.
 
 ## Profiles Registration
 
-To expose deep research tools to a specific profile, list the `deep_research` bundle under the `native_tool_groups` section in the profile YAML (e.g., [aion_std.yaml](config_std/profiles/aion_std.yaml)):
+To expose deep research tools to a specific profile, list the `deep_research` bundle under the `native_tool_groups` section in the profile YAML (e.g., [aion_std.yaml](config_std/profiles/aion_std.yaml)), or toggle it in admin-ui → Profiles → Tools → Built-in:
 
 ```yaml
 native_tool_groups:
   - web_research
   - deep_research
 ```
+
+Profiles that still list `deep_research` under `mcp_servers` (legacy form; no
+such MCP server exists, the job runs in-process) count as having the connector
+too. That slug is never offered as a loadable MCP group by `tool_search`.
+
+### Availability rules
+
+Deep Research does **not** depend on the profile's other MCP servers or native
+groups: it is a self-contained pipeline. The only check is the connector
+(`src/runtime/deep_research_tools.py`, `deep_research_tools_allowed`):
+
+| Profile has the connector | Chat mode | `trigger_research` callable |
+| :--- | :--- | :--- |
+| yes | normal / plan / ask / debug | yes |
+| no | normal / plan / ask / debug | no |
+| any | **Deep Research** | **yes** |
+
+`AION_DEEP_RESEARCH_ENABLED=0` disables the tools everywhere. The resolved
+agent mode is part of the agent cache key, so the Deep Research agent of a chat
+session never leaks its tools into the normal-mode agent of the same session.
+
+Once started, the job does not inherit anything from the calling profile: it
+receives only the topic, the owner (for the library and UI language) and the
+chat session id, and uses the platform web search providers and LLM directly.
+
+---
+
+## Time budget
+
+Three limits keep a run bounded with slow reasoning models:
+
+- **Per call** (`timeout` of each LLM call: page extraction =
+  `AION_DEEP_RESEARCH_EXTRACTION_TIMEOUT`, analysis 300 s, report =
+  `AION_DEEP_RESEARCH_REPORT_TIMEOUT`): a **total** deadline, retries
+  included. With streaming the HTTP read timeout only bounds the gap between
+  chunks, so the bridge enforces the total itself; a call past its deadline
+  returns empty and the run goes on.
+- **Per run** (`max_time`, the research budget): checked before each round
+  and before each queued page. When it is reached, pages not started yet are
+  skipped and the run moves on to analysis and the final report.
+- **Hard stop** (`AION_DEEP_RESEARCH_RUN_TIMEOUT`, default 1800 s): last-resort
+  cap on the whole job; on expiry the evolving report is saved. Raise it (up
+  to 86400) only if runs legitimately need longer.
+
+## Troubleshooting
+
+- **Job ends at once with `LLM endpoint HTTP 4xx …`**: the LLM rejected the
+  provider's key or model. The bridge uses the same URL, model and key as the
+  chat agent (`resolve_llm_credentials`, see
+  [LLM provider and API key precedence](../configuration/llm-provider-precedence.md)).
+  With a key-scoped router ("Model … is not allowed for this API key") set the
+  provider's model to one the key may use (e.g. `auto`) in admin-ui → LLM
+  providers.
+- **Report missing, only raw "Finding N" blocks saved** ("Final report output
+  too brief … falling back to evolving report" in the logs): the
+  report-writing LLM call returned nothing. Two known causes, both handled by
+  the bridge now:
+  - `504 Gateway Timeout` after exactly 60 s: the gateway closes requests that
+    stay silent; the bridge streams (`AION_DEEP_RESEARCH_LLM_STREAM=1`).
+  - `LLM returned empty content` with `finish=length`: a reasoning model spent
+    the whole `max_tokens` thinking (the AION router ignores
+    `chat_template_kwargs.enable_thinking`); the bridge caps it with
+    `thinking_token_budget` (`AION_DEEP_RESEARCH_THINKING_BUDGET`) and adds the
+    same amount to `max_tokens`, so even short calls have room to answer. On
+    long prompts the router ignores the budget; an empty `finish=length`
+    answer is then retried once with `AION_DEEP_RESEARCH_LENGTH_RETRY_TOKENS`
+    more. The warning logs `finish`, `reasoning_chars`, `max_tokens` and
+    `prompt_chars` to tell these cases apart.
+- **Report in the wrong layout** (price table, "Prezzo indicativo" under each
+  section on a topic that is not a purchase): the auto-detected category was
+  `product`. The classifier describes when each category applies and falls
+  back to the generic layout unless the reply names exactly one category
+  (`general` or an ambiguous reply → generic). The category is shown in the
+  report stats.
+- **Huge unformatted English text at the top of the report**: it was the
+  "Search" statistic filled with page text by a mis-parsed web_search row
+  (TOON `\"` escapes). Fixed in `src/runtime/toon_encode.py`; the stat now
+  only accepts short provider ids (`tavily`, `brave`, `searxng`). The "Model"
+  stat shows the model actually called (default LLM provider), not
+  `AION_MODEL`.
+- **The model calls `tool_search('trigger_research')` or says the tool is
+  missing**: the tools are resident whenever they are allowed; if they are
+  missing the profile has no connector and the chat is not in Deep Research
+  mode (see [Availability rules](#availability-rules)).
 
 ---
 

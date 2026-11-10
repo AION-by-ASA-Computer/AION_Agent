@@ -393,14 +393,14 @@ async def check_pii_capabilities(
     """
     unsupported: Dict[str, Any] = {"support_pii": False, "pii_tags": []}
     from src.runtime.llm_adapter import (
-        resolve_llm_endpoint,
+        resolve_llm_credentials,
         format_litellm_model_string,
     )
-    import os
 
-    llm_url, llm_model = resolve_llm_endpoint()
+    # Same URL/model/key triple as the chat agent (default DB provider, else
+    # .env), so the capabilities probe authenticates like the real requests.
+    llm_url, llm_model, api_key = resolve_llm_credentials()
     provider = "openai"
-    api_key = os.getenv("AION_LLM_API_KEY", "")
 
     logger.info(
         "PII STARTS HERE %s %s %s %s", llm_provider_name, llm_url, llm_model, provider

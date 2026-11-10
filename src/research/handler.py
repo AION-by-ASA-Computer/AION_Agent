@@ -407,9 +407,19 @@ class ResearchHandler:
             maximum=12,
         )
 
+        # Model label for the report stats: the model the bridge really calls
+        # (default DB provider, else .env), not the possibly stale AION_MODEL.
+        try:
+            from src.runtime.llm_adapter import resolve_llm_endpoint
+
+            _, model_label = resolve_llm_endpoint()
+            model_label = model_label.split("/", 1)[1] if model_label.startswith("openai/") else model_label
+        except Exception:
+            model_label = os.getenv("AION_MODEL", "")
+
         researcher = DeepResearcher(
             llm_endpoint="",
-            llm_model=os.getenv("AION_MODEL", ""),
+            llm_model=model_label,
             max_rounds=max_rounds,
             min_rounds=min(3, max_rounds),
             max_time=max_time,

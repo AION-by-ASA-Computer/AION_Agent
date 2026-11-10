@@ -44,8 +44,36 @@ def mnemos_readonly_tools() -> bool:
 
 
 def profile_wants_mnemos(profile) -> bool:
+    """True when the profile lists the ``mnemos`` native tool group.
+
+    The group gates *everything* Mnemos does for a turn, not only the
+    ``memory_*`` tools: wake-up injection of stored notes and post-turn
+    extraction are skipped too, so a profile without ``mnemos`` neither
+    reads nor writes long-term memory (see docs/memory/mnemos.md).
+    """
     groups = getattr(profile, "native_tool_groups", None) or []
     return "mnemos" in groups
+
+
+def profile_name_wants_mnemos(profile_name: Optional[str]) -> bool:
+    """Resolve ``profile_name`` (slug or display name) and apply :func:`profile_wants_mnemos`.
+
+    Used by the turn pipeline, which only carries the profile name. An unknown
+    or empty name returns True so callers outside a profile (benchmarks,
+    maintenance jobs) keep the historical always-on behaviour.
+    """
+    name = (profile_name or "").strip()
+    if not name:
+        return True
+    try:
+        from src.agent_profile import profile_manager
+
+        profile = profile_manager.get_profile(name)
+    except Exception:
+        return True
+    if profile is None:
+        return True
+    return profile_wants_mnemos(profile)
 
 
 def _run_async(coro) -> Any:

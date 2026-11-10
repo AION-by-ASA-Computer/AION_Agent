@@ -128,6 +128,17 @@ graph TD
 
 **Pre-chat dalla UI:** `POST /v1/chat/prepare` + polling `GET /v1/chat/prepare/status` riusano lo stesso pool (nessun respawn se il warm boot è già completato).
 
+### Un solo profilo attivo per sessione
+
+Una chat ha in ogni momento **un solo profilo attivo**; tool, MCP e skill non si mescolano tra profili.
+
+- **Prepare solo col profilo definitivo:** chat-ui chiama `/v1/chat/prepare` solo quando il profilo della conversazione è risolto (lista profili caricata + dettagli conversazione letti), mai con un default provvisorio.
+- **Cambio profilo nella stessa chat** (`get_agent` con un profilo diverso):
+  - la cache agenti scarta gli agenti della sessione costruiti per altri profili, insieme ai loro tool deferred (`tool_search` cerca solo nel pool `(sessione, profilo)`);
+  - `warm_session` rilascia **tutti** i worker session-scoped della chat, anche i server presenti in entrambi i profili: leggono il profilo da `AION_CURRENT_PROFILE_SLUG` allo spawn (allowlist di `skills_hub`, scope di `query_memory`, container sandbox) e vengono riavviati col profilo nuovo. Worker di altre chat e pool per utente non vengono toccati;
+  - un agente riusato dalla cache riallinea il contesto MCP della sessione al proprio profilo (lo usa lo skill gate).
+- **Esecuzione piani** senza profilo esplicito usa il profilo attivo della chat, non `aion_std`.
+
 ### Pool structure
 
 - **Legacy** (`AION_MCP_USER_POOL=0`): `(chat_session_id, server_name)` — un processo per chat.

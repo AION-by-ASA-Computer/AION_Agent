@@ -38,10 +38,18 @@ mcp = FastMCP("AION Skills Hub")
 
 
 def _profile_allowed_skill_names() -> list[str] | None:
-    """Limit search to skills on the active profile when slug is set on the MCP subprocess."""
+    """Skill allowlist of the active profile, or None when no profile is known.
+
+    The profile comes from ``AION_CURRENT_PROFILE_SLUG``, set by the backend
+    when it spawns this worker. The backend restarts the session's workers on
+    every profile switch (``MCPManager.warm_session``), so the env always names
+    the profile currently selected in the chat. ``conversations.profile_slug``
+    is only a fallback when the env is empty: it is written when the
+    conversation is created and can lag behind a later profile switch.
+    """
     slug = (os.getenv("AION_CURRENT_PROFILE_SLUG") or "").strip()
     session_id = os.getenv("AION_CHAT_SESSION_ID")
-    if session_id:
+    if session_id and not slug:
         import sqlite3
 
         db_path = "data/aion.db"
@@ -229,6 +237,7 @@ def skill_view(name: str, materialize: bool = True) -> str:
     if sid:
         try:
             from src.tools.skill_materialize import record_skill_viewed
+
             record_skill_viewed(sid, slug)
         except Exception as e:
             logger.warning("Failed to record skill viewed for %s: %s", slug, e)
@@ -513,4 +522,3 @@ if __name__ == "__main__":
             raise
 
     asyncio.run(main())
-

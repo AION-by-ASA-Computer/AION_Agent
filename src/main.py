@@ -881,6 +881,61 @@ _AGENT_CACHE_ENABLED = os.getenv("AION_AGENT_CACHE", "1").lower() in (
 )
 
 
+def _evict_other_profile_agents_locked(session_id: str, profile_slug: str) -> int:
+    """Drop cached agents of ``session_id`` built for a profile other than ``profile_slug``.
+
+    A chat session has exactly one active profile. Agents of another profile
+    left in the cache share per-session state with the active one (MCP pool
+    context read by the skill gate, MCP wrapper functions purged by
+    ``build_all_tools``), so tools, MCP servers and skills could mix between
+    profiles. Must be called with ``_AGENT_CACHE_LOCK`` held. Returns the
+    number of evicted entries.
+    """
+    prefix = f"{session_id}\0"
+    stale = [
+        key
+        for key in _AGENT_CACHE
+        if key.startswith(prefix) and key.split("\0", 2)[1] != profile_slug
+    ]
+    for key in stale:
+        _AGENT_CACHE.pop(key, None)
+    if stale:
+        from src.runtime.tool_exposure import clear_deferred_tools_of_other_profiles
+
+        clear_deferred_tools_of_other_profiles(session_id, profile_slug)
+        logger.info(
+            "get_agent: evicted %d cached agent(s) of other profiles session=%s "
+            "active_profile=%s",
+            len(stale),
+            session_id[:8] + "..." if len(session_id) > 8 else session_id,
+            profile_slug,
+        )
+    return len(stale)
+
+
+async def _realign_session_profile(
+    session_id: str, profile: Any, user_id: str, tenant_id: str
+) -> None:
+    """Point the session MCP context at ``profile`` when a cached agent is reused.
+
+    The skill gate and MCP pool read the profile from the session context set
+    by ``warm_session``; a cache hit skips the build (and the warm), so after
+    a profile switch the context could still name the previous profile.
+    """
+    sctx = mcp_manager.get_session_context(session_id)
+    if sctx is not None and (sctx.profile_slug or "") == profile.slug:
+        return
+    from src.runtime.tool_exposure import resident_mcp_servers
+
+    await mcp_manager.warm_session(
+        session_id,
+        resident_mcp_servers(profile.mcp_servers or []),
+        profile_slug=profile.slug,
+        user_id=user_id,
+        tenant_id=tenant_id,
+    )
+
+
 def clear_agent_cache() -> None:
     """Drop cached agents (e.g. after LLM provider or token limit changes)."""
     _AGENT_CACHE.clear()
@@ -951,8 +1006,14 @@ async def build_all_tools(
     profile,
     user_id: str = "default",
     timings: Optional[Dict[str, Any]] = None,
+    agent_mode: Optional[str] = None,
 ):
-    """Build tools: delegation legacy, tool nativi da registry, poi MCP."""
+    """Build tools: delegation legacy, tool nativi da registry, poi MCP.
+
+    ``agent_mode`` is the resolved agent mode of the agent being built; it only
+    affects the Deep Research tools, which Deep Research mode adds for every
+    profile (``merge_builtin_deep_research_tools``).
+    """
     from .runtime.orchestration_tools import (
         ORCHESTRATION_BUILTIN_SERVER,
         merge_builtin_orchestration_tools,
@@ -1064,7 +1125,9 @@ async def build_all_tools(
     merge_builtin_cron_tools(all_tools, session_id, user_id)
     from .runtime.deep_research_tools import merge_builtin_deep_research_tools
 
-    merge_builtin_deep_research_tools(all_tools, session_id, user_id, profile)
+    merge_builtin_deep_research_tools(
+        all_tools, session_id, user_id, profile, agent_mode=agent_mode
+    )
     from .runtime.sql_query_memory_tools import merge_builtin_sql_query_memory_tools
 
     merge_builtin_sql_query_memory_tools(all_tools, session_id, user_id, profile)
@@ -1194,6 +1257,12 @@ async def get_agent(
         ):
             resolved_agent_mode = env_default_mode
 
+    # Deep Research mode is honoured for every profile: build_all_tools adds
+    # trigger_research / manage_research in that mode even when the profile
+    # has no deep_research connector (see src/runtime/deep_research_tools.py).
+    # resolved_agent_mode is part of cache_key, so the normal-mode agent of the
+    # same session never inherits those tools.
+
     cache_key = (
         f"{session_id}\0{profile.slug}\0{profile_sig}\0{user_id}\0{tenant_id}"
         f"\0{gen_cache_sig}\0{skills_hash}\0{skill_prompt_mode}\0{critical_sig}"
@@ -1202,7 +1271,11 @@ async def get_agent(
     build_waiter: Optional[asyncio.Future] = None
     build_leader = False
     if _AGENT_CACHE_ENABLED:
+        cache_hit = None
         async with _AGENT_CACHE_LOCK:
+            # One active profile per session: forget agents of other profiles
+            # so nothing (tools, MCP context, skills) is shared with this one.
+            _evict_other_profile_agents_locked(session_id, profile.slug)
             hit = _AGENT_CACHE.get(cache_key)
             if hit is not None:
                 _AGENT_CACHE.move_to_end(cache_key)
@@ -1212,13 +1285,18 @@ async def get_agent(
                     profile.slug,
                     resolved_agent_mode,
                 )
-                return hit
-            build_waiter = _AGENT_BUILD_INFLIGHT.get(cache_key)
-            if build_waiter is None:
-                build_waiter = asyncio.get_running_loop().create_future()
-                _AGENT_BUILD_INFLIGHT[cache_key] = build_waiter
-                build_leader = True
+                cache_hit = hit
+            else:
+                build_waiter = _AGENT_BUILD_INFLIGHT.get(cache_key)
+                if build_waiter is None:
+                    build_waiter = asyncio.get_running_loop().create_future()
+                    _AGENT_BUILD_INFLIGHT[cache_key] = build_waiter
+                    build_leader = True
+        if cache_hit is not None:
+            await _realign_session_profile(session_id, profile, user_id, tenant_id)
+            return cache_hit
         if not build_leader:
+            assert build_waiter is not None
             logger.debug(
                 "get_agent: await in-flight build session=%s profile=%s",
                 session_id[:8] + "...",
@@ -1288,7 +1366,11 @@ async def _finish_get_agent_build(
     )
     phases["warm_ms"] = int(round((time.perf_counter() - t_warm) * 1000))
     tools = await build_all_tools(
-        session_id, profile, user_id=user_id, timings=build_timings
+        session_id,
+        profile,
+        user_id=user_id,
+        timings=build_timings,
+        agent_mode=resolved_agent_mode,
     )
 
     # 5. Plan Mode: rimuovi fisicamente i tool mutanti dalla lista passata al LLM.
@@ -1412,11 +1494,14 @@ async def _finish_get_agent_build(
     from src.runtime.llm_adapter import (
         normalize_litellm_provider,
         resolve_llm_adapter,
-        resolve_llm_endpoint,
+        resolve_llm_credentials,
         resolve_llm_timeout,
     )
 
-    llm_url, llm_model = resolve_llm_endpoint()
+    # URL, model AND key come from the same source (default DB provider, else
+    # .env): pairing the DB provider's URL/model with AION_LLM_API_KEY sent the
+    # wrong key to key-scoped routers (docs/configuration/llm-provider-precedence.md).
+    llm_url, llm_model, llm_api_key = resolve_llm_credentials()
     llm_adapter = resolve_llm_adapter()
     logger.info("LLM adapter: %s", llm_adapter)
     llm_timeout = resolve_llm_timeout()
@@ -1614,9 +1699,10 @@ async def _finish_get_agent_build(
 
     # Fallback: crea chat_generator dalla configurazione env se non giÃ  caricato dal DB
     if not provider_loaded:
-        api_key_secret = Secret.from_token(
-            os.getenv("AION_LLM_API_KEY", "placeholder-token")
-        )
+        # Key resolved together with llm_url/llm_model above: the DB default
+        # provider's key when that provider is in use, AION_LLM_API_KEY only for
+        # the pure .env configuration.
+        api_key_secret = Secret.from_token(llm_api_key or "placeholder-token")
         chat_generator = LiteLLMChatGeneratorWrapper(
             api_base_url=llm_url,
             model=llm_model,
@@ -1641,7 +1727,10 @@ async def _finish_get_agent_build(
     deferred_pool: list = []
     if defer_tool_groups_enabled():
         tools, deferred_pool = partition_resident_tools(tools)
-        remember_deferred_tools(session_id, deferred_pool)
+        # Pool scoped to this profile: the same chat session may also build
+        # agents for other profiles (default warm-up), whose deferred tools
+        # must not become loadable here.
+        remember_deferred_tools(session_id, deferred_pool, profile.slug)
         tools.append(
             make_tool_search_tool(
                 session_id=session_id,
@@ -1907,6 +1996,10 @@ async def _finish_get_agent_build(
     )
     if deferred_pool:
         attach_deferred_pool(agent, deferred_pool)
+        # refresh_agent_turn_context rebuilds the system prompt every turn from
+        # the profile: keep the deferred-name catalog so it is re-appended and
+        # the model keeps seeing the same tool names on every turn.
+        agent._aion_deferred_catalog = format_deferred_catalog(deferred_pool)
     phases["agent_ms"] = int(round((time.perf_counter() - t_agent) * 1000))
 
     pair = (agent, profile.slug)

@@ -286,8 +286,19 @@ def parse_web_tool_payload(raw: str, tool: str) -> Optional[Dict[str, Any]]:
     return data if isinstance(data, dict) else None
 
 
+# Backslash escapes written by _escape_toon_string inside quoted cells.
+_TOON_ESCAPES = {"n": "\n", "t": "\t", "r": "\r", '"': '"', "\\": "\\"}
+
+
 def _consume_csv_row(buf: str, field_count: int) -> Optional[tuple[List[str], int]]:
-    """Parse one tabular TOON row from buf; supports quoted fields spanning newlines."""
+    """Parse one tabular TOON row from buf; supports quoted fields spanning newlines.
+
+    Inside quotes both the CSV ``""`` form and the backslash escapes produced by
+    ``_escape_toon_string`` (``\\"``, ``\\\\``) are decoded. Treating ``\\"`` as a
+    closing quote shifted the columns of web_search rows whose snippet holds a
+    quote, so page text landed in the ``provider`` cell and then in the Deep
+    Research report's "Search" statistic.
+    """
     cells: List[str] = []
     cur = ""
     in_quotes = False
@@ -295,6 +306,10 @@ def _consume_csv_row(buf: str, field_count: int) -> Optional[tuple[List[str], in
     n = len(buf)
     while i < n:
         ch = buf[i]
+        if ch == "\\" and in_quotes and i + 1 < n:
+            cur += _TOON_ESCAPES.get(buf[i + 1], buf[i + 1])
+            i += 2
+            continue
         if ch == '"':
             if in_quotes and i + 1 < n and buf[i + 1] == '"':
                 cur += '"'
@@ -312,6 +327,10 @@ def _consume_csv_row(buf: str, field_count: int) -> Optional[tuple[List[str], in
                 in_q = False
                 while i < n:
                     c = buf[i]
+                    if c == "\\" and in_q and i + 1 < n:
+                        last += _TOON_ESCAPES.get(buf[i + 1], buf[i + 1])
+                        i += 2
+                        continue
                     if c == '"':
                         if in_q and i + 1 < n and buf[i + 1] == '"':
                             last += '"'

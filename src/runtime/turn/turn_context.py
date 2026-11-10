@@ -195,12 +195,19 @@ async def build_turn_context(
         _os_qm.getenv("AION_DEFAULT_TENANT_ID") or "default"
     ).strip() or "default"
 
-    wake = await ltm_orchestrator.wake_up(
-        pipeline.session_id,
-        user_id=pipeline.user_id,
-        tenant_id=_tenant_qm,
-        active_project=_qm_project,
-    )
+    # Mnemos wake-up only for profiles that list the ``mnemos`` native group:
+    # removing the group from a profile must stop it from seeing stored notes,
+    # not just hide the memory_* tools.
+    from src.runtime.mnemos_tools import profile_wants_mnemos
+
+    wake = ""
+    if _prof_row is None or profile_wants_mnemos(_prof_row):
+        wake = await ltm_orchestrator.wake_up(
+            pipeline.session_id,
+            user_id=pipeline.user_id,
+            tenant_id=_tenant_qm,
+            active_project=_qm_project,
+        )
 
     # ------------------------------------------------------------------
     # 3. STM window
