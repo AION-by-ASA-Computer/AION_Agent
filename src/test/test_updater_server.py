@@ -27,14 +27,21 @@ server = importlib.util.module_from_spec(_spec)
 assert _spec.loader is not None
 _spec.loader.exec_module(server)
 
-PLAN = {"current": "1.6.2", "target": "1.7.0", "chain": ["1.6.3", "1.7.0"], "mode": "github",
-        "update_available": True}
+PLAN = {
+    "current": "1.6.2",
+    "target": "1.7.0",
+    "chain": ["1.6.3", "1.7.0"],
+    "mode": "github",
+    "update_available": True,
+}
 
 
 class FakeRunner:
     """Stand-in for subprocess.run of `install.sh upgrade --plan`."""
 
-    def __init__(self, plan: Dict[str, Any] | None = None, returncode: int = 0, stderr: str = ""):
+    def __init__(
+        self, plan: Dict[str, Any] | None = None, returncode: int = 0, stderr: str = ""
+    ):
         self.plan = PLAN if plan is None else plan
         self.returncode = returncode
         self.stderr = stderr
@@ -42,8 +49,12 @@ class FakeRunner:
 
     def __call__(self, args, **kwargs):
         self.calls.append({"args": args, **kwargs})
-        stdout = "noise\n" + json.dumps(self.plan) + "\n" if self.returncode == 0 else ""
-        return subprocess.CompletedProcess(args, self.returncode, stdout=stdout, stderr=self.stderr)
+        stdout = (
+            "noise\n" + json.dumps(self.plan) + "\n" if self.returncode == 0 else ""
+        )
+        return subprocess.CompletedProcess(
+            args, self.returncode, stdout=stdout, stderr=self.stderr
+        )
 
 
 class FakeProc:
@@ -155,7 +166,12 @@ def test_start_spawns_install_sh_and_writes_status(install_dir):
     assert status["chain"] == ["1.6.3", "1.7.0"]
     assert status["requested_by"] == "alice"
     call = popen.calls[0]
-    assert call["args"][2:] == ["upgrade", "--yes", "--progress-file", str(up.status_path)]
+    assert call["args"][2:] == [
+        "upgrade",
+        "--yes",
+        "--progress-file",
+        str(up.status_path),
+    ]
     assert call["cwd"] == str(install_dir)
     assert call["start_new_session"] is True
     assert Path(status["log_file"]).parent == up.logs_dir
@@ -178,7 +194,9 @@ def test_double_start_is_409(install_dir):
 def test_start_without_chain_is_404(install_dir):
     """Already on the latest version: 404 no_update and nothing spawned."""
     popen = FakePopen()
-    up = make_updater(install_dir, runner=FakeRunner(plan={**PLAN, "chain": []}), popen=popen)
+    up = make_updater(
+        install_dir, runner=FakeRunner(plan={**PLAN, "chain": []}), popen=popen
+    )
     with pytest.raises(server.UpdaterError) as exc:
         up.start()
     assert (exc.value.status, exc.value.code) == (404, "no_update")
@@ -189,15 +207,24 @@ def test_lock_from_other_host_blocks_until_stale(install_dir):
     """A lock written by another host (e.g. manual run) blocks until it is stale."""
     now = 10_000.0
     lock = install_dir / "data" / ".upgrade.lock"
-    lock.write_text(json.dumps({"pid": 1, "hostname": "some-host", "started_at": int(now) - 60}))
+    lock.write_text(
+        json.dumps({"pid": 1, "hostname": "some-host", "started_at": int(now) - 60})
+    )
     popen = FakePopen()
     up = make_updater(install_dir, popen=popen, clock=lambda: now)
     with pytest.raises(server.UpdaterError) as exc:
         up.start()
     assert exc.value.code == "upgrade_locked"
 
-    lock.write_text(json.dumps({"pid": 1, "hostname": "some-host",
-                                "started_at": int(now) - server.STALE_LOCK_SEC - 1}))
+    lock.write_text(
+        json.dumps(
+            {
+                "pid": 1,
+                "hostname": "some-host",
+                "started_at": int(now) - server.STALE_LOCK_SEC - 1,
+            }
+        )
+    )
     up.start()
     assert len(popen.calls) == 1
     popen.procs[0].finish(0)
@@ -206,8 +233,15 @@ def test_lock_from_other_host_blocks_until_stale(install_dir):
 def test_lock_from_this_host_with_dead_pid_is_ignored(install_dir):
     """A lock left by this container whose PID is gone does not block a retry."""
     lock = install_dir / "data" / ".upgrade.lock"
-    lock.write_text(json.dumps({"pid": 999_999_999, "hostname": socket.gethostname(),
-                                "started_at": int(time.time())}))
+    lock.write_text(
+        json.dumps(
+            {
+                "pid": 999_999_999,
+                "hostname": socket.gethostname(),
+                "started_at": int(time.time()),
+            }
+        )
+    )
     popen = FakePopen()
     make_updater(install_dir, popen=popen).start()
     assert len(popen.calls) == 1
@@ -289,7 +323,9 @@ def http_server(install_dir):
     servers = []
 
     def start(token: str):
-        httpd = server.ThreadingHTTPServer(("127.0.0.1", 0), server.make_handler(up, token))
+        httpd = server.ThreadingHTTPServer(
+            ("127.0.0.1", 0), server.make_handler(up, token)
+        )
         threading.Thread(target=httpd.serve_forever, daemon=True).start()
         servers.append(httpd)
         return f"http://127.0.0.1:{httpd.server_address[1]}"
@@ -302,7 +338,9 @@ def http_server(install_dir):
         httpd.server_close()
 
 
-def _request(url: str, method: str = "GET", token: str | None = None, body: dict | None = None):
+def _request(
+    url: str, method: str = "GET", token: str | None = None, body: dict | None = None
+):
     headers = {"Content-Type": "application/json"}
     if token is not None:
         headers["Authorization"] = f"Bearer {token}"
@@ -345,7 +383,9 @@ def test_http_upgrade_flow(http_server):
     """POST /upgrade → 202 with requested_by; a second POST → 409; /status shows the run."""
     start, _, popen = http_server
     base = start("tok")
-    status, body = _request(f"{base}/upgrade", method="POST", token="tok", body={"requested_by": "alice"})
+    status, body = _request(
+        f"{base}/upgrade", method="POST", token="tok", body={"requested_by": "alice"}
+    )
     assert status == 202
     assert body["requested_by"] == "alice"
     status, body = _request(f"{base}/upgrade", method="POST", token="tok", body={})

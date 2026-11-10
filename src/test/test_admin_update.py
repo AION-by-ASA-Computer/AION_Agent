@@ -103,7 +103,9 @@ def test_status_unsupported_when_unreachable(client, sidecar):
 
 def test_status_proxied_with_bearer(client, sidecar):
     """Status is proxied as-is and the shared token is sent as Bearer."""
-    state = sidecar(lambda r: httpx.Response(200, json={"supported": True, "state": "idle"}))
+    state = sidecar(
+        lambda r: httpx.Response(200, json={"supported": True, "state": "idle"})
+    )
     res = client.get("/admin/update/status")
     assert res.json() == {"supported": True, "state": "idle"}
     req = state["seen"][0]
@@ -113,7 +115,12 @@ def test_status_proxied_with_bearer(client, sidecar):
 
 def test_plan_adds_release_links_and_refresh(client, sidecar):
     """Plan gets per-hop release links; `local` has none; refresh is forwarded."""
-    plan = {**PLAN, "chain": ["1.7.0", "local"], "target": "local", "mode": "hybrid-local"}
+    plan = {
+        **PLAN,
+        "chain": ["1.7.0", "local"],
+        "target": "local",
+        "mode": "hybrid-local",
+    }
     state = sidecar(lambda r: httpx.Response(200, json=plan))
     res = client.get("/admin/update/plan?refresh=true")
     assert res.status_code == 200
@@ -160,9 +167,13 @@ def test_start_proxies_and_audits(client, sidecar, audit_calls):
         (500, "internal", 502),
     ],
 )
-def test_start_errors_propagated(client, sidecar, audit_calls, sidecar_status, code, expected_status):
+def test_start_errors_propagated(
+    client, sidecar, audit_calls, sidecar_status, code, expected_status
+):
     """409/404 pass through, other sidecar errors become 502; no audit on failure."""
-    sidecar(lambda r: httpx.Response(sidecar_status, json={"error": code, "detail": "msg"}))
+    sidecar(
+        lambda r: httpx.Response(sidecar_status, json={"error": code, "detail": "msg"})
+    )
     res = client.post("/admin/update/start")
     assert res.status_code == expected_status
     assert res.json()["detail"] == {"code": code, "message": "msg"}

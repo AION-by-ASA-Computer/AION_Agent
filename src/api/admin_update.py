@@ -30,7 +30,9 @@ logger = logging.getLogger("aion.api.admin_update")
 router = APIRouter(prefix="/admin/update", tags=["admin_update"])
 
 # Public release page linked from the confirmation dialog for every hop.
-_RELEASE_URL = "https://github.com/AION-by-ASA-Computer/AION_Agent/releases/tag/v{version}"
+_RELEASE_URL = (
+    "https://github.com/AION-by-ASA-Computer/AION_Agent/releases/tag/v{version}"
+)
 _SEMVER_RE = re.compile(r"^\d+\.\d+\.\d+$")
 
 # Timeouts (seconds). /plan may run `install.sh upgrade --plan` (GitHub API
@@ -74,7 +76,11 @@ def updater_configured() -> bool:
 
 
 async def _call_updater(
-    method: str, path: str, *, timeout: float, json_body: Optional[Dict[str, Any]] = None
+    method: str,
+    path: str,
+    *,
+    timeout: float,
+    json_body: Optional[Dict[str, Any]] = None,
 ) -> httpx.Response:
     """Send one authenticated request to the sidecar.
 
@@ -104,7 +110,11 @@ def _with_release_links(plan: Dict[str, Any]) -> Dict[str, Any]:
     """
     hops = []
     for version in plan.get("chain") or []:
-        url = _RELEASE_URL.format(version=version) if _SEMVER_RE.match(str(version)) else None
+        url = (
+            _RELEASE_URL.format(version=version)
+            if _SEMVER_RE.match(str(version))
+            else None
+        )
         hops.append({"version": version, "release_url": url})
     return {**plan, "hops": hops}
 
