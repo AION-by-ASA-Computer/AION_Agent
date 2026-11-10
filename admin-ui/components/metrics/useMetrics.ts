@@ -26,7 +26,8 @@ export function useMetrics() {
       .then((r) => (r.ok ? r.json() : Promise.reject(r)))
       .then((d) => Array.isArray(d) && setProfiles(d))
       .catch(() => {});
-    apiFetch(`${apiBase()}/admin/users`)
+    // include_service: integrations generate traffic too, so they are filterable here.
+    apiFetch(`${apiBase()}/admin/users?include_service=1`)
       .then((r) => (r.ok ? r.json() : Promise.reject(r)))
       .then((d) => d && Array.isArray(d.users) && setUsers(d.users))
       .catch(() => {});

@@ -87,6 +87,9 @@ async def get_login_mode(
                 .where(
                     User.tenant_id == tenant,
                     User.sso_migration_exempt == True,  # noqa: E712
+                    # Service accounts are exempt by construction: not people
+                    # the admin chose to exclude, so not counted here.
+                    User.account_type != "service",
                 )
             )
             exempt = (await session.execute(exempt_q)).scalar_one()
@@ -295,6 +298,7 @@ async def list_migration_users(
             stmt = select(User).where(
                 User.tenant_id == tenant,
                 User.sso_migration_exempt == True,  # noqa: E712
+                User.account_type != "service",
             )
         elif status == "migrated" and provider:
             stmt = select(User).where(
@@ -428,6 +432,9 @@ async def set_user_exempt(
         user = await session.get(User, user_id)
         if not user or user.tenant_id != tenant:
             raise HTTPException(404, detail="Utente non trovato")
+        # Service accounts stay exempt: they have nothing to link to SSO.
+        if getattr(user, "account_type", "human") == "service":
+            raise HTTPException(409, detail={"code": "service_account_always_exempt"})
         user.sso_migration_exempt = body.exempt
         await session.commit()
 

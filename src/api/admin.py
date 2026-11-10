@@ -71,6 +71,7 @@ from .admin_diagnostics import router as diagnostics_router
 from .admin_sso import router as admin_sso_router
 from .admin_whatsapp import router as admin_whatsapp_router
 from .admin_stt import router as admin_stt_router
+from .admin_service_accounts import router as admin_service_accounts_router
 from ..runtime.redis_client import redis_status
 from ..data.engine import get_async_session_maker
 from ..mcp_connector_catalog import (
@@ -82,6 +83,11 @@ from ..data.user_password import (
     create_invited_user,
 )
 from ..data import api_keys as api_keys_db
+from ..data.service_accounts import (
+    ACCOUNT_TYPE_SERVICE,
+    is_reserved_identifier,
+    is_service,
+)
 from ..data.models import (
     Conversation,
     Message,
@@ -300,6 +306,8 @@ router.include_router(diagnostics_router)
 router.include_router(admin_sso_router)
 router.include_router(admin_whatsapp_router)
 router.include_router(admin_stt_router)
+# /admin/service-accounts: non-human accounts used by integrations via API keys.
+router.include_router(admin_service_accounts_router)
 
 
 def _project_root() -> Path:
@@ -4009,8 +4017,13 @@ def _confirmed_on(idents, provider: Optional[str], since) -> bool:
 
 
 @router.get("/users")
-async def list_users():
-    """List all users in the unified database."""
+async def list_users(include_service: bool = False):
+    """List users in the unified database.
+
+    Service accounts are hidden by default (they have their own page and
+    endpoints under ``/admin/service-accounts``); pickers that must also
+    offer them (e.g. SQL project members) pass ``?include_service=1``.
+    """
     from ..data.models import User, UserSsoIdentity
     from ..data.user_password import get_roles
     from ..auth.sso.login_mode import get_login_settings
@@ -4026,6 +4039,8 @@ async def list_users():
     links = await active_links_by_user(tenant)
     async with get_async_session_maker()() as session:
         q = select(User).order_by(User.created_at.desc())
+        if not include_service:
+            q = q.where(User.account_type != ACCOUNT_TYPE_SERVICE)
         rows = (await session.execute(q)).scalars().all()
         active_keys = await api_keys_db.count_active_by_user(session)
         identities: Dict[str, list] = {}
@@ -4097,6 +4112,7 @@ async def list_users():
                     "api_keys_active": active_keys.get(r.id, 0),
                     "created_at": r.created_at,
                     "last_active_at": r.last_active_at,
+                    "account_type": r.account_type or "human",
                     **auth_info(r),
                 }
                 for r in rows
@@ -4122,6 +4138,10 @@ async def create_user(
     from ..notifications.smtp_settings import smtp_configured
     from .public_urls import chat_base_url
 
+    # The "svc-" prefix is reserved for service accounts, so an identifier
+    # always tells which kind of account it is (and LTM gating can rely on it).
+    if is_reserved_identifier(body.identifier):
+        raise HTTPException(status_code=422, detail={"code": "identifier_reserved"})
     # Con SSO attivo gli account nascono solo al primo login SSO
     # (vedi signup policy): niente nuovi utenti con password.
     settings = await get_login_settings(body.tenant_id or "default")
@@ -4284,6 +4304,13 @@ async def update_user(
         u = await session.get(User, user_id)
         if not u:
             raise HTTPException(status_code=404, detail="User not found")
+        # Service accounts must never get roles, email or API-key toggles from
+        # the people form: they are edited only via /admin/service-accounts.
+        if is_service(u):
+            raise HTTPException(
+                status_code=409,
+                detail={"code": "service_account_use_dedicated_endpoint"},
+            )
 
         if (
             body.roles is not None

@@ -21,6 +21,21 @@ def sanitize_id(part: str) -> str:
     return s[:80] or "default"
 
 
+async def _ltm_allowed_for(user_id: Optional[str]) -> bool:
+    """False only for service accounts whose admin left LTM disabled.
+
+    Human users always return True (global ``AION_LTM_*`` switches still apply).
+    See ``src/data/service_accounts.service_ltm_enabled``.
+    """
+    try:
+        from src.data.service_accounts import service_ltm_enabled
+
+        return (await service_ltm_enabled(user_id)) is not False
+    except Exception as e:  # pragma: no cover - never block a turn on this check
+        logger.debug("service LTM check skipped: %s", e)
+        return True
+
+
 class LTMOrchestrator:
     """Long-term memory via AION Mnemos (native SQLite backend)."""
 
@@ -37,6 +52,9 @@ class LTMOrchestrator:
     ) -> str:
         tid = tenant_id or default_tenant_id()
         project = (active_project or "").strip() or None
+        # Service accounts with LTM off have nothing stored: skip the lookup.
+        if not await _ltm_allowed_for(user_id):
+            return ""
         try:
             text = await mnemos_orchestrator.wake_up(
                 tenant_id=tid,
@@ -87,6 +105,11 @@ class LTMOrchestrator:
     ) -> None:
         _ = profile_slug
         if os.getenv("AION_LTM_EXTRACT", "1").lower() in ("0", "false", "no"):
+            return
+        # Per-account switch: service accounts extract only when the admin
+        # enabled LTM for them (automation traffic would flood the memory).
+        # Also covers ``precompact_flush`` (batch mode).
+        if not await _ltm_allowed_for(user_id):
             return
         system = self._extraction_skill_text()
         if not system:

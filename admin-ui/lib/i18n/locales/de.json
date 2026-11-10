@@ -33,7 +33,8 @@
     "theme_light": "Zum hellen Design wechseln",
     "theme_dark": "Zum dunklen Design wechseln",
     "whatsapp": "WhatsApp",
-    "telegram": "Telegram"
+    "telegram": "Telegram",
+    "service_accounts": "Dienstkonten"
   },
   "admin_dashboard": {
     "title": "Übersicht",
@@ -2645,6 +2646,177 @@
       "bot_owner_reassigned": "Eigentümer neu zugewiesen",
       "quota_changed": "Kontingent geändert",
       "user_purged": "AION-Nutzer gelöscht"
+    }
+  },
+  "admin_service_accounts": {
+    "title": "Dienstkonten",
+    "subtitle": "Nicht-menschliche Konten für Integrationen und Skripte. Sie melden sich nur mit hier erstellten API-Schlüsseln an, und jeder Schlüssel läuft ab.",
+    "add": "Neues Dienstkonto",
+    "search": "Dienstkonten suchen…",
+    "loading": "Dienstkonten werden geladen…",
+    "error": "Die Dienstkonten konnten nicht geladen werden.",
+    "retry": "Erneut versuchen",
+    "never_used": "Nie verwendet",
+    "count_one": "{{count}} Dienstkonto",
+    "count_other": "{{count}} Dienstkonten",
+    "count_filtered": "{{shown}} von {{total}}",
+    "keys_badge_title": "{{active}} aktive API-Schlüssel von {{max}} erlaubten",
+    "cols": {
+      "account": "Konto",
+      "status": "Status",
+      "keys": "Schlüssel",
+      "last_used": "Zuletzt verwendet",
+      "memory": "Gedächtnis",
+      "actions": "Aktionen"
+    },
+    "filter": {
+      "aria": "Nach {{col}} filtern",
+      "clear": "Filter entfernen",
+      "search": "Suchen…",
+      "all": "Alle"
+    },
+    "status": {
+      "active": "Aktiv",
+      "disabled": "Deaktiviert"
+    },
+    "ltm": {
+      "on": "An",
+      "off": "Aus"
+    },
+    "row": {
+      "keys": "API-Schlüssel von {{name}}",
+      "profiles": "Profilzugriff für {{name}}",
+      "edit": "{{name}} bearbeiten",
+      "delete": "{{name}} löschen",
+      "enable": "{{name}} aktivieren",
+      "disable": "{{name}} deaktivieren"
+    },
+    "empty": {
+      "title": "Noch keine Dienstkonten",
+      "body": "Ein Dienstkonto lässt eine Integration, ein Skript oder einen geplanten Job mit AION sprechen, ohne dass eine Person dahintersteht.",
+      "point_keys": "Es hat kein Passwort, kein SSO und keine 2FA: Es authentifiziert sich nur mit API-Schlüsseln, und jeder Schlüssel hat ein Ablaufdatum.",
+      "point_scopes": "Jeder Schlüssel hat nur die Berechtigungen, die du vergibst (Chat, Unterhaltungen, Dateien), und kann jederzeit widerrufen werden.",
+      "point_memory": "Das Langzeitgedächtnis ist standardmäßig aus, damit automatisierter Verkehr es nicht füllt.",
+      "search": "Kein Dienstkonto entspricht diesen Filtern.",
+      "clear_filters": "Filter entfernen"
+    },
+    "form": {
+      "title_new": "Neues Dienstkonto",
+      "title_edit": "Dienstkonto bearbeiten",
+      "optional": "Optional",
+      "display_name": "Name",
+      "display_name_placeholder": "Nächtlicher Bericht",
+      "slug": "Kennung",
+      "slug_hint": "Kleinbuchstaben, Ziffern, Punkte, Binde- und Unterstriche (2-61 Zeichen). Kann später nicht geändert werden.",
+      "slug_invalid": "Verwende 2-61 Kleinbuchstaben, Ziffern, „.“, „-“ oder „_“, beginnend mit einem Buchstaben oder einer Ziffer.",
+      "description": "Beschreibung",
+      "description_placeholder": "Was dieses Konto verwendet und wer dafür verantwortlich ist",
+      "description_hint": "Hilft anderen Admins zu verstehen, wofür das Konto da ist.",
+      "ltm": "Langzeitgedächtnis",
+      "ltm_hint": "Lässt AION sich Fakten über die Unterhaltungen dieses Kontos hinweg merken. Für Integrationen meist nicht nötig.",
+      "keys_title": "API-Schlüssel",
+      "keys_description": "Grenzen für die Schlüssel dieses Kontos. Jeder Schlüssel läuft ab.",
+      "max_keys": "Erlaubte aktive Schlüssel",
+      "max_days": "Maximale Schlüssellaufzeit (Tage)",
+      "range_hint": "Von {{min}} bis {{max}}",
+      "range_error": "Gib eine ganze Zahl von {{min}} bis {{max}} ein",
+      "limits_existing": "Neue Grenzen gelten für ab jetzt erstellte Schlüssel; bestehende behalten ihr Ablaufdatum.",
+      "cancel": "Abbrechen",
+      "save": "Speichern",
+      "create": "Erstellen",
+      "saving": "Wird gespeichert…"
+    },
+    "keys": {
+      "title": "API-Schlüssel · {{name}}",
+      "close": "Schließen",
+      "policy": "{{active}} von {{max}} aktiven Schlüsseln · je bis zu {{days}} Tage",
+      "new": "Neuer Schlüssel",
+      "account_disabled": "Dieses Konto ist deaktiviert: Seine Schlüssel funktionieren nicht, und neue können erst nach der Reaktivierung erstellt werden.",
+      "quota_full": "Dieses Konto hat bereits {{max}} aktive Schlüssel. Widerrufe einen oder erhöhe die Grenze, um einen weiteren zu erstellen.",
+      "error": "Die Schlüssel konnten nicht geladen werden.",
+      "empty_title": "Noch keine Schlüssel",
+      "empty_body": "Erstelle einen Schlüssel, damit sich die Integration authentifizieren kann. Der vollständige Schlüssel wird nur einmal angezeigt.",
+      "status": {
+        "active": "Aktiv",
+        "expired": "Abgelaufen",
+        "revoked": "Widerrufen"
+      },
+      "revoke": "Widerrufen",
+      "revoke_confirm": "Jetzt widerrufen? Aufrufe damit schlagen fehl.",
+      "revoke_aria": "{{name}} widerrufen",
+      "created_on": "Erstellt am {{date}}",
+      "expires_on": "Läuft ab am {{date}}",
+      "expired_on": "Abgelaufen am {{date}}",
+      "revoked_on": "Widerrufen am {{date}}",
+      "last_used": "Zuletzt verwendet {{date}}",
+      "never_used": "Nie verwendet",
+      "name": "Schlüsselname",
+      "name_hint": "Wo der Schlüssel verwendet wird, z. B. Server- oder Jobname.",
+      "name_placeholder": "report-server",
+      "days": "Läuft ab in (Tagen)",
+      "days_hint": "Bis zu {{max}} · am {{date}}",
+      "scopes": "Berechtigungen",
+      "scopes_required": "Wähle mindestens eine Berechtigung.",
+      "create": "Schlüssel erstellen"
+    },
+    "new_key": {
+      "title": "Kopiere deinen neuen API-Schlüssel",
+      "body": "Nur jetzt wird der vollständige Schlüssel angezeigt. Bewahre ihn sicher auf, etwa in einem Secrets-Manager.",
+      "usage": "Sende ihn als",
+      "usage_or": "oder im Header",
+      "once": "Er wird nicht erneut angezeigt.",
+      "copy": "Schlüssel kopieren",
+      "copied": "Kopiert",
+      "done": "Ich habe ihn gespeichert"
+    },
+    "scopes": {
+      "chat": "Mit dem Agenten chatten",
+      "conversations_read": "Unterhaltungen lesen",
+      "conversations_write": "Unterhaltungen verwalten",
+      "files_read": "Dateien lesen",
+      "files_write": "Dateien hochladen"
+    },
+    "errors": {
+      "user_exists": "{{identifier}} existiert bereits. Wähle eine andere Kennung.",
+      "invalid_scopes": "Eine oder mehrere Berechtigungen sind für dieses Konto nicht erlaubt.",
+      "invalid_expiration": "Die Laufzeit muss zwischen 1 und {{days}} Tagen liegen.",
+      "api_key_quota_exceeded": "Dieses Konto hat bereits {{max}} aktive Schlüssel."
+    },
+    "profiles": {
+      "title": "Profilzugriff",
+      "body": "Wähle, welche Profile {{name}} verwenden darf.",
+      "hint": "Ohne Auswahl kann das Konto alle Profile verwenden.",
+      "clear": "Auswahl aufheben",
+      "selected": "{{count}} ausgewählt",
+      "all": "Alle Profile",
+      "none": "Es gibt noch keine Profile.",
+      "cancel": "Abbrechen",
+      "save": "Speichern",
+      "saving": "Wird gespeichert…"
+    },
+    "delete": {
+      "title": "Dieses Dienstkonto löschen?",
+      "body": "{{name}} und alle seine API-Schlüssel werden endgültig entfernt. Integrationen, die es nutzen, funktionieren dann nicht mehr. Das kann nicht rückgängig gemacht werden.",
+      "confirm_label": "Gib {{name}} zur Bestätigung ein",
+      "cancel": "Abbrechen",
+      "confirm": "Löschen",
+      "deleting": "Wird gelöscht…"
+    },
+    "toast": {
+      "load_failed": "Dienstkonten konnten nicht geladen werden: {{error}}",
+      "save_failed": "Speichern fehlgeschlagen: {{error}}",
+      "delete_failed": "Löschen fehlgeschlagen: {{error}}",
+      "profiles_load_failed": "Profilzugriff konnte nicht geladen werden: {{error}}",
+      "profiles_saved": "Profilzugriff gespeichert",
+      "created": "Dienstkonto erstellt. Erstelle jetzt einen API-Schlüssel.",
+      "updated": "Dienstkonto aktualisiert",
+      "deleted": "Dienstkonto gelöscht",
+      "enabled": "{{name}} aktiviert",
+      "disabled": "{{name}} deaktiviert: Seine Schlüssel funktionieren nicht mehr",
+      "keys_load_failed": "Schlüssel konnten nicht geladen werden: {{error}}",
+      "key_create_failed": "Schlüssel konnte nicht erstellt werden: {{error}}",
+      "key_revoked": "Schlüssel „{{name}}“ widerrufen",
+      "key_revoke_failed": "Schlüssel konnte nicht widerrufen werden: {{error}}"
     }
   }
 }

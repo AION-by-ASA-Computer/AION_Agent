@@ -381,6 +381,17 @@ Admin-toggled (`PUT /admin/auth/2fa`), applies only to the password login while 
 (`src/api/auth_mfa.py`, logic in `src/auth/mfa/totp.py`). Recovery: admin reset, `python -m src.auth.mfa reset <user>`
 or `AION_2FA_FORCE_DISABLE=1`. See `docs/security/two-factor-auth.md`.
 
+### Service accounts
+
+Non-human accounts for integrations: `users` rows with `account_type='service'`,
+identifier `svc-<slug>` (prefix reserved), managed only by admins via
+`/admin/service-accounts` (`src/api/admin_service_accounts.py`, data helpers in
+`src/data/service_accounts.py`). They authenticate only with admin-created API keys
+(user scopes, mandatory expiry ≤ 365 days); password/SSO/chat tokens are refused,
+`disabled_at` rejects keys (`api_key_owner_disabled`), LTM is off unless
+`metadata.service.ltm_enabled`. `GET /admin/users` hides them unless
+`?include_service=1`. See `docs/security/service-accounts.md`.
+
 ### WhatsApp channel
 
 Employees chat with AION from WhatsApp via Meta Cloud API (`src/channels/whatsapp/`,

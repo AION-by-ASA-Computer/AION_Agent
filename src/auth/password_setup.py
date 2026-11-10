@@ -163,6 +163,9 @@ async def issue_setup_links(
             user = await session.get(User, uid)
             if not user or user.tenant_id != tenant_id:
                 continue
+            # Service accounts never get a password (API keys only).
+            if getattr(user, "account_type", "human") == "service":
+                continue
             info = {
                 "user_id": user.id,
                 "identifier": user.identifier,
@@ -278,6 +281,9 @@ async def issue_temp_passwords(
         for uid in user_ids:
             user = await session.get(User, uid)
             if not user or user.tenant_id != tenant_id:
+                continue
+            # Service accounts never get a password (API keys only).
+            if getattr(user, "account_type", "human") == "service":
                 continue
             await session.execute(
                 update(PasswordSetupToken)
@@ -494,6 +500,9 @@ async def find_user_for_reset(
             user = by_email[0] if len(by_email) == 1 else None
         if user is not None and await _user_signs_in_with_sso(session, user):
             return None
+        # "Forgot password" never applies to service accounts.
+        if user is not None and getattr(user, "account_type", "human") == "service":
+            return None
         return user
 
 
@@ -502,6 +511,9 @@ async def user_link_block_reason(
 ) -> Optional[str]:
     """Motivo per cui non si puo' inviare un link (o, con ``needs_email=False``,
     emettere una password temporanea) all'utente, o None."""
+    # Service accounts authenticate only with admin-issued API keys.
+    if getattr(user, "account_type", "human") == "service":
+        return "service_account_no_password"
     if needs_email and not (user.email or "").strip():
         return "user_email_missing"
     async with get_async_session_maker()() as session:

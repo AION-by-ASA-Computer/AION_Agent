@@ -8,7 +8,9 @@ description: Per-user API keys created from chat-ui settings, admin policy, vali
 
 An API key lets a script, an automation (n8n, SDK, cron outside AION) or another service call AION **on behalf of one user**. Each key belongs to exactly one user and acts **as that user**: same conversations, same allowed profiles, never more. On top of that the key is limited by its own **scopes**: it can reach only the endpoints that explicitly accept one of them (deny by default).
 
-Keys are created by each user from **chat-ui → Settings → API keys**. The administrator never creates keys; from **admin-ui → Users** they decide, per user, whether the feature is enabled, how many active keys are allowed and the maximum lifetime.
+Keys are created by each user from **chat-ui → Settings → API keys**. The administrator never creates personal keys; from **admin-ui → Users** they decide, per user, whether the feature is enabled, how many active keys are allowed and the maximum lifetime.
+
+The one exception is [service accounts](./service-accounts.md): non-human accounts whose keys only administrators create, from **admin-ui → Service accounts**. Those keys follow the same format, validation and scopes described here.
 
 ## Lifecycle
 
@@ -51,7 +53,7 @@ Every request carrying a key goes through `authenticate_api_key()` (`src/api/aut
 | Hash exists | `401 api_key_invalid` |
 | `revoked_at` is null | `401 api_key_revoked` |
 | `expires_at` set and in the future | `401 api_key_expired` |
-| Owner exists and `can_create_api_keys` is true | `401 api_key_owner_disabled` |
+| Owner exists, `can_create_api_keys` is true and the owner is not disabled (`disabled_at`) | `401 api_key_owner_disabled` |
 | Endpoint accepts API keys | `403 api_key_not_allowed` |
 | Key has one of the endpoint's scopes | `403 missing_scope` |
 | Profile allowed for the owner | `403 profile_not_allowed` |
