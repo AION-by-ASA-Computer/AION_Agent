@@ -166,6 +166,39 @@ type StatusSegment = {
   outcomeDetails?: Record<string, unknown>;
 };
 
+/**
+ * Chart payload produced by the `charts` MCP tools (normalized server-side by
+ * `src/chart_payload.py`). `id` links the SSE `chart` event, the timeline
+ * segment and the persisted `session_charts` row.
+ */
+export type ChartPayload = {
+  id?: string;
+  tool_call_id?: string;
+  message_id?: string;
+  query?: string;
+  data?: Array<Record<string, unknown>>;
+  chart_kind?: "line" | "area" | "bar";
+  x_key?: string;
+  series_keys?: string[];
+  stacked?: boolean;
+  y_label?: string;
+  legend_off?: boolean;
+  range_seconds?: number;
+  step_seconds?: number;
+};
+
+/**
+ * Chart rendered inline in the turn, at the point where the tool produced it.
+ * Live: `chart` comes from the SSE event. History: the persisted timeline only
+ * stores the reference and the API re-injects `chart` from `session_charts`.
+ */
+type ChartSegment = {
+  kind: "chart";
+  id: string;
+  toolCallId?: string;
+  chart?: ChartPayload;
+};
+
 /** Transient indicator while plan or document artifact streams (not persisted). */
 type GeneratingSegment = {
   kind: "generating";
@@ -180,7 +213,8 @@ export type TurnSegment =
   | ArtifactSegment
   | TextSegment
   | StatusSegment
-  | GeneratingSegment;
+  | GeneratingSegment
+  | ChartSegment;
 
 export type ContextBudgetPart = {
   key: string;

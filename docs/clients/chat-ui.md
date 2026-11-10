@@ -50,7 +50,7 @@ Backend (`.env`): `AION_CORS_ORIGINS` can list `http://localhost:8003`; default 
 
 - `POST /chat` — SSE streaming
 - `POST /sessions/{id}/upload`, `GET .../files`, `GET .../download`
-- `GET /sessions/{id}/charts`
+- Charts arrive inline: `chart` tool event on the `/chat` SSE stream, and `{kind: "chart"}` timeline segments in `GET /chat-ui/conversations/{id}/messages` (see [Session Charts](../api-and-runtime/session-charts.md))
 - `GET /sessions/{id}/events/stream` — session Redis events (plan approval)
 - `POST /chat/stop` — stream interruption
 - `GET /profiles`
@@ -99,7 +99,7 @@ Path: `/integrations`. Panel for personal credentials on servers with `credentia
 | `/db` → Agent DB iframe | Partial (component + BFF exist but trigger commented out in ChatWorkspace) |
 | Upload + merge session attachments | Yes |
 | Legacy `.doc` → `.docx` on upload (API host; fields `converted_docx_path`, `conversion_status`) | Yes — see [Office and legacy Word](../configuration/office-and-legacy-word.md) |
-| Post-turn charts | Yes (Recharts, data from `/sessions/.../charts`) |
+| Inline charts (live during streaming, restored on reload) | Yes (Recharts `ChartBlock`, see [Session Charts](../api-and-runtime/session-charts.md)) |
 | New session files (uploads/workspace/derived) | Yes |
 | Profile + reasoning effort | Yes |
 | Sidebar tunings + presets | Yes (`SidebarTuningsPanel`, `GET/PUT /v1/runtime-settings`) |
@@ -153,7 +153,7 @@ The chat-ui uses CSS tokens from `chat-ui/styles/theme-tokens.css`: **HSL variab
 | `--secondary` | Dock column (light secondary background) |
 | `--destructive` | Stop stream, login error messages |
 | `--sidebar-*` | Thread sidebar (background, active item, border) |
-| `--chart-1` … `--chart-5` | Series in Recharts charts (`SessionCharts`) |
+| `--chart-1` … `--chart-8` | Categorical series colors in inline charts (`SessionCharts.tsx`), fixed order, light/dark variants |
 
 Technical implementation:
 

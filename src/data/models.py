@@ -291,6 +291,42 @@ class Step(Base):
     )
 
 
+class SessionChart(Base):
+    """Chart rendered in a chat turn (emitted by the ``charts`` MCP tools).
+
+    Redis keeps charts for the live turn (fast, TTL-bound); at the end of the SSE
+    turn they are copied here so chat-ui can re-render them after a reload or a
+    chat switch, inline at the point of the assistant timeline where the tool ran.
+
+    ``id`` is the chart id referenced by the ``{"kind": "chart"}`` timeline
+    segment. Rows disappear with the conversation (FK cascade on hard purge,
+    explicit delete on soft delete / turn delete, see ``src/charts_store.py``).
+    """
+
+    __tablename__ = "session_charts"
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    conversation_id: Mapped[str] = mapped_column(
+        String(64),
+        ForeignKey("conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="default"
+    )
+    # Assistant message the chart belongs to. No FK on purpose: charts are
+    # persisted at turn end and must not fail if the message row is written
+    # later (or collapsed); turn deletion removes them explicitly.
+    message_id: Mapped[Optional[str]] = mapped_column(String(64), index=True)
+    # Id of the tool call that produced the chart (links to ``steps.id``).
+    tool_call_id: Mapped[Optional[str]] = mapped_column(String(128))
+    # Normalized chart payload (see ``src/chart_payload.py``) as JSON text.
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Feedback(Base):
     __tablename__ = "feedbacks"
     id: Mapped[str] = mapped_column(String(64), primary_key=True)

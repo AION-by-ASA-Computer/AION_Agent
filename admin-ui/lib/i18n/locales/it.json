@@ -697,6 +697,7 @@
         "key_ph": "NOME_VARIABILE",
         "value_ph": "Valore",
         "secret_ph": "Valore segreto",
+        "secret_replace_ph": "Nuovo valore (lascia vuoto per non cambiarlo)",
         "edit": "Modifica",
         "cancel_edit": "Annulla modifica",
         "show": "Mostra valore",

@@ -52,7 +52,9 @@ export function MarkdownCodeBlock({
         const { codeToHtml } = await import("shiki/bundle/web");
         const rendered = await codeToHtml(code, {
           lang,
-          theme: "github-dark-default",
+          // Dual theme: colors resolved in CSS per active theme (globals.css).
+          themes: { light: "github-light-default", dark: "github-dark-default" },
+          defaultColor: false,
         });
         if (!cancelled) setHighlight({ key: highlightKey, html: rendered });
       } catch {
@@ -104,18 +106,19 @@ export function MarkdownCodeBlock({
   return (
     <div
       className={cn(
-        "not-prose group/code my-3 overflow-hidden rounded-xl border border-border/80 bg-[#0d1117] shadow-sm ring-1 ring-black/5 dark:ring-white/10",
+        // Colors come from the --code-* theme tokens (light/dark), shared with CodeArtifactBlock.
+        "aion-code-surface not-prose group/code my-3 overflow-hidden rounded-xl border border-[hsl(var(--code-border))] bg-[hsl(var(--code-bg))] shadow-sm",
         className
       )}
       style={{ fontSize: "var(--aion-chat-code-font-size, 10.5px)" }}
     >
-      <div className="flex items-center justify-between gap-2 border-b border-white/10 bg-[#161b22] px-3.5 py-2">
-        <span className="font-mono text-[0.86em] font-medium uppercase tracking-wide text-[#8b949e]">
+      <div className="flex items-center justify-between gap-2 border-b border-[hsl(var(--code-border))] bg-[hsl(var(--code-header-bg))] px-3.5 py-2">
+        <span className="font-mono text-[0.86em] font-medium uppercase tracking-wide text-[hsl(var(--code-muted))]">
           {lang}
         </span>
         <button
           type="button"
-          className="focus-ring inline-flex items-center gap-1.5 rounded-md border border-white/10 bg-white/5 px-2.5 py-[0.35em] text-[0.86em] font-medium text-[#c9d1d9] opacity-100 transition-opacity hover:bg-white/10 sm:opacity-0 sm:group-hover/code:opacity-100 sm:focus-visible:opacity-100"
+          className="focus-ring inline-flex items-center gap-1.5 rounded-md border border-[hsl(var(--code-border))] bg-[hsl(var(--code-bg))] px-2.5 py-[0.35em] text-[0.86em] font-medium text-[hsl(var(--code-fg))] opacity-100 transition-opacity hover:bg-[hsl(var(--code-border))] sm:opacity-0 sm:group-hover/code:opacity-100 sm:focus-visible:opacity-100"
           onClick={() => void copy()}
           aria-label={t("chat.actions.copy")}
         >
@@ -130,7 +133,7 @@ export function MarkdownCodeBlock({
             dangerouslySetInnerHTML={{ __html: html }}
           />
         ) : (
-          <pre className="m-0 whitespace-pre-wrap break-words p-4 font-mono text-[1em] leading-[1.65] text-[#e6edf3]">
+          <pre className="m-0 whitespace-pre-wrap break-words p-4 font-mono text-[1em] leading-[1.65] text-[hsl(var(--code-fg))]">
             <code>{code}</code>
           </pre>
         )}
