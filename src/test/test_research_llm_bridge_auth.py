@@ -38,7 +38,9 @@ def _install_router(monkeypatch, key: str, handler) -> list:
     monkeypatch.setattr(
         llm_bridge.httpx,
         "AsyncClient",
-        lambda *a, **k: _REAL_ASYNC_CLIENT(transport=transport, timeout=k.get("timeout")),
+        lambda *a, **k: _REAL_ASYNC_CLIENT(
+            transport=transport, timeout=k.get("timeout")
+        ),
     )
     monkeypatch.delenv("AION_LLM_ADAPTER", raising=False)
     # A different .env key must never be sent instead of the provider key.
@@ -55,7 +57,9 @@ def _sse(*events: dict) -> httpx.Response:
 def _key_scoped(request: httpx.Request) -> httpx.Response:
     """Router that only lets ``Bearer db-key`` use the model."""
     if request.headers.get("authorization") != "Bearer db-key":
-        return httpx.Response(404, json={"detail": "Model 'm1' is not allowed for this API key"})
+        return httpx.Response(
+            404, json={"detail": "Model 'm1' is not allowed for this API key"}
+        )
     return _sse(
         {"choices": [{"delta": {"reasoning_content": "hidden thinking"}}]},
         {"choices": [{"delta": {"content": "## Report\n"}}]},
@@ -79,9 +83,14 @@ async def test_bridge_accepts_non_streamed_json(monkeypatch):
     _install_router(
         monkeypatch,
         "db-key",
-        lambda _r: httpx.Response(200, json={"choices": [{"message": {"content": "plain"}}]}),
+        lambda _r: httpx.Response(
+            200, json={"choices": [{"message": {"content": "plain"}}]}
+        ),
     )
-    assert await llm_bridge.complete_messages([{"role": "user", "content": "x"}]) == "plain"
+    assert (
+        await llm_bridge.complete_messages([{"role": "user", "content": "x"}])
+        == "plain"
+    )
 
 
 @pytest.mark.anyio
@@ -90,10 +99,15 @@ async def test_bridge_stream_can_be_disabled(monkeypatch):
     seen = _install_router(
         monkeypatch,
         "db-key",
-        lambda _r: httpx.Response(200, json={"choices": [{"message": {"content": "plain"}}]}),
+        lambda _r: httpx.Response(
+            200, json={"choices": [{"message": {"content": "plain"}}]}
+        ),
     )
     monkeypatch.setenv("AION_DEEP_RESEARCH_LLM_STREAM", "0")
-    assert await llm_bridge.complete_messages([{"role": "user", "content": "x"}]) == "plain"
+    assert (
+        await llm_bridge.complete_messages([{"role": "user", "content": "x"}])
+        == "plain"
+    )
     assert "stream" not in json.loads(seen[0].content)
 
 
@@ -132,7 +146,9 @@ async def test_bridge_retries_empty_length_answer_with_more_tokens(monkeypatch):
                 {"choices": [{"delta": {"reasoning_content": "long thinking"}}]},
                 {"choices": [{"delta": {}, "finish_reason": "length"}]},
             )
-        return _sse({"choices": [{"delta": {"content": "extracted"}, "finish_reason": "stop"}]})
+        return _sse(
+            {"choices": [{"delta": {"content": "extracted"}, "finish_reason": "stop"}]}
+        )
 
     seen = _install_router(monkeypatch, "db-key", _reasoning_then_answer)
     monkeypatch.setenv("AION_DEEP_RESEARCH_THINKING_BUDGET", "512")
@@ -152,11 +168,15 @@ async def test_bridge_timeout_is_total_even_when_streaming(monkeypatch):
 
     async def _slow(_request: httpx.Request) -> httpx.Response:
         async def _body():
-            for _ in range(50):  # ~5 s of reasoning deltas, each well under any read timeout
+            for _ in range(
+                50
+            ):  # ~5 s of reasoning deltas, each well under any read timeout
                 await asyncio.sleep(0.1)
                 yield b'data: {"choices":[{"delta":{"reasoning_content":"x"}}]}\n\n'
 
-        return httpx.Response(200, content=_body(), headers={"content-type": "text/event-stream"})
+        return httpx.Response(
+            200, content=_body(), headers={"content-type": "text/event-stream"}
+        )
 
     _install_router(monkeypatch, "db-key", _slow)
     started = time.monotonic()
@@ -183,10 +203,14 @@ async def test_bridge_no_retry_when_model_stops_empty(monkeypatch):
 async def test_bridge_thinking_budget_can_be_disabled(monkeypatch):
     """AION_DEEP_RESEARCH_THINKING_BUDGET=0 sends neither the field nor extra tokens."""
     seen = _install_router(
-        monkeypatch, "db-key", lambda _r: _sse({"choices": [{"delta": {"content": "ok"}}]})
+        monkeypatch,
+        "db-key",
+        lambda _r: _sse({"choices": [{"delta": {"content": "ok"}}]}),
     )
     monkeypatch.setenv("AION_DEEP_RESEARCH_THINKING_BUDGET", "0")
-    await llm_bridge.complete_messages([{"role": "user", "content": "x"}], max_tokens=20)
+    await llm_bridge.complete_messages(
+        [{"role": "user", "content": "x"}], max_tokens=20
+    )
     body = json.loads(seen[0].content)
     assert "thinking_token_budget" not in body
     assert body["max_tokens"] == 20

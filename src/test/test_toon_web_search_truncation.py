@@ -98,7 +98,9 @@ def test_web_search_toon_round_trip_with_escaped_quotes():
             "provider": "tavily",
         },
     ]
-    raw = format_web_search_toon({"query": "rust", "provider_used": "tavily", "results": rows})
+    raw = format_web_search_toon(
+        {"query": "rust", "provider_used": "tavily", "results": rows}
+    )
     data = parse_web_search_toon(raw)
     assert data is not None
     assert [r["provider"] for r in data["results"]] == ["tavily", "tavily"]

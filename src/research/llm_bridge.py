@@ -12,6 +12,7 @@ import httpx
 
 from .research_utils import strip_thinking
 
+
 def _stream_enabled() -> bool:
     """Stream research completions (``AION_DEEP_RESEARCH_LLM_STREAM``, default on).
 
@@ -118,7 +119,9 @@ async def _post_chat(
                 parts.append(_content_text(delta.get("content")))
                 reasoning = delta.get("reasoning_content") or delta.get("reasoning")
                 if isinstance(reasoning, str):
-                    diag["reasoning_chars"] = diag.get("reasoning_chars", 0) + len(reasoning)
+                    diag["reasoning_chars"] = diag.get("reasoning_chars", 0) + len(
+                        reasoning
+                    )
                 if choice.get("finish_reason"):
                     diag["finish_reason"] = choice["finish_reason"]
         return r.status_code, "", "".join(parts)

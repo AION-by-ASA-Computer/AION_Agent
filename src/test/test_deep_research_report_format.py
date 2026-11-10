@@ -39,8 +39,14 @@ def test_parse_category_label(reply, expected):
 @pytest.mark.anyio
 async def test_search_stat_keeps_only_provider_ids(monkeypatch):
     """A provider value that is not a short id is recorded as 'aion', never as page text."""
-    rows = [{"url": "https://a.org", "title": "A", "snippet": "s",
-             "provider": "Jordan admitted he was initially reluctant, tavily"}]
+    rows = [
+        {
+            "url": "https://a.org",
+            "title": "A",
+            "snippet": "s",
+            "provider": "Jordan admitted he was initially reluctant, tavily",
+        }
+    ]
 
     async def _fake_search(_query, max_results=10):
         return rows

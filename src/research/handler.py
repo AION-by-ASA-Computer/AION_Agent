@@ -413,7 +413,11 @@ class ResearchHandler:
             from src.runtime.llm_adapter import resolve_llm_endpoint
 
             _, model_label = resolve_llm_endpoint()
-            model_label = model_label.split("/", 1)[1] if model_label.startswith("openai/") else model_label
+            model_label = (
+                model_label.split("/", 1)[1]
+                if model_label.startswith("openai/")
+                else model_label
+            )
         except Exception:
             model_label = os.getenv("AION_MODEL", "")
 
