@@ -78,7 +78,6 @@ services:
       AION_ROOT_PATH: /api
       # Docs API disabilitati in produzione (security hardening by default).
       AION_API_DOCS_ENABLED: "0"
-      AION_WREN_HOME: /app/data/wren/.wren
       AION_NORTHWIND_DB_URL: /app/data/db_test
       # Session sandbox container isolation (Podman rootless on host)
       AION_SANDBOX_BACKEND: ${AION_SANDBOX_BACKEND:-container}
@@ -96,7 +95,6 @@ services:
       - ./.env:/app/.env:ro
       - ./data/sessions:/app/data/sessions
       - ./data/db_test:/app/data/db_test
-      - ~/.wren:/app/data/wren/.wren:ro
       - ${AION_PODMAN_SOCKET_HOST:-/run/user/1000/podman/podman.sock}:/run/podman/podman.sock
       # Writable runtime overlay (synced from the image's *_std at boot;
       # local customizations persist across upgrades).
@@ -190,8 +188,9 @@ services:
     environment:
       AION_UPDATER_TOKEN: ${AION_UPDATER_TOKEN:-}
       AION_HOST_INSTALL_DIR: ${AION_HOST_INSTALL_DIR:-/nonexistent}
-      # compose espande `~/.wren` (volume del backend) con l'HOME del client:
-      # deve essere quella dell'host.
+      # compose espande `~` nei path dei volumi con l'HOME del client: la
+      # allineiamo a quella dell'host così l'updater risolve i path come un
+      # `docker compose` lanciato a mano (anche negli override locali).
       HOME: ${AION_HOST_HOME:-/tmp}
       # `localhost` qui non è l'host: health check diretto sul backend.
       AION_UPGRADE_HEALTH_URL: http://backend:8001/health

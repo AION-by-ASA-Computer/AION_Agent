@@ -1075,7 +1075,6 @@ if [ -f "$AION_INSTALL_DIR/.env" ] && [ "$FORCE" -eq 0 ]; then
 fi
 
 mkdir -p "$AION_INSTALL_DIR"/{docker,scripts,config,mcp_servers,data/sessions,data/db_test,data/_backups}
-mkdir -p "$HOME/.wren"
 echo "[ok] Directory tree created at $AION_INSTALL_DIR"
 
 # --- Step 2: Download Files ---

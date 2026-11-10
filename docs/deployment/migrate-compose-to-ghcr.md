@@ -155,13 +155,6 @@ docker compose logs backend | grep -iE "alembic|migrat" | tail -5
 ```
 :::
 
-**1d. Cartella `~/.wren`.** Il compose GHCR la monta; se manca Docker la crea
-(su Linux con owner root).
-
-```bash
-mkdir -p ~/.wren
-```
-
 ---
 
 ## 2. Backup
