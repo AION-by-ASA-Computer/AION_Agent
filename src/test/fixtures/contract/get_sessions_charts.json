@@ -8,6 +8,7 @@
           "value": 1
         }
       ],
+      "id": "<uuid>",
       "legend_off": false,
       "query": "up",
       "stacked": false,

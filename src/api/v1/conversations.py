@@ -181,6 +181,10 @@ async def delete_conversation(
             .values(archived_at=datetime.now(timezone.utc))
         )
         await session.commit()
+    # Soft delete: remove the conversation's charts explicitly (SQLite + Redis).
+    from src.charts_store import delete_conversation_charts
+
+    await delete_conversation_charts([conversation_id])
     from src.mcp_manager import mcp_manager
 
     await mcp_manager.release_session(conversation_id)

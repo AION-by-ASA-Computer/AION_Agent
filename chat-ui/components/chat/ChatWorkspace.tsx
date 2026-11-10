@@ -31,7 +31,6 @@ import {
   consumeChatStream,
   drainSessionEventsLoop,
   fetchProfiles,
-  fetchSessionCharts,
   fetchToolLedger,
   listSessionFilesSubdir,
   type SessionFileRow,
@@ -61,7 +60,6 @@ import {
   type ChatHistoryMessage,
   type ChatHistoryStep,
   type ProfileRow,
-  type SessionChart,
   listSideThreads,
   createSideThread,
   type SideThreadSummary,
@@ -165,7 +163,6 @@ import {
   toggleMessageRating,
   type MessageRating,
 } from "@/lib/message-feedback";
-import { SessionCharts } from "@/components/chat/SessionCharts";
 import { formatMessageTime, formatTurnDuration } from "@/lib/format-turn-time";
 
 import type { DockTab } from "@/lib/layout/dock-tab";
@@ -1453,7 +1450,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
   }, [conversationId, messages, turnVisual]);
 
 
-  const [postTurnCharts, setPostTurnCharts] = useState<SessionChart[]>([]);
   const [postTurnFiles, setPostTurnFiles] = useState<{ rp: string; label: string }[]>([]);
   const seenFilesRef = useRef<Set<string>>(new Set());
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -2154,7 +2150,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           console.error("[aion-chat-ui] early user save:", err),
         );
       }
-      setPostTurnCharts([]);
       setPostTurnFiles([]);
       abortRef.current = new AbortController();
 
@@ -2438,9 +2433,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
           await refreshThreads();
           return;
         }
-
-        const ch = await fetchSessionCharts(targetConvId, userId, token);
-        setPostTurnCharts(ch);
 
         const newLinks: { rp: string; label: string }[] = [];
         for (const sub of ["workspace", "derived"] as const) {
@@ -2749,7 +2741,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       });
     }
 
-    setPostTurnCharts([]);
     setPostTurnFiles([]);
     setPlanChunk(null);
 
@@ -2881,7 +2872,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         return prev.slice(0, idx);
       });
 
-      setPostTurnCharts([]);
       setPostTurnFiles([]);
       setPlanChunk(null);
 
@@ -3052,7 +3042,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     const loadEpoch = bumpHistoryLoadEpoch();
     const ac = new AbortController();
     seenFilesRef.current = new Set();
-    // Hydrate existing user-facing generated files and charts for this conversation on reload
+    // Hydrate existing user-facing generated files for this conversation on reload
+    // (charts come inline with the message history timeline).
     void (async () => {
       const newLinks: { rp: string; label: string }[] = [];
       for (const sub of ["workspace", "derived"] as const) {
@@ -3109,11 +3100,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         }
       }
     })();
-    void fetchSessionCharts(cid, userId, token)
-      .then((ch) => {
-        if (activeConversationRef.current === cid) setPostTurnCharts(ch);
-      })
-      .catch(() => {});
     fetchConversationHistory(cid, userId, token, ac.signal)
       .then((result) => {
         if (isStaleHistoryLoad(cid, loadEpoch)) return;
@@ -5380,7 +5366,8 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                 aria-busy={streaming}
                 aria-live="polite"
               >
-                <div className="mx-auto w-full max-w-3xl flex flex-col">
+                {/* aion-chat-column: inline-size container used to center inline charts on the chat column (globals.css) */}
+                <div className="aion-chat-column mx-auto w-full max-w-3xl flex flex-col">
                   {threadOrigin ? (
                     <nav
                       aria-label={t("sideThread.breadcrumb.aria")}
@@ -5918,13 +5905,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       ) : null}
                     </div>
                   ) : null}
-                  {postTurnCharts.length > 0 && (
-                    <div className="mr-auto mt-3 w-full max-w-xl space-y-2.5">
-                      <div className="rounded-2xl border border-border bg-card/40 px-5 py-4 shadow-sm">
-                        <SessionCharts charts={postTurnCharts} />
-                      </div>
-                    </div>
-                  )}
                   <div ref={messagesEndRef} className="h-4 w-full shrink-0" aria-hidden="true" />
                 </div>
               </div>

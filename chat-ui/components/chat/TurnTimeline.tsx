@@ -27,6 +27,7 @@ import { isScriptLikeTitle } from "@/lib/sse/filePreviewTools";
 import { sessionDownloadUrl } from "@/lib/api/aion";
 import { markdownCodeComponents } from "@/lib/markdown/markdownCodeComponents";
 import { SafeErrorBoundary } from "@/components/ui/ErrorBoundary";
+import { ChartBlock } from "@/components/chat/SessionCharts";
 import { resolveTurnOutcomeMessage } from "@/lib/sse/turnOutcomeMessage";
 
 type Props = {
@@ -139,6 +140,9 @@ export function TurnTimeline({
               />
             );
           }
+          if (seg.kind === "chart") {
+            return seg.chart ? <ChartSegmentBlock key={seg.id} chart={seg.chart} /> : null;
+          }
           if (seg.kind === "text" && Boolean(seg.content)) {
             return (
               <div key={seg.id} className="prose-chat">
@@ -187,6 +191,9 @@ export function TurnTimeline({
               isScript={scriptLike}
             />
           );
+        }
+        if (seg.kind === "chart") {
+          return seg.chart ? <ChartSegmentBlock key={seg.id} chart={seg.chart} /> : null;
         }
         if (seg.kind === "status") {
           const warn = seg.tone === "warning";
@@ -360,6 +367,15 @@ export function TurnTimeline({
 }
 
 export { AgentWorkingShimmer } from "@/components/chat/ShimmerText";
+
+/** Chart segment: isolated in an error boundary so a malformed payload never breaks the turn. */
+function ChartSegmentBlock({ chart }: { chart: NonNullable<Extract<TurnSegment, { kind: "chart" }>["chart"]> }) {
+  return (
+    <SafeErrorBoundary fallback={null}>
+      <ChartBlock chart={chart} className="my-2" />
+    </SafeErrorBoundary>
+  );
+}
 
 const TextSegment = memo(function TextSegment({
   content,
