@@ -38,7 +38,7 @@ jobs:
           submodules: false
 
       - name: Check spelling
-        uses: crate-ci/typos@37bb98842b0d8c4ffebdb75301a13db0267cef89 # v1.47.2
+        uses: crate-ci/typos@4c8b7f51ca60df14e3c5ca82770dfbbe6c3dae85 # v1.52.0
         with:
           files: |
             ./README.md
