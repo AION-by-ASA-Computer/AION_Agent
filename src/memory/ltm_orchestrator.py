@@ -75,7 +75,13 @@ class LTMOrchestrator:
         *,
         active_project: Optional[str] = None,
         tenant_id: Optional[str] = None,
+        profile_slug: Optional[str] = None,
     ) -> None:
+        """Persist notes from the transcript head before STM compaction drops it.
+
+        ``profile_slug`` is forwarded so profiles without the ``mnemos`` native
+        group skip the flush (see :meth:`extract_and_persist`).
+        """
         await self.extract_and_persist(
             chat_session_id,
             user_id,
@@ -84,6 +90,7 @@ class LTMOrchestrator:
             mode="batch",
             active_project=active_project,
             tenant_id=tenant_id,
+            profile_slug=profile_slug,
         )
 
     def _extraction_skill_text(self) -> str:
@@ -103,14 +110,24 @@ class LTMOrchestrator:
         user_message_id: Optional[str] = None,
         assistant_message_id: Optional[str] = None,
     ) -> None:
-        _ = profile_slug
+        """Extract long-term notes from a turn (or batch transcript) into Mnemos.
+
+        Skipped when ``AION_LTM_EXTRACT=0`` or when ``profile_slug`` names a
+        profile without the ``mnemos`` native tool group: removing Mnemos from
+        a profile means its conversations are not written to long-term memory.
+        Callers without a profile (``profile_slug=None``) keep extracting.
+        """
         if os.getenv("AION_LTM_EXTRACT", "1").lower() in ("0", "false", "no"):
             return
-        # Per-account switch: service accounts extract only when the admin
-        # enabled LTM for them (automation traffic would flood the memory).
-        # Also covers ``precompact_flush`` (batch mode).
-        if not await _ltm_allowed_for(user_id):
-            return
+        if profile_slug is not None:
+            from src.runtime.mnemos_tools import profile_name_wants_mnemos
+
+            if not profile_name_wants_mnemos(profile_slug):
+                logger.debug(
+                    "LTM extraction skipped: profile %s has no mnemos group",
+                    profile_slug,
+                )
+                return
         system = self._extraction_skill_text()
         if not system:
             system = "Rispondi solo con JSON valido secondo lo schema LTM note."

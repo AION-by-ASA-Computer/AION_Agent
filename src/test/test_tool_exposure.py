@@ -284,7 +284,9 @@ def test_tool_search_publishes_named_sandbox_tool():
     sid = "search-exec-allow"
     agent = _Agent()
     ctx = _Ctx()
-    remember_deferred_tools(sid, [_Tool("sandbox_exec_allowlisted")])
+    remember_deferred_tools(
+        sid, [_Tool("sandbox_exec_allowlisted")], "generic_assistant"
+    )
     set_turn_runtime(
         session_id=sid,
         loop=None,
@@ -354,7 +356,7 @@ def test_tool_search_unknown_lists_names_without_publishing():
 
     sid = "search-miss"
     ctx = _Ctx()
-    remember_deferred_tools(sid, [_Tool("sandbox_apply_patch")])
+    remember_deferred_tools(sid, [_Tool("sandbox_apply_patch")], "generic_assistant")
     set_turn_runtime(
         session_id=sid,
         loop=None,
@@ -528,3 +530,45 @@ def test_tool_search_loads_cold_server_from_learned_tool_name(monkeypatch):
         clear_deferred_tools(sid)
     assert loaded_groups == ["aion_sre_ssh"]
     assert message.startswith("Loaded 1 tool(s): list_pending_updates.")
+
+
+def test_tool_search_ignores_tools_deferred_by_another_profile():
+    """Regression: the default aion_std warm-up must not leak web_search.
+
+    One chat session builds an aion_std agent (with web_research) before the
+    profile the user picked. tool_search on a profile without web_research must
+    not find web_search, even if it sits in the aion_std pool of the session.
+    """
+    sid = "search-cross-profile"
+    remember_deferred_tools(sid, [_Tool("web_search")], "aion_std")
+    profile = SimpleNamespace(
+        slug="generic_assistant",
+        mcp_servers=["skills_hub", "session_sandbox"],
+        native_tool_groups=["mnemos"],
+    )
+    tool = make_tool_search_tool(
+        session_id=sid, user_id="default", tenant_id="default", profile=profile
+    )
+    try:
+        message = tool.function("web_search")
+        assert message.startswith("No tool matched")
+    finally:
+        clear_deferred_tools(sid)
+
+
+def test_tool_search_drops_native_tools_of_groups_not_on_profile():
+    """Even a pool entry under the right profile key is refused without its group."""
+    sid = "search-native-filter"
+    remember_deferred_tools(sid, [_Tool("web_search")], "generic_assistant")
+    profile = SimpleNamespace(
+        slug="generic_assistant",
+        mcp_servers=["skills_hub", "session_sandbox"],
+        native_tool_groups=["mnemos"],
+    )
+    tool = make_tool_search_tool(
+        session_id=sid, user_id="default", tenant_id="default", profile=profile
+    )
+    try:
+        assert tool.function("web_search").startswith("No tool matched")
+    finally:
+        clear_deferred_tools(sid)

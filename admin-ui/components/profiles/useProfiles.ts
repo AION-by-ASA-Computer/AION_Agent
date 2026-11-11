@@ -132,7 +132,7 @@ export function useProfiles() {
   const fetchMetadata = useCallback(async () => {
     try {
       const [skillsRes, mcpRes, nativeRes, integrationsRes, catalogRes] = await Promise.all([
-        apiFetch(`${apiBase()}/admin/skills`),
+        apiFetch(`${apiBase()}/admin/skills?status=verified`),
         apiFetch(`${apiBase()}/admin/registry`),
         apiFetch(`${apiBase()}/admin/native-tools`),
         apiFetch(`${apiBase()}/admin/mcp-integrations`),

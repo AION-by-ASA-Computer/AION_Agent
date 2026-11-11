@@ -1794,8 +1794,14 @@ class MCPManager:
 
         # Un warm parziale (activate_tool_group di un solo server) non è un
         # cambio profilo: i worker già accesi di questa chat restano fino
-        # all'idle del pool. Si spengono solo i server assenti dal profilo
-        # nuovo, e solo su questa sessione.
+        # all'idle del pool.
+        # On a real profile switch every worker of this session is released,
+        # including servers the new profile also lists: workers read the
+        # profile from AION_CURRENT_PROFILE_SLUG at spawn (skills_hub skill
+        # allowlist, query_memory scope, sandbox container), so a surviving
+        # worker would keep serving the previous profile. They respawn on
+        # demand with the new profile. Workers of other sessions and the
+        # shared per-user pool are never touched.
         try:
             profile_changed = bool(
                 old_profile_slug and old_profile_slug != profile_slug
@@ -1815,7 +1821,7 @@ class MCPManager:
             if profile_changed and allowed is not None:
                 async with self._pool_lock:
                     for (sid, sname), worker in list(self._pool.items()):
-                        if sid == chat_session_id and sname not in allowed:
+                        if sid == chat_session_id:
                             to_stop.append((sid, sname))
 
             for sid, sname in to_stop:

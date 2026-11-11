@@ -40,6 +40,8 @@ async def consolidate(
         + transcript[:16000],
         "",
         mode="batch",
+        # Profiles without the mnemos native group do not promote to LTM.
+        profile_slug=profile_name,
     )
     ids = [r["id"] for r in rows if r.get("id") is not None]
     await history_manager.mark_promoted(ids)

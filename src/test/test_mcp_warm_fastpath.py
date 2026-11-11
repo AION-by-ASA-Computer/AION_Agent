@@ -107,16 +107,24 @@ def test_partial_warm_keeps_sibling_workers(monkeypatch):
     asyncio.run(_run())
 
 
-def test_profile_switch_stops_only_servers_absent_from_new_profile(monkeypatch):
+def test_profile_switch_restarts_every_worker_of_the_session(monkeypatch):
+    """A profile switch releases all workers of that chat, shared servers included.
+
+    Workers read the profile from their spawn env (skills_hub allowlist,
+    query_memory scope), so session_sandbox/skills_hub kept from the previous
+    profile would keep serving it. Workers of other chats stay untouched.
+    """
     monkeypatch.setenv("AION_MCP_POOL", "1")
 
     async def _run():
         mgr = MCPManager()
         sid = "chat-switch"
+        other = "chat-other"
         mgr._session_ctx[sid] = ("apple_agent", "admin", "default")
         stopped: list = []
-        sandbox = _park(mgr, sid, "session_sandbox", stopped)
+        _park(mgr, sid, "session_sandbox", stopped)
         _park(mgr, sid, "clickup", stopped)
+        other_worker = _park(mgr, other, "skills_hub", stopped)
         monkeypatch.setattr(mgr, "_is_stdio_server", lambda _name: False)
         monkeypatch.setattr(
             mgr,
@@ -126,10 +134,12 @@ def test_profile_switch_stops_only_servers_absent_from_new_profile(monkeypatch):
         await mgr.warm_session(
             sid, ["skills_hub"], profile_slug="generic_assistant", user_id="admin"
         )
-        assert stopped == ["clickup"]
-        assert (sid, "session_sandbox") in mgr._pool
+        assert sorted(stopped) == ["clickup", "session_sandbox"]
+        assert (sid, "session_sandbox") not in mgr._pool
         assert (sid, "clickup") not in mgr._pool
-        sandbox._task.cancel()
+        assert (other, "skills_hub") in mgr._pool
+        assert mgr.get_session_context(sid).profile_slug == "generic_assistant"
+        other_worker._task.cancel()
 
     asyncio.run(_run())
 

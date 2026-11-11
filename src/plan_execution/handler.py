@@ -16,6 +16,27 @@ logger = logging.getLogger("aion.plan_execution")
 _handler: Optional["PlanExecutionHandler"] = None
 
 
+def _active_session_profile(chat_session_id: str) -> str:
+    """Profile currently active for ``chat_session_id`` ("" when unknown).
+
+    Read from the MCP session context, which ``get_agent`` sets to the profile
+    of the last agent built or reused for the chat. Plan execution uses it when
+    the request carries no profile, so an approved plan runs with the profile
+    selected in the chat instead of a default one (which would build an agent
+    with another profile's tools, MCP servers and skills).
+    """
+    sid = (chat_session_id or "").strip()
+    if not sid:
+        return ""
+    try:
+        from src.mcp_manager import mcp_manager
+
+        sctx = mcp_manager.get_session_context(sid)
+        return (getattr(sctx, "profile_slug", "") or "").strip() if sctx else ""
+    except Exception:
+        return ""
+
+
 async def _get_agent_for_execution(
     profile_name: str,
     *,
@@ -253,8 +274,13 @@ class PlanExecutionHandler:
             raise ValueError("plan_id is required")
 
         run_id = new_plan_execution_run_id()
+        # Explicit profile first, then the chat's active profile; the env /
+        # aion_std default only when the session has no profile yet.
         profile = (
-            profile_name or os.getenv("AION_DEFAULT_PROFILE") or "aion_std"
+            (profile_name or "").strip()
+            or _active_session_profile(chat_session_id)
+            or os.getenv("AION_DEFAULT_PROFILE")
+            or "aion_std"
         ).strip()
 
         entry: Dict[str, Any] = {

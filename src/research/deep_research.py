@@ -165,6 +165,41 @@ CATEGORY_PROMPTS = {
 }
 
 
+def _parse_category_label(reply: Optional[str]) -> Optional[str]:
+    """Map the classifier's reply to a ``CATEGORY_PROMPTS`` key, or ``None``.
+
+    Accepts a clean one-word answer, or a reply that names exactly one known
+    category as a whole word ("the category is product"). ``general``, no
+    match, or several categories in the reply mean ``None`` (generic format):
+    the old substring scan returned the first key found (``product``), so a
+    hedged answer like "not product, general" forced the product layout.
+    """
+    words = re.findall(r"[a-z]+", (reply or "").strip().lower())
+    if "general" in words:
+        return None
+    named = {w for w in words if w in CATEGORY_PROMPTS}
+    return named.pop() if len(named) == 1 else None
+
+
+def _report_timeout() -> int:
+    """Total seconds allowed to write the final report (and its expansion).
+
+    ``AION_DEEP_RESEARCH_REPORT_TIMEOUT`` (default 600). The report is the
+    longest generation of the run; 300 s cut it off on a reasoning model, and
+    the job then fell back to the less polished evolving report.
+    """
+    import os
+
+    try:
+        return max(60, int(os.getenv("AION_DEEP_RESEARCH_REPORT_TIMEOUT", "600")))
+    except ValueError:
+        return 600
+
+
+# Search provider ids shown in the report's "Search" statistic.
+_PROVIDER_ID_RE = re.compile(r"^[a-z0-9_.-]{1,32}$")
+
+
 # ---------------------------------------------------------------------------
 # DeepResearcher
 # ---------------------------------------------------------------------------
@@ -445,14 +480,27 @@ class DeepResearcher:
             return ""
 
     async def _classify_category(self, question: str) -> Optional[str]:
-        """Fast LLM call to classify the research question into a category."""
-        valid = ", ".join(CATEGORY_PROMPTS.keys())
+        """Fast LLM call to classify the research question into a category.
+
+        Returns a key of ``CATEGORY_PROMPTS`` or ``None`` (generic report
+        format). Each category forces a very specific layout (``product`` adds a
+        price/rating table and a price per section), so the prompt describes
+        when each applies and anything ambiguous falls back to ``None``: a
+        biography classified as ``product`` produced "Prezzo indicativo" lines
+        under every section.
+        """
         prompt = (
-            f"Classify this research question into exactly ONE category.\n"
-            f"Categories: {valid}\n"
-            f"If none fit well, respond with: general\n\n"
-            f"Question: {question}\n\n"
-            f"Respond with ONLY the category name, nothing else."
+            "Classify this research request into exactly ONE category:\n"
+            "- product: the user wants to BUY or CHOOSE a product/service to purchase "
+            "(e.g. 'best laptop under 1000 euro', 'which robot vacuum to buy').\n"
+            "- comparison: the user explicitly compares two or more named options "
+            "(e.g. 'PostgreSQL vs MySQL', 'iPhone or Pixel').\n"
+            "- howto: the user wants step-by-step instructions to do something.\n"
+            "- factcheck: the user asks whether a specific claim is true.\n"
+            "- general: everything else — biographies, history, topics, people, "
+            "events, explanations, overviews.\n\n"
+            f"Request: {question}\n\n"
+            "Respond with ONLY the category name, nothing else."
         )
         try:
             result = await self._llm(
@@ -461,18 +509,7 @@ class DeepResearcher:
                 max_tokens=20,
                 timeout=15,
             )
-            cat = (result or "").strip().lower()
-            # Clean one-word answer first.
-            first = cat.split()[0].strip(".,\"'*:") if cat.split() else ""
-            if first in CATEGORY_PROMPTS:
-                return first
-            # Weak local models often wrap the label in preamble ("the category
-            # is product") — scan the whole reply for any known category word
-            # before giving up (which would default to the generic format).
-            for c in CATEGORY_PROMPTS:
-                if c in cat:
-                    return c
-            return None
+            return _parse_category_label(result)
         except Exception as e:
             logger.warning(f"Category classification failed: {e}")
             return None
@@ -579,6 +616,13 @@ class DeepResearcher:
 
         async def _bounded_extract(result: Dict) -> Optional[Dict]:
             async with semaphore:
+                # Time budget (max_time) reached while this page was queued:
+                # skip it so the run moves on to analysis and the final report
+                # instead of reading every page (pages already being read
+                # finish normally). Without this a slow model kept extracting
+                # for 18+ minutes past a 5-minute budget.
+                if self._cancelled or self._time_exceeded():
+                    return None
                 return await self._fetch_and_extract(
                     result["url"], question, result.get("title", "")
                 )
@@ -600,7 +644,12 @@ class DeepResearcher:
         try:
             results = await search_web(query, max_results=10)
             if results:
-                prov = results[0].get("provider") or "aion"
+                prov = str(results[0].get("provider") or "aion").strip().lower()
+                # Only short provider ids (tavily, brave, searxng…): a mis-parsed
+                # row once put page text here, which the HTML report printed
+                # as a huge unformatted English block in the stats header.
+                if not _PROVIDER_ID_RE.match(prov):
+                    prov = "aion"
                 if prov not in self.providers_used:
                     self.providers_used.append(prov)
                 logger.info(
@@ -918,7 +967,7 @@ class DeepResearcher:
                 messages,
                 temperature=0.3,
                 max_tokens=self.max_report_tokens,
-                timeout=300,
+                timeout=_report_timeout(),
             )
             clean_result = strip_thinking(result) or result
 
@@ -972,7 +1021,7 @@ class DeepResearcher:
                         expand_messages,
                         temperature=0.4,
                         max_tokens=self.max_report_tokens,
-                        timeout=300,
+                        timeout=_report_timeout(),
                     )
                     clean_expanded = strip_thinking(expanded) or expanded
                     if (

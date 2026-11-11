@@ -96,13 +96,14 @@ def call_llm_api(prompt_text: str, model_config: dict) -> str:
     In caso di offline o fallimento, fa il fallback su una risposta simulata (mock).
     """
     try:
-        from src.runtime.llm_adapter import resolve_llm_endpoint
+        from src.runtime.llm_adapter import resolve_llm_credentials
 
-        api_url, model_name = resolve_llm_endpoint()
+        # Key resolved with URL/model (default DB provider, else .env).
+        api_url, model_name, api_key = resolve_llm_credentials()
     except ValueError:
         api_url = (os.getenv("AION_API_URL") or "").strip().rstrip("/")
         model_name = (os.getenv("AION_MODEL") or "").strip()
-    api_key = os.getenv("AION_LLM_API_KEY", "placeholder-token")
+        api_key = os.getenv("AION_LLM_API_KEY", "placeholder-token")
 
     # Costruisce l'URL completo basato su AION_API_URL
     chat_url = f"{api_url.rstrip('/')}/chat/completions"
