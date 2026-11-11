@@ -24,6 +24,11 @@ skills:
 
 `native_tool_groups` is **separate** from `mcp_servers`: it lists only bundles defined in `native_tool_registry.yaml` (merge with `native_tool_registry.local.yaml` if present).
 
+Like an MCP server, a group missing from the profile means the capability is gone:
+without `web_research` the agent has no `web_search` / `web_fetch_page` (not even via
+`tool_search`) and chat-ui hides the web search toggle. Deep research is a separate
+group (`deep_research`) and must be removed too if the profile must not reach the web.
+
 ## Environment variables (`.env`)
 
 | Variable | Role |

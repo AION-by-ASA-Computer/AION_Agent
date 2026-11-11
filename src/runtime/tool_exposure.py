@@ -45,7 +45,12 @@ RESIDENT_TOOL_NAMES = frozenset(
 )
 
 # Native bundles kept as real tools (small). Others are a one-line manifest.
-RESIDENT_NATIVE_GROUPS = frozenset({"mnemos"})
+# ``deep_research`` is resident so that, when the Deep Research tools are on the
+# agent (connector on the profile or Deep Research mode), the model can call
+# trigger_research on its first step instead of a tool_search round trip; the
+# deferred variant made the model reason at length on stale "No tool matched"
+# results before starting the job.
+RESIDENT_NATIVE_GROUPS = frozenset({"mnemos", "deep_research"})
 
 # Cold-server tools named by skills. The slug is warmed only when tool_search
 # asks for that name and the server is on the profile.
@@ -71,7 +76,12 @@ _KNOWN_COLD_TOOLS = {
 _LEARNED_COLD_TOOLS: Dict[str, str] = {}
 
 _SEARCH_LIMIT = 5
-_DEFERRED_BY_SESSION: Dict[str, List[Any]] = {}
+# Deferred tool objects per (chat session, profile slug). The profile is part
+# of the key because one chat session can build agents for several profiles
+# (e.g. the default aion_std warm-up, then the profile the user picked): a
+# session-only key let tool_search hand a profile tools of another profile,
+# such as web_search on a profile without the web_research group.
+_DEFERRED_BY_SESSION: Dict[Tuple[str, str], List[Any]] = {}
 
 # Haystack runs the tool calls of one step in a thread pool. tool_search calls
 # of one session take turns, so tool_search("list_pending_updates") sees the
@@ -125,10 +135,18 @@ def resident_mcp_servers(server_names: Sequence[str]) -> List[str]:
 
 
 def deferred_mcp_servers(server_names: Sequence[str]) -> List[str]:
+    from src.runtime.deep_research_tools import DEEP_RESEARCH_MCP_SLUGS
+
     names = [n for n in server_names if n]
     if not defer_tool_groups_enabled():
         return []
-    return [n for n in names if n not in RESIDENT_MCP_SERVERS]
+    # The legacy ``deep_research`` MCP slug is only a connector flag (the tools
+    # are in-process and resident): never offer it as a loadable MCP group.
+    return [
+        n
+        for n in names
+        if n not in RESIDENT_MCP_SERVERS and n not in DEEP_RESEARCH_MCP_SLUGS
+    ]
 
 
 def deferred_native_groups(groups: Sequence[str]) -> List[str]:
@@ -166,21 +184,49 @@ def select_resident_tools(tools: Sequence[Any]) -> List[Any]:
     return kept
 
 
-def remember_deferred_tools(session_id: str, tools: Sequence[Any]) -> None:
-    """Keep deferred tool objects for this chat so tool_search can publish them."""
-    sid = session_id or ""
-    current = _DEFERRED_BY_SESSION.get(sid, [])
+def _pool_key(session_id: str, profile_slug: str) -> Tuple[str, str]:
+    """Key of the deferred pool: (chat session, profile slug)."""
+    return (session_id or "", (profile_slug or "").strip())
+
+
+def remember_deferred_tools(
+    session_id: str, tools: Sequence[Any], profile_slug: str = ""
+) -> None:
+    """Keep deferred tool objects for this chat + profile so tool_search can publish them.
+
+    Called by ``src.main.get_agent`` with the agent's deferred tools and by
+    tool_search after it loads a group. ``profile_slug`` scopes the pool so a
+    profile never sees tools deferred by another profile's agent.
+    """
+    key = _pool_key(session_id, profile_slug)
+    current = _DEFERRED_BY_SESSION.get(key, [])
     merged, _added = _extend_tool_collection(current, tools)
-    _DEFERRED_BY_SESSION[sid] = merged
+    _DEFERRED_BY_SESSION[key] = merged
 
 
-def deferred_tools_for(session_id: str) -> List[Any]:
-    return list(_DEFERRED_BY_SESSION.get(session_id or "", []))
+def deferred_tools_for(session_id: str, profile_slug: str = "") -> List[Any]:
+    """Deferred tools remembered for this chat session and profile."""
+    return list(_DEFERRED_BY_SESSION.get(_pool_key(session_id, profile_slug), []))
+
+
+def clear_deferred_tools_of_other_profiles(session_id: str, profile_slug: str) -> None:
+    """Drop the deferred pools of ``session_id`` that belong to other profiles.
+
+    Called by ``src.main.get_agent`` on a profile switch, together with the
+    eviction of the other profiles' cached agents.
+    """
+    keep = _pool_key(session_id, profile_slug)
+    for key in [
+        k for k in _DEFERRED_BY_SESSION if k[0] == (session_id or "") and k != keep
+    ]:
+        _DEFERRED_BY_SESSION.pop(key, None)
 
 
 def clear_deferred_tools(session_id: str = "") -> None:
+    """Drop the deferred pools of one session (all profiles) or of every session."""
     if session_id:
-        _DEFERRED_BY_SESSION.pop(session_id, None)
+        for key in [k for k in _DEFERRED_BY_SESSION if k[0] == session_id]:
+            _DEFERRED_BY_SESSION.pop(key, None)
         with _SEARCH_LOCKS_GUARD:
             _SEARCH_LOCKS.pop(session_id, None)
     else:
@@ -202,8 +248,9 @@ def _deferred_native_tool_names() -> set[str]:
     from src.runtime.native_tools.registry_io import get_bundle
 
     names: set[str] = set()
-    # Known heavy bundles. Unknown bundles are not stripped here.
-    for gid in ("web_research", "deep_research"):
+    # Known heavy bundles. Unknown bundles are not stripped here; resident
+    # bundles (RESIDENT_NATIVE_GROUPS, e.g. deep_research) are never deferred.
+    for gid in ("web_research",):
         bundle = get_bundle(gid) or {}
         for tid in bundle.get("tools") or []:
             names.add(str(tid))
@@ -355,7 +402,37 @@ def _already_loaded_names(session_id: str) -> set[str]:
     return names
 
 
-def _pool_for(session_id: str) -> List[Any]:
+def _profile_slug(profile: Any) -> str:
+    return str(getattr(profile, "slug", None) or getattr(profile, "name", "") or "")
+
+
+def _allowed_by_native_groups(tool: Any, profile: Any) -> bool:
+    """False for tools of a native bundle the profile does not list.
+
+    Defence in depth on top of the per-profile pool: whatever ends up in the
+    pool, tool_search never publishes e.g. web_search to a profile without the
+    web_research group.
+    """
+    from src.runtime.native_tools.registry_io import load_merged_native_tool_registry
+
+    name = _tool_name(tool)
+    groups = set(getattr(profile, "native_tool_groups", None) or [])
+    try:
+        bundles = (load_merged_native_tool_registry() or {}).get("bundles") or {}
+    except Exception:
+        return True
+    for gid, bundle in bundles.items():
+        tool_ids = {str(t) for t in ((bundle or {}).get("tools") or [])}
+        if name in tool_ids and gid in groups:
+            return True
+    # Name belongs to some bundle but none of them is on the profile.
+    return not any(
+        name in {str(t) for t in ((b or {}).get("tools") or [])}
+        for b in bundles.values()
+    )
+
+
+def _pool_for(session_id: str, profile: Any = None) -> List[Any]:
     from src.runtime.turn_compaction import resolve_turn_runtime
 
     rt = resolve_turn_runtime(session_id or None)
@@ -366,9 +443,11 @@ def _pool_for(session_id: str) -> List[Any]:
         else []
     )
     merged, _added = _extend_tool_collection(
-        agent_tools, deferred_tools_for(session_id)
+        agent_tools, deferred_tools_for(session_id, _profile_slug(profile))
     )
-    return merged
+    if profile is None:
+        return merged
+    return [t for t in merged if _allowed_by_native_groups(t, profile)]
 
 
 def _group_for_query(query: str, profile: Any) -> Optional[str]:
@@ -404,8 +483,10 @@ def _group_for_query(query: str, profile: Any) -> Optional[str]:
     return None
 
 
-def _remember_loaded(session_id: str, tools: Sequence[Any]) -> None:
-    remember_deferred_tools(session_id, tools)
+def _remember_loaded(
+    session_id: str, tools: Sequence[Any], profile: Any = None
+) -> None:
+    remember_deferred_tools(session_id, tools, _profile_slug(profile))
     from src.runtime.turn_compaction import resolve_turn_runtime
 
     rt = resolve_turn_runtime(session_id or None)
@@ -466,7 +547,7 @@ def make_tool_search_tool(
 
     def _search(query: str) -> str:
         q = (query or "").strip()
-        pool = _pool_for(session_id)
+        pool = _pool_for(session_id, profile)
         catalog = sorted({_tool_name(t) for t in pool if _tool_name(t)})
         groups = activatable_groups(profile)
         available = (
@@ -501,7 +582,7 @@ def make_tool_search_tool(
                     profile=profile,
                 )
                 if loaded:
-                    _remember_loaded(session_id, loaded)
+                    _remember_loaded(session_id, loaded, profile)
                 ranked = rank_tools(q, loaded)
                 if _norm_query(q) == _norm_query(group) or not ranked:
                     chosen = list(loaded[:_SEARCH_LIMIT])

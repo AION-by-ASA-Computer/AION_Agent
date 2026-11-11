@@ -95,7 +95,16 @@ def refresh_agent_turn_context(
         elif mode == "deep_research":
             from src.runtime.deep_research_mode import build_deep_research_system_prompt
 
+            # Deep Research mode works on every profile: get_agent adds
+            # trigger_research to the deep_research-mode agent regardless of
+            # the profile's connector, so the mode prompt is always valid.
             prompt += build_deep_research_system_prompt()
+        # Re-append the deferred-name catalog built with the agent (see
+        # src.main._finish_get_agent_build): without it the refreshed prompt
+        # silently dropped the names tool_search can load.
+        catalog = getattr(agent, "_aion_deferred_catalog", "") or ""
+        if prompt and isinstance(catalog, str) and catalog:
+            prompt += catalog
         if prompt and hasattr(agent, "system_prompt"):
             agent.system_prompt = prompt
     except Exception:

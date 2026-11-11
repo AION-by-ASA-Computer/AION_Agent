@@ -75,3 +75,35 @@ line2",tavily
     assert data is not None
     assert len(data["results"]) == 2
     assert data["results"][0]["url"] == "https://a.org"
+
+
+def test_web_search_toon_round_trip_with_escaped_quotes():
+    """Snippets with quotes/backslashes keep every column in place after a round trip.
+
+    Regression: the encoder writes \\" inside quoted cells but the row parser only
+    understood "", so the columns shifted and page text ended up in ``provider``
+    (shown as the Deep Research report's "Search" statistic).
+    """
+    rows = [
+        {
+            "title": 'Rust (programming language) - "Wikipedia"',
+            "url": "https://en.wikipedia.org/wiki/Rust",
+            "snippet": 'History [edit "Edit section"] path C:\rust, then "quotes", commas',
+            "provider": "tavily",
+        },
+        {
+            "title": "Second",
+            "url": "https://b.org",
+            "snippet": "plain snippet",
+            "provider": "tavily",
+        },
+    ]
+    raw = format_web_search_toon(
+        {"query": "rust", "provider_used": "tavily", "results": rows}
+    )
+    data = parse_web_search_toon(raw)
+    assert data is not None
+    assert [r["provider"] for r in data["results"]] == ["tavily", "tavily"]
+    assert [r["url"] for r in data["results"]] == [r["url"] for r in rows]
+    assert data["results"][0]["title"] == rows[0]["title"]
+    assert '"Edit section"' in data["results"][0]["snippet"]

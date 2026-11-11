@@ -58,9 +58,17 @@ interface BlockMarkdownEditorProps {
   value: string;
   onChange: (val: string) => void;
   placeholder?: string;
+  /** Minimum height in px. With `fill`, it only applies below the `lg` breakpoint. */
   height?: number;
   readOnly?: boolean;
   allowTasks?: boolean;
+  /**
+   * Desktop (`lg+`) fill mode: the editor drops its fixed minimum height and grows to the
+   * space its flex-column parent gives it, scrolling its blocks internally. Used by the
+   * Profiles / Skills editors, whose panels are sized to the viewport so the page itself
+   * never scrolls. Below `lg` the editor keeps `height` as min-height and the page scrolls.
+   */
+  fill?: boolean;
 }
 
 // --- Utils ---
@@ -639,6 +647,7 @@ export function BlockMarkdownEditor({
   height = 550,
   readOnly = false,
   allowTasks = true,
+  fill = false,
 }: BlockMarkdownEditorProps) {
   const [blocks, setBlocks] = useState<Block[]>([]);
   const [focusedId, setFocusedId] = useState<string | null>(null);
@@ -912,9 +921,15 @@ export function BlockMarkdownEditor({
   }, [blocks, readOnly]);
 
   return (
-    <div 
-      className="flex flex-col border border-border rounded-2xl bg-muted/60 overflow-hidden shadow-inner group-focus-within:border-primary/50 transition-all duration-300"
-      style={{ minHeight: height }}
+    <div
+      className={
+        "flex flex-col border border-border rounded-2xl bg-muted/60 overflow-hidden shadow-inner group-focus-within:border-primary/50 transition-all duration-300" +
+        // An inline minHeight cannot be responsive, so fill mode passes it through a CSS variable:
+        // min-height on small screens, then on lg+ a flex-1 / min-h-0 box bounded by the parent,
+        // with a 12rem floor so the editor stays usable on short screens (the panel scrolls instead).
+        (fill ? " min-h-[var(--bme-min-h)] lg:min-h-48 lg:flex-1" : "")
+      }
+      style={fill ? ({ "--bme-min-h": `${height}px` } as React.CSSProperties) : { minHeight: height }}
     >
       <div 
         ref={containerRef}

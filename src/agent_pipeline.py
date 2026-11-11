@@ -1072,6 +1072,8 @@ class AgentPipeline:
             self.session_id,
             self.user_id,
             transcript,
+            # Lets the flush honour the profile's mnemos group.
+            profile_slug=self.profile_name,
         )
         await hook_registry.dispatch(
             "pre_compact",
