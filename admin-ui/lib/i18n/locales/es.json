@@ -2648,6 +2648,63 @@
       "user_purged": "Usuario de AION eliminado"
     }
   },
+  "update": {
+    "banner": {
+      "title": "Nueva versión {{version}} disponible",
+      "title_local": "Nueva build local disponible",
+      "installed": "(instalada: {{version}})",
+      "changelog": "Changelog",
+      "how_to": "Cómo actualizar",
+      "update_now": "Actualizar ahora",
+      "dismiss_aria": "Cerrar aviso de actualización"
+    },
+    "confirm": {
+      "title": "Actualizar AION",
+      "cancel": "Cancelar",
+      "loading_plan": "Calculando las actualizaciones que aplicar…",
+      "chain_label": "Se aplicarán en secuencia:",
+      "release_notes": "Notas de la versión",
+      "local_hop": "build desde el código local",
+      "warning_downtime": "Cada paso reinicia los servicios: AION no estará disponible durante unos minutos.",
+      "warning_backup": "Antes de cada paso se crea una copia de seguridad automática de los datos.",
+      "warning_keep_open": "Puedes cerrar la página: la actualización continúa y, al volver a abrirla, verás el progreso.",
+      "starting": "Iniciando…",
+      "confirm": "Actualizar",
+      "error_running": "Ya hay una actualización en curso.",
+      "error_no_update": "No hay ninguna actualización que aplicar.",
+      "error_unavailable": "El servicio de actualización (aion-updater) no está disponible.",
+      "error_generic": "La actualización ha fallado."
+    },
+    "progress": {
+      "title_running": "Actualización en curso",
+      "title_succeeded": "Actualización completada",
+      "title_failed": "La actualización ha fallado",
+      "reloading": "Recargando la página con la nueva versión…",
+      "services_restarting": "Reiniciando servicios…",
+      "hop_done": "completado",
+      "hop_running": "en curso",
+      "hop_failed": "fallido",
+      "hop_pending": "pendiente",
+      "failed_hint": "Las versiones ya aplicadas siguen instaladas: \"Reintentar\" continúa desde el paso fallido.",
+      "backup_hint": "Copia de seguridad de los datos: {{path}}",
+      "show_log": "Mostrar log",
+      "close": "Cerrar",
+      "retry": "Reintentar",
+      "reload": "Recargar ahora",
+      "phase": {
+        "starting": "Iniciando…",
+        "plan": "Calculando los pasos…",
+        "backup": "Copia de seguridad de los datos…",
+        "fetch": "Descargando la configuración…",
+        "build": "Compilando imágenes locales…",
+        "pull": "Descargando imágenes…",
+        "migrate": "Migrando datos…",
+        "restart": "Reiniciando servicios…",
+        "health": "Comprobando el estado de los servicios…",
+        "done": "Completado"
+      }
+    }
+  },
   "admin_service_accounts": {
     "title": "Cuentas de servicio",
     "subtitle": "Cuentas no humanas para integraciones y scripts. Solo inician sesión con las claves API que crees aquí, y todas las claves caducan.",

@@ -386,6 +386,26 @@ Probe requires a successful connection test before advancing LLM/embedding/OCR (
 
 ---
 
+## One-click update
+
+When a new release is available the admin-ui shows a banner on every page
+(`components/VersionUpdateBanner.tsx`, fed by `GET /admin/version-check`).
+On GHCR deployments with the `aion-updater` sidecar it also shows an
+**Update now** button:
+
+- `components/update/UpdateConfirmDialog.tsx` loads the hop plan
+  (`GET /admin/update/plan?refresh=true`) and lists every release that will be
+  applied, with links to the release notes;
+- confirming calls `POST /admin/update/start` (admin only, audited as `update.start`);
+- `components/update/UpdateProgressOverlay.tsx` (mounted in `AppShell`) polls
+  `GET /admin/update/status` every 3s, shows per-hop progress, the current
+  phase and the log tail, tolerates the 502s caused by the restarts, reloads
+  the page on success and offers **Retry** (resume from the failed hop) on failure.
+  It also reappears on page load while an upgrade is running.
+
+Without the sidecar the banner only links to the changelog and the manual
+upgrade guide. See [Self-update from the admin-ui](../deployment/self-update.md).
+
 ## Next.js Architecture
 
 ### Why Next.js?
