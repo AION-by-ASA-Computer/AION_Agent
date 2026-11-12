@@ -1262,6 +1262,99 @@ class SmtpSettings(Base):
     )
 
 
+class SmbSettings(Base):
+    """Global switch and limits of the ``smb_files`` MCP connector (migration e2f3a4b033).
+
+    One row per tenant, written by the admin API (``src/api/admin_smb.py``) and
+    read by the MCP server through ``src/tools/smb_files/settings_store.py``.
+    The file servers themselves live in :class:`SmbServer` (migration
+    f3a4b5c034).  No secret here: each user's Windows credentials live in the
+    per-user credential store and reach the MCP process as env at spawn time.
+    """
+
+    __tablename__ = "smb_settings"
+
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tenants.id"), primary_key=True
+    )
+    # Disabled by default: the connector stays off until the admin opts in.
+    enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
+    max_read_mb: Mapped[int] = mapped_column(Integer, default=25, server_default="25")
+    max_write_mb: Mapped[int] = mapped_column(
+        Integer, default=25, server_default="25"
+    )
+    # How long a local AD-lockout block lasts (see smb_files/auth_guard.py).
+    lockout_minutes: Mapped[int] = mapped_column(
+        Integer, default=30, server_default="30"
+    )
+    updated_by_user_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("users.id"), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
+class SmbServer(Base):
+    """One Windows file server reachable through ``smb_files`` (migration f3a4b5c034).
+
+    The agent addresses it as ``<alias>/<Share>/<path>``.  Servers sharing a
+    ``credential_set`` (typically: the same AD domain) share the user's
+    credentials; ``DEFAULT`` maps to the ``SMB_USERNAME``/``SMB_PASSWORD``
+    keys, any other set to ``SMB_USERNAME__<SET>``/``SMB_PASSWORD__<SET>``.
+    Holds no secret.
+    """
+
+    __tablename__ = "smb_servers"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "alias", name="uq_smb_servers_tenant_alias"),
+        # smbclient caches one session per host: two rows on the same host would
+        # silently share a session (and credentials).
+        UniqueConstraint("tenant_id", "host", name="uq_smb_servers_tenant_host"),
+    )
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    tenant_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("tenants.id"), nullable=False, index=True
+    )
+    alias: Mapped[str] = mapped_column(String(32), nullable=False)
+    label: Mapped[Optional[str]] = mapped_column(String(128))
+    # Stored lowercase: host names are case-insensitive.
+    host: Mapped[str] = mapped_column(String(256), nullable=False)
+    port: Mapped[int] = mapped_column(Integer, default=445, server_default="445")
+    # Used for bare usernames ("mario.rossi" -> "DOMAIN\mario.rossi").
+    default_domain: Mapped[Optional[str]] = mapped_column(String(128))
+    credential_set: Mapped[str] = mapped_column(
+        String(24), default="DEFAULT", server_default="DEFAULT", nullable=False
+    )
+    # JSON list: [{"name": "Documenti", "read_only": false, "label": "..."}]
+    shares_json: Mapped[str] = mapped_column(
+        Text, default="[]", server_default="[]", nullable=False
+    )
+    # Values: 'ntlm', 'negotiate' (negotiate prepares the Kerberos roadmap).
+    auth_protocol: Mapped[str] = mapped_column(
+        String(16), default="ntlm", server_default="ntlm", nullable=False
+    )
+    require_encryption: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0"
+    )
+    # Lets the admin take one server offline without losing its configuration.
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default="1")
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    last_test_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    last_test_ok: Mapped[Optional[bool]] = mapped_column(Boolean)
+    last_test_error: Mapped[Optional[str]] = mapped_column(String(64))
+    updated_by_user_id: Mapped[Optional[str]] = mapped_column(
+        String(64), ForeignKey("users.id"), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+
+
 class PasswordSetupToken(Base):
     """Link monouso inviati via email per impostare la password.
 

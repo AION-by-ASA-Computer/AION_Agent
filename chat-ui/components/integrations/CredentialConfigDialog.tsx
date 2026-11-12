@@ -239,8 +239,12 @@ export function CredentialConfigDialog({
       return;
     }
 
+    // Campi write_only (es. password di dominio): il server non restituisce mai il valore,
+    // quindi non esiste nulla da recuperare; "mostra" rivela solo il testo digitato in locale.
+    const isWriteOnly = formFields.some((f) => f.key === key && f.write_only);
+
     // Se il valore è la maschera di censura ed è salvato sul server, recuperiamo il testo in chiaro decifrato
-    if (values[key] === MASKED_SECRET_VALUE && savedKeys.has(key)) {
+    if (!isWriteOnly && values[key] === MASKED_SECRET_VALUE && savedKeys.has(key)) {
       setLoadingSecretKeys((prev) => ({ ...prev, [key]: true }));
       try {
         const res = await fetch(
@@ -403,6 +407,8 @@ export function CredentialConfigDialog({
     const missing = attemptedSave && isFieldMissing(field);
     const isMaskedSecret = isSecret && values[field.key] === MASKED_SECRET_VALUE;
     const isLoadingSecret = loadingSecretKeys[field.key];
+    // Il valore salvato non e' rivelabile: l'occhio compare solo mentre l'utente digita
+    const hideReveal = Boolean(field.write_only) && isMaskedSecret;
     const isDeleting = deletingKeys[field.key];
 
     // ==========================================
@@ -751,11 +757,13 @@ export function CredentialConfigDialog({
                 }}
                 placeholder={`Inserisci ${labelText.toLowerCase()}…`}
                 className={cn(
-                  "w-full rounded-xl border bg-background dark:bg-black/50 px-3.5 py-2.5 pr-12 text-xs sm:text-sm text-foreground font-mono placeholder:text-muted-foreground/60 focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-400/20 dark:focus:ring-zinc-400/20 outline-none transition",
+                  "w-full rounded-xl border bg-background dark:bg-black/50 px-3.5 py-2.5 text-xs sm:text-sm text-foreground font-mono placeholder:text-muted-foreground/60 focus:border-zinc-400 dark:focus:border-zinc-500 focus:ring-2 focus:ring-zinc-400/20 dark:focus:ring-zinc-400/20 outline-none transition",
+                  hideReveal ? "pr-3.5" : "pr-12",
                   missing ? "border-destructive ring-2 ring-destructive/20" : "border-border/80 dark:border-white/15",
                   isMaskedSecret && !showPlain && "text-muted-foreground tracking-widest",
                 )}
               />
+              {hideReveal ? null : (
               <button
                 type="button"
                 onClick={() => void toggleShowPassword(field.key)}
@@ -773,6 +781,7 @@ export function CredentialConfigDialog({
                   <Eye className="h-4 w-4" />
                 )}
               </button>
+              )}
             </div>
           ) : (
             <input
@@ -790,8 +799,10 @@ export function CredentialConfigDialog({
 
           {isMaskedSecret && !showPlain ? (
             <p className="mt-1 text-[11px] text-muted-foreground">
-              {t("integrationsPage.modify_field_hint") ||
-                "Lascia invariato per conservare il valore salvato, oppure digita per sostituirlo."}
+              {field.write_only
+                ? t("integrationsPage.write_only_field_hint")
+                : t("integrationsPage.modify_field_hint") ||
+                  "Lascia invariato per conservare il valore salvato, oppure digita per sostituirlo."}
             </p>
           ) : null}
         </div>

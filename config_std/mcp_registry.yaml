@@ -119,13 +119,17 @@ mssql:
     MSSQL_TRUST_SERVER_CERTIFICATE: "true"
     NODE_TLS_REJECT_UNAUTHORIZED: "0"
 
-monge_gateway:
-  command: "python"
-  args: ["-u", "monge_gateway/server.py"]
-  description: "Gateway DMZ per interrogazione database MS SQL (automa_monge / Storicofatturati)"
+smb_files:
+  command: python
+  args: [-u, smb_files/server.py]
+  description: "File server Windows (share SMB) con le credenziali dell'utente"
+  aion_connector_id: smb_files
   env:
-    DMZ_GATEWAY_URL: "${DMZ_GATEWAY_URL:-http://IP_MACCHINA_DMZ:8000}"
-    DMZ_GATEWAY_API_KEY: "${DMZ_GATEWAY_API_KEY}"
+    SMB_USERNAME: "${AION_USER_SMB_FILES__SMB_USERNAME}"
+    SMB_PASSWORD: "${AION_USER_SMB_FILES__SMB_PASSWORD}"
+    # JSON of all the user's smb_files credentials: carries the extra credential
+    # sets (SMB_USERNAME__<SET> / SMB_PASSWORD__<SET>) of servers in other domains.
+    SMB_EXTRA_CREDENTIALS: "${AION_USER_SMB_FILES__*}"
 
 # --- Per-user MCP credentials (Approccio A + HOME isolation Approccio B) ---
 # Con AION_MCP_USER_CREDENTIALS=1, i valori sotto possono usare placeholder risolti dal DB

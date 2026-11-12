@@ -22,7 +22,9 @@ from src.runtime.credential_store import (
     user_credentials_enabled,
 )
 from src.runtime.mcp_integration_helpers import (
+    WRITE_ONLY_HINT,
     batch_list_credentials_hints,
+    credential_key_is_write_only,
     credentials_feature_enabled,
     get_user_mcp_preference_map,
     integration_row_to_public_dict,
@@ -376,8 +378,25 @@ async def save_credentials(
             status_code=404, detail="Integration not found or not enabled"
         )
 
+    # Connectors whose credentials reach the process as one wildcard JSON
+    # (smb_files) only accept their own key format; checked before any write
+    # so a rejected request saves nothing.
+    from src.runtime.dynamic_credential_fields import credential_key_allowed
+
+    for key in body.credentials:
+        if not credential_key_allowed(body.server_slug, key):
+            raise HTTPException(
+                status_code=400,
+                detail={"code": "credential_key_not_allowed", "key": key[:64]},
+            )
+
     for key, value in body.credentials.items():
         hint = (body.display_hints or {}).get(key)
+        # The hint is client-supplied and returned by GET /integrations: for
+        # write-only secrets force the mask so a client can never leak the value
+        # through it.
+        if await credential_key_is_write_only(body.server_slug, key):
+            hint = WRITE_ONLY_HINT
         await set_credential(
             user_id,
             body.server_slug,
@@ -415,6 +434,11 @@ async def get_user_credential_value(
     user_id = _credential_user_id(auth)
     tenant = _tenant_id()
     from src.runtime.credential_store import get_credential
+
+    # Write-only secrets (e.g. the Windows domain password of smb_files) never
+    # leave the backend: the runtime reads them only when spawning the MCP process.
+    if await credential_key_is_write_only(server_slug, credential_key):
+        raise HTTPException(status_code=403, detail="secret_write_only")
 
     val = await get_credential(user_id, server_slug, credential_key, tenant_id=tenant)
     if val is None:

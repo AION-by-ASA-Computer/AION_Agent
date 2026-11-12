@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AudioLines, Brain, Cpu, Globe, Loader2, Mail, RotateCcw, Save, ScanLine, ShieldCheck, Timer } from "lucide-react";
+import { AudioLines, Brain, Cpu, Globe, Loader2, Mail, RotateCcw, Save, ScanLine, Server, ShieldCheck, Timer } from "lucide-react";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -18,6 +18,7 @@ import { SandboxSection } from "@/components/settings/SandboxSection";
 import { SttSection, clearedStt, type SttMode } from "@/components/settings/SttSection";
 import { RetentionSection } from "@/components/settings/RetentionSection";
 import { SmtpSection } from "@/components/settings/SmtpSection";
+import { SmbSection } from "@/components/settings/SmbSection";
 import { K, type Notify, type SectionCtx, type Settings } from "@/components/settings/types";
 
 const k = K;
@@ -31,11 +32,12 @@ const SECTIONS = [
   { id: "sandbox", icon: ShieldCheck },
   { id: "retention", icon: Timer },
   { id: "smtp", icon: Mail },
+  { id: "smb", icon: Server },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
-// Models, Sandbox and SMTP persist on their own; the rest saves through the page bar.
-const SELF_SAVING: SectionId[] = ["models", "sandbox", "smtp"];
+// Models, Sandbox, SMTP and the file server persist on their own; the rest saves through the page bar.
+const SELF_SAVING: SectionId[] = ["models", "sandbox", "smtp", "smb"];
 
 const isSection = (v: string): v is SectionId => SECTIONS.some((s) => s.id === v);
 const positive = (v: string | undefined) => {
@@ -277,6 +279,7 @@ export default function SettingsPage() {
           <div hidden={active !== "sandbox"}><SandboxSection t={t} notify={notify} onRestart={onRestart} /></div>
           <div hidden={active !== "retention"}><RetentionSection {...ctx} /></div>
           <div hidden={active !== "smtp"}><SmtpSection t={t} notify={notify} /></div>
+          <div hidden={active !== "smb"}><SmbSection t={t} notify={notify} /></div>
         </div>
       </div>
 

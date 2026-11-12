@@ -607,6 +607,7 @@
     "field_saved_placeholder": "•••••••••••• (valor guardado)",
     "filter_no_results": "No se encontraron integraciones con este filtro.",
     "modify_field_hint": "Deja sin cambios para conservar el valor guardado, o escribe para reemplazarlo.",
+    "write_only_field_hint": "Por seguridad, la contraseña guardada no se puede mostrar: escribe para reemplazarla.",
     "oauth_callback_missing_slug": "Error en callback OAuth: falta el identificador de la integración.",
     "oauth_callback_state_mismatch": "Comprobación de seguridad OAuth fallida: el estado no coincide.",
     "oauth_connect_service": "Conectar {{service}}",

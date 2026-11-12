@@ -89,6 +89,7 @@ _DEFAULT_SESSION_SCOPED_SERVERS = frozenset(
         "skills_hub",
         "query_memory",
         "aion_subagents",
+        "smb_files",  # session workspace copy/upload + per-user Windows credentials
     }
 )
 
@@ -1686,7 +1687,11 @@ class MCPManager:
                 continue
             if is_static_mcp_env_key(str(key)):
                 continue
-            needs_user_cred = "${AION_USER_" in template
+            # The ``${AION_USER_<SLUG>__*}`` wildcard only carries optional
+            # extra keys (e.g. smb_files credential sets): never blocks a spawn.
+            needs_user_cred = "${AION_USER_" in template and not template.strip().endswith(
+                "__*}"
+            )
             val = resolved.get(key)
             if needs_user_cred and (
                 val is None or (isinstance(val, str) and not val.strip())

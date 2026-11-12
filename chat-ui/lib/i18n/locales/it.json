@@ -580,6 +580,7 @@
     "field_saved_encrypted": "Valore salvato protetto",
     "field_saved_placeholder": "•••••••••••• (valore salvato)",
     "modify_field_hint": "Lascia invariato per conservare il valore salvato, oppure digita per sostituirlo.",
+    "write_only_field_hint": "Per sicurezza la password salvata non può essere visualizzata: digita per sostituirla.",
     "badge_connected": "connessa",
     "badge_disabled": "disattivata",
     "badge_pending_short": "da configurare",

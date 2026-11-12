@@ -375,7 +375,7 @@ def skill_append(
 ) -> str:
     """Appends new notes, insights, rules, or data sections to an existing skill WITHOUT overwriting existing content.
 
-    name: slug della skill (es. 'monge_mssql_gateway')
+    name: slug della skill (es. 'mssql_gateway')
     content_to_append: testo Markdown con le nuove informazioni da integrare
     heading: intestazione opzionale (es. '## Aggiornamenti Anagrafica Clienti')
     """

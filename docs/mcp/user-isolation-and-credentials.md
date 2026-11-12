@@ -33,6 +33,7 @@ python -c "import secrets; print(secrets.token_hex(32))"
 - `${VAR}` — risolto da `os.environ` / `.env` (comportamento storico).
 - `${AION_USER_<SLUG_MAIUSCOLO>__<CHIAVE>}` — risolto dal DB per l’utente corrente, es. `${AION_USER_EMAIL_MCP__ACCESS_TOKEN}` per lo slug registry `email_mcp`.
 - `${AION_USER_<CHIAVE>}` — forma breve: la chiave è relativa allo **slug del server** in cui compare la mappa `env`.
+- `${AION_USER_<SLUG_MAIUSCOLO>__*}` — jolly: un oggetto JSON con **tutte** le credenziali dell'utente per lo slug (stringa vuota se non ce ne sono). Serve quando i nomi delle chiavi dipendono dalla configurazione admin e non si possono elencare nel registry, es. i set di credenziali di [`smb_files`](smb-files.md#server-multipli-e-set-di-credenziali). Non blocca mai l'avvio del worker, non genera campi nel form (la variabile che lo riceve è un trasporto) e nel probe dell'Hub riceve un valore mock non-JSON. Solo i connettori che lo dichiarano ricevono il bundle.
 
 Vedi anche il commento di esempio in `config_std/mcp_registry.yaml`.
 
@@ -50,6 +51,15 @@ L'inferenza automatica della modalità avviene in `src/mcp_integration_sync.py` 
 - `${AION_USER_*}` → `per_user`
 - `${VAR}` (variabili standard) → `org_shared`
 - Nessuna variabile → `none`
+
+## Campi write-only (`write_only`)
+
+Un campo di `credential_fields` (catalogo connettori) può dichiarare `write_only: true`, tipicamente per password che non devono mai poter essere rilette, come la password di dominio Windows di [`smb_files`](smb-files.md). Per questi campi:
+
+- `GET /v1/integrations/credentials/{slug}/{key}` risponde **403** `secret_write_only` (il controllo usa schema DB e catalogo, quindi non si aggira con alias di slug o chiave): il valore è letto solo dal runtime allo spawn del processo MCP.
+- L'hint di visualizzazione resta sempre `****`; gli hint salvati in precedenza sono mascherati in `GET /v1/integrations`.
+- chat-ui nasconde l'icona «occhio» sul campo già salvato (compare solo mentre si digita un nuovo valore, che sostituisce quello salvato); admin-ui preserva il flag quando si salva lo schema dall'Hub.
+- Il flag è un'impostazione del catalogo: i campi senza `write_only` mantengono il comportamento storico.
 
 ## Hub unificato (admin)
 
