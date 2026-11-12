@@ -414,6 +414,19 @@ live-followable), sharing the turn plumbing with WhatsApp in
 `GROUPS_ENABLED` in `src/channels/telegram/groups.py` (code kept).
 See `docs/telegram/RUNBOOK.md`.
 
+### One-click update (aion-updater sidecar)
+
+The admin-ui "Update now" button (`VersionUpdateBanner` → `components/update/*`)
+calls `/admin/update/*` (`src/api/admin_update.py`), an admin-only proxy to the
+`updater` sidecar (`docker/updater/server.py`, `docker/Dockerfile.updater`,
+compose profile `updater` in `docker-compose.ghcr.yml`). The sidecar mounts
+`docker.sock` and runs the same `install.sh upgrade --yes --progress-file
+data/updater/status.json` hop chain (`--plan` prints the chain as JSON).
+`AION_UPDATER_MODE=1` keeps the sidecar out of per-hop restarts; it is recreated
+at the end. Hybrid test mode: `AION_UPGRADE_FINAL_LOCAL=1` + `AION_LOCAL_REPO_DIR`
+add a final `local` hop built from the clone (`upgrade_runner.py --to local`).
+See `docs/deployment/self-update.md`.
+
 ### Documentation
 - Single source of truth: `docs/` directory
 - Rendered site: `website/` (Docusaurus)

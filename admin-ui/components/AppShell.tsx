@@ -10,6 +10,7 @@ import { getStoredUserId, setStoredAuth } from "@/lib/auth/storage";
 import { fetchAuthStatus, resetAuthStatusCache } from "@/lib/auth/status";
 import { AdminBrand } from "@/components/brand/AdminBrand";
 import { VersionUpdateBanner } from "@/components/VersionUpdateBanner";
+import { UpdateProgressOverlay } from "@/components/update/UpdateProgressOverlay";
 import { useT } from "@/lib/i18n/use-t";
 import { cn } from "@/lib/cn";
 import { ADMIN_NAV, isNavActive } from "@/lib/admin-nav";
@@ -316,6 +317,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
           </div>
         </header>
         <VersionUpdateBanner className="mx-4 mt-4 sm:mx-6 lg:mx-8" />
+        {/* One-click upgrade progress: opens on start or when an upgrade is already running. */}
+        <UpdateProgressOverlay />
         <div className="mx-auto w-full max-w-[96rem] px-4 py-6 sm:px-6 lg:px-8">{children}</div>
       </main>
     </div>

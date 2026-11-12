@@ -15,6 +15,11 @@ AION_SKIP_PODMAN="${AION_SKIP_PODMAN:-0}"
 FORCE=0
 USE_LOCAL=0
 AION_YES=0
+# Upgrade: file JSON di avanzamento (scritto atomicamente a ogni fase) letto
+# dal sidecar aion-updater e mostrato dall'admin-ui. Vuoto = disattivato.
+AION_PROGRESS_FILE="${AION_PROGRESS_FILE:-}"
+# Upgrade: --plan calcola solo la catena di hop, la stampa in JSON ed esce.
+AION_PLAN_ONLY=0
 # Radice del clone, risolta prima di qualsiasi cd (serve a --local).
 LOCAL_REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]:-$0}")/.." 2>/dev/null && pwd || true)"
 
@@ -35,6 +40,8 @@ Usage: $0 [upgrade] [OPTIONS]
 Subcommands:
   upgrade            Aggiorna un'installazione GHCR esistente (eseguire nella
                      directory dove vivono .env e docker-compose.ghcr.yml)
+                     Opzioni extra: --plan (stampa la catena di hop in JSON ed
+                     esce), --progress-file <path> (stato JSON per l'admin-ui)
 
 Options:
   --dir <path>       Install directory (default: \$PWD/aion-agent)
@@ -65,6 +72,8 @@ while [[ $# -gt 0 ]]; do
         --force) FORCE=1; shift ;;
         --local) USE_LOCAL=1; shift ;;
         --yes|-y) AION_YES=1; shift ;;
+        --plan) AION_PLAN_ONLY=1; shift ;;
+        --progress-file) AION_PROGRESS_FILE="$2"; shift 2 ;;
         --help) usage ;;
         *) echo "Unknown option: $1"; exit 1 ;;
     esac
@@ -94,6 +103,14 @@ export AION_REF
 #      docker compose pull → up -d → health-check
 #   8. Aggiorna .aion-install.json
 #   9. Rilascia lock + riepilogo
+#  10. Se lanciato dal sidecar aion-updater: pianifica la sua ricreazione
+#
+# Estensioni per l'aggiornamento dall'admin-ui (docs/deployment/self-update.md):
+#   --plan              calcola solo la catena di hop e la stampa in JSON
+#   --progress-file F   scrive lo stato JSON a ogni fase (letto dal sidecar)
+#   AION_UPDATER_MODE=1 lo script gira dentro il sidecar (vedi _compose_up_stack)
+#   AION_UPGRADE_FINAL_LOCAL=1 + AION_LOCAL_REPO_DIR: modalità ibrida, con un
+#                       hop finale "local" costruito dal clone del repository
 # ===========================================================================
 
 # ---------------------------------------------------------------------------
@@ -101,32 +118,223 @@ export AION_REF
 # ---------------------------------------------------------------------------
 _lock_acquire() {
     local lock_file="$1"
+    local stale_sec="${AION_UPGRADE_STALE_LOCK_SEC:-7200}"
+    local my_host
+    my_host="$(hostname 2>/dev/null || echo unknown)"
     mkdir -p "$(dirname "$lock_file")"
     if [ -f "$lock_file" ]; then
-        local pid
-        pid=$(python3 -c "
-import json, sys
+        # Il lock può arrivare da un altro PID namespace: un run manuale
+        # sull'host e uno dal sidecar aion-updater non vedono i rispettivi PID.
+        # Per un lock di un altro hostname `kill -0` non è affidabile, quindi
+        # lo si considera attivo finché non supera la soglia stale (2h).
+        local info pid lock_host started
+        info=$(python3 -c "
+import json
 try:
     d = json.load(open('$lock_file'))
-    print(int(d.get('pid', 0)))
-except:
-    print(0)
-" 2>/dev/null || echo 0)
-        if [ "$pid" -gt 0 ] && kill -0 "$pid" 2>/dev/null; then
+    print(int(d.get('pid', 0)), d.get('hostname') or '-', int(d.get('started_at', 0)))
+except Exception:
+    print(0, '-', 0)
+" 2>/dev/null || echo "0 - 0")
+        read -r pid lock_host started <<<"$info"
+        if [ "$lock_host" != "-" ] && [ "$lock_host" != "$my_host" ]; then
+            local age=$(( $(date +%s) - started ))
+            if [ "$age" -lt "$stale_sec" ]; then
+                echo "[error] Upgrade già in corso su '$lock_host' (PID $pid, da ${age}s)."
+                echo "        Rimuovere $lock_file manualmente se nessun upgrade è attivo."
+                return 1
+            fi
+            echo "[info] Lock stale di '$lock_host' (età ${age}s) — rimosso."
+            rm -f "$lock_file"
+        elif [ "$pid" -gt 0 ] && kill -0 "$pid" 2>/dev/null; then
             echo "[error] Upgrade già in corso (PID $pid)."
             echo "        Rimuovere $lock_file manualmente se il processo non esiste più."
             return 1
+        else
+            echo "[info] Lock stale trovato (PID $pid non attivo) — rimosso."
+            rm -f "$lock_file"
         fi
-        echo "[info] Lock stale trovato (PID $pid non attivo) — rimosso."
-        rm -f "$lock_file"
     fi
-    printf '{"pid":%d,"started_at":%d}\n' "$$" "$(date +%s)" > "$lock_file"
+    printf '{"pid":%d,"started_at":%d,"hostname":"%s"}\n' "$$" "$(date +%s)" "$my_host" > "$lock_file"
     echo "[ok] Lock acquisito: $lock_file"
     return 0
 }
 
 _lock_release() {
     rm -f "$1"
+}
+
+# ---------------------------------------------------------------------------
+# .env helpers — lettura/scrittura idempotente di singole chiavi
+# ---------------------------------------------------------------------------
+
+# Stampa il valore di KEY nel .env della directory corrente (ultima occorrenza),
+# stringa vuota se assente.
+_env_get() {
+    python3 -c "
+import re, sys
+try:
+    found = re.findall(r'^' + re.escape(sys.argv[1]) + r'=(.*)$', open('.env').read(), re.MULTILINE)
+    print(found[-1].strip() if found else '')
+except Exception:
+    print('')
+" "$1" 2>/dev/null || true
+}
+
+# Imposta KEY=VALUE nel .env. Con "--if-missing" non tocca una chiave già
+# presente (anche se vuota): le scelte dell'amministratore restano intatte.
+_env_set() {
+    python3 -c "
+import re, sys
+args = sys.argv[1:]
+only_missing = args[0] == '--if-missing'
+if only_missing:
+    args = args[1:]
+key, value = args[0], args[1]
+txt = open('.env').read()
+pattern = re.compile(r'^' + re.escape(key) + r'=.*$', re.MULTILINE)
+if pattern.search(txt):
+    if only_missing:
+        sys.exit(0)
+    txt = pattern.sub(lambda _m: key + '=' + value, txt)
+else:
+    if txt and not txt.endswith('\n'):
+        txt += '\n'
+    txt += key + '=' + value + '\n'
+open('.env', 'w').write(txt)
+" "$@"
+}
+
+# ---------------------------------------------------------------------------
+# Progress file — stato JSON dell'upgrade per il sidecar aion-updater
+# ---------------------------------------------------------------------------
+# Uso: _progress key=value [key=value ...]
+#   - "reset=1"      riparte da un oggetto vuoto, conservando solo le chiavi
+#                    scritte dal sidecar prima dell'avvio (pid, log_file, ...)
+#   - "chain=a b c"  lista di versioni separate da spazio
+#   - "hop_index=N"  intero
+#   - "done_hop=X"   aggiunge X alla lista "completed"
+# La scrittura è atomica (file temporaneo + rename) perché il sidecar può
+# leggere il file in qualsiasi momento. No-op se --progress-file non è passato.
+_progress() {
+    [ -n "${AION_PROGRESS_FILE:-}" ] || return 0
+    python3 -c "
+import json, os, sys, tempfile, time
+
+path = sys.argv[1]
+try:
+    with open(path) as fh:
+        data = json.load(fh)
+except Exception:
+    data = {}
+now = time.strftime('%Y-%m-%dT%H:%M:%SZ', time.gmtime())
+for arg in sys.argv[2:]:
+    key, _, value = arg.partition('=')
+    if key == 'reset':
+        keep = ('pid', 'log_file', 'requested_by', 'started_at')
+        data = {k: data[k] for k in keep if k in data}
+        data.setdefault('started_at', now)
+    elif key == 'chain':
+        data['chain'] = value.split()
+    elif key == 'hop_index':
+        data['hop_index'] = int(value)
+    elif key == 'done_hop':
+        data.setdefault('completed', []).append(value)
+    else:
+        data[key] = value
+data['updated_at'] = now
+if data.get('state') in ('succeeded', 'failed'):
+    data.setdefault('finished_at', now)
+folder = os.path.dirname(os.path.abspath(path))
+os.makedirs(folder, exist_ok=True)
+fd, tmp = tempfile.mkstemp(dir=folder, prefix='.status.')
+with os.fdopen(fd, 'w') as fh:
+    json.dump(data, fh, indent=2)
+os.chmod(tmp, 0o644)
+os.replace(tmp, path)
+" "$AION_PROGRESS_FILE" "$@" || true
+}
+
+# Stato finale "failed" scritto dal trap EXIT quando l'upgrade esce con errore
+# senza aver già marcato un esito (es. `exit 1` dopo un messaggio [error]).
+# Il messaggio leggibile viene ricavato dal sidecar dall'ultima riga [error] del log.
+_progress_fail_if_running() {
+    local code="$1"
+    [ -n "${AION_PROGRESS_FILE:-}" ] || return 0
+    [ "$code" -eq 0 ] && return 0
+    local state
+    state=$(python3 -c "
+import json, sys
+try: print(json.load(open(sys.argv[1])).get('state', ''))
+except Exception: print('')
+" "$AION_PROGRESS_FILE" 2>/dev/null || true)
+    if [ "$state" = "running" ]; then
+        _progress state=failed "exit_code=$code"
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Sidecar aion-updater — chiavi .env richieste dal servizio in compose
+# ---------------------------------------------------------------------------
+# Il servizio `updater` di docker-compose.ghcr.yml monta la directory di
+# installazione allo STESSO path dell'host (install.sh usa $PWD nei `docker run
+# -v`) e gira con UID/GID dell'utente di deploy. Queste chiavi vanno scritte
+# dall'host (o dal sidecar, che vede gli stessi path): il container di
+# migrazione non conosce i path dell'host. Idempotente: le chiavi già presenti
+# non vengono toccate, tranne AION_HOST_INSTALL_DIR che segue la directory reale.
+_ensure_updater_env() {
+    local uid gid docker_gid
+    uid="${SUDO_UID:-$(id -u)}"
+    gid="${SUDO_GID:-$(id -g)}"
+    if [ "$(uname -s)" = "Darwin" ]; then
+        # Docker Desktop: dentro il VM il socket appartiene a root:root.
+        docker_gid=0
+    else
+        docker_gid=$(stat -L -c %g /var/run/docker.sock 2>/dev/null || echo 0)
+    fi
+    _env_set AION_HOST_INSTALL_DIR "$PWD"
+    _env_set --if-missing AION_HOST_HOME "${AION_HOST_HOME:-$HOME}"
+    _env_set --if-missing AION_HOST_UID "$uid"
+    _env_set --if-missing AION_HOST_GID "$gid"
+    _env_set --if-missing AION_HOST_DOCKER_GID "$docker_gid"
+    _env_set --if-missing AION_UPDATER_TOKEN "$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+    # Profilo compose che attiva il sidecar: chi lo ha tolto (opt-out) resta tale.
+    _env_set --if-missing COMPOSE_PROFILES "updater"
+}
+
+# ---------------------------------------------------------------------------
+# Build locale delle immagini — condivisa da `install.sh --local` e dall'hop
+# finale `local` della modalità ibrida dell'upgrade.
+# ---------------------------------------------------------------------------
+# Stessi Dockerfile e build-arg di .github/workflows/release-images.yml, con i
+# nomi delle immagini GHCR: docker-compose.ghcr.yml le usa senza modifiche.
+# Uso: build_local_images <repo_dir> <tag>
+build_local_images() {
+    local repo_dir="$1"
+    local tag="$2"
+    local spec name file args
+    local specs=(
+        "aion-backend|docker/Dockerfile.backend|"
+        "aion-chat-ui|docker/Dockerfile.chat-ui|NEXT_PUBLIC_AION_API_URL=/api NEXT_PUBLIC_AION_ADMIN_UI_URL=/admin"
+        "aion-admin-ui|docker/Dockerfile.admin-ui|NEXT_PUBLIC_AION_API_URL=/api"
+        "aion-website|docker/Dockerfile.website|DOCUSAURUS_BASE_URL=/docs/"
+        "aion-sandbox|docker/Dockerfile.sandbox|"
+        "aion-updater|docker/Dockerfile.updater|"
+    )
+    for spec in "${specs[@]}"; do
+        IFS='|' read -r name file args <<<"$spec"
+        local image="ghcr.io/aion-by-asa-computer/${name}:${tag}"
+        local cmd=(docker build -f "$repo_dir/$file" -t "$image")
+        for a in $args; do
+            cmd+=(--build-arg "$a")
+        done
+        cmd+=("$repo_dir")
+        echo "Building $image..."
+        "${cmd[@]}" || {
+            echo "[error] Build fallita per $image"
+            exit 1
+        }
+    done
 }
 
 # ---------------------------------------------------------------------------
@@ -160,6 +368,18 @@ _as_podman_user() {
         "$@"
 }
 
+# Esegue `podman "$@"` come utente rootless. Dentro il sidecar aion-updater
+# (AION_PODMAN_REMOTE=1) Podman non è installato: il socket rootless dell'host
+# è montato in AION_PODMAN_SOCKET ed espone un'API compatibile Docker, quindi
+# basta il docker CLI dell'immagine puntato su quel socket (serve solo `pull`).
+_podman() {
+    if [ "${AION_PODMAN_REMOTE:-0}" = "1" ]; then
+        docker -H "unix://${AION_PODMAN_SOCKET:-/run/podman/podman.sock}" "$@"
+    else
+        _as_podman_user podman "$@"
+    fi
+}
+
 # Allinea la sandbox Podman alla versione $1: pull nello storage dell'utente
 # rootless e aggiornamento di AION_SANDBOX_CONTAINER_IMAGE nel .env.
 # Immagini personalizzate (es. build locali) non vengono toccate.
@@ -186,12 +406,17 @@ except Exception: print('')
     if [ "$current" = "$target" ]; then
         return 0
     fi
-    if ! command -v podman >/dev/null 2>&1; then
+    if [ "${AION_PODMAN_REMOTE:-0}" != "1" ] && ! command -v podman >/dev/null 2>&1; then
         echo "[info] podman non installato (sandbox subprocess) — skip."
         return 0
     fi
+    if [ "${AION_PODMAN_REMOTE:-0}" = "1" ] && [ ! -S "${AION_PODMAN_SOCKET:-/run/podman/podman.sock}" ]; then
+        echo "[warning] Socket Podman non montato nel sidecar — sandbox non aggiornata."
+        echo "          Aggiornarla dall'host: podman pull $target"
+        return 0
+    fi
     echo "[hop] podman pull $target..."
-    if ! _as_podman_user podman pull "$target" </dev/null; then
+    if ! _podman pull "$target" </dev/null; then
         echo "[warning] podman pull $target fallito: la sandbox resta su $current."
         return 0
     fi
@@ -205,7 +430,73 @@ PY
     echo "[ok] Sandbox Podman: $current → $target"
 }
 
+# Avvia (o aggiorna) lo stack dopo un hop.
+# Dentro il sidecar aion-updater (AION_UPDATER_MODE=1):
+#   - il servizio `updater` viene escluso: ricrearlo ucciderebbe il processo
+#     che sta eseguendo l'upgrade (lo ricrea l'helper finale, vedi sotto);
+#   - niente --remove-orphans: il compose di una release più vecchia potrebbe
+#     non contenere il servizio `updater` e compose lo rimuoverebbe come orfano.
+_compose_up_stack() {
+    if [ "${AION_UPDATER_MODE:-0}" = "1" ]; then
+        local services
+        services=$(docker compose -f docker-compose.ghcr.yml config --services | grep -vx updater | tr '\n' ' ')
+        # shellcheck disable=SC2086  # lista di nomi di servizio, split voluto
+        docker compose -f docker-compose.ghcr.yml up -d --no-build $services
+    else
+        docker compose -f docker-compose.ghcr.yml up -d --no-build --remove-orphans
+    fi
+}
+
+# Ultimo passo di un upgrade lanciato dal sidecar: il sidecar non può ricreare
+# sé stesso, quindi avvia un container helper staccato (stessa immagine
+# dell'updater in esecuzione, che contiene docker CLI + compose) che, dopo
+# qualche secondo, esegue un `up -d --remove-orphans` completo. A quel punto lo
+# stato è già "succeeded" e il lock è rilasciato: il nuovo updater lo rilegge.
+_schedule_updater_recreate() {
+    local image="${AION_UPDATER_SELF_IMAGE:-}"
+    if [ -z "$image" ] || ! docker image inspect "$image" >/dev/null 2>&1; then
+        echo "[warning] Immagine dell'updater non determinabile: il sidecar resta alla versione precedente."
+        echo "          Per aggiornarlo: docker compose -f docker-compose.ghcr.yml up -d updater"
+        return 0
+    fi
+    if docker run -d --rm \
+        --name "aion-updater-finalize-$(date +%s)" \
+        -v /var/run/docker.sock:/var/run/docker.sock \
+        -v "$PWD:$PWD" -w "$PWD" \
+        -e HOME="$HOME" -e DOCKER_CONFIG=/tmp/.docker \
+        --entrypoint sh "$image" \
+        -c 'sleep 5; docker compose -f docker-compose.ghcr.yml up -d --no-build --remove-orphans' \
+        >/dev/null; then
+        echo "[ok] Ricreazione del sidecar aion-updater pianificata."
+    else
+        echo "[warning] Impossibile pianificare la ricreazione del sidecar aion-updater."
+        echo "          Per aggiornarlo: docker compose -f docker-compose.ghcr.yml up -d updater"
+    fi
+}
+
+# Trap EXIT dell'upgrade: rilascia il lock (se preso) e, se l'uscita è un
+# errore, marca il progress file come "failed".
+_upgrade_exit_trap() {
+    local code="$1"
+    if [ "${UPGRADE_LOCK_HELD:-0}" = "1" ]; then
+        _lock_release "data/.upgrade.lock"
+        echo "[info] Lock rilasciato (trap EXIT)."
+    fi
+    _progress_fail_if_running "$code"
+}
+
 do_upgrade() {
+    if [ "$AION_PLAN_ONLY" -eq 1 ]; then
+        # --plan: lo stdout è riservato al JSON finale (letto dal sidecar
+        # aion-updater); tutti i messaggi informativi vanno su stderr.
+        exec 3>&1 1>&2
+    else
+        # Da qui in poi un'uscita con errore marca il progress file "failed".
+        UPGRADE_LOCK_HELD=0
+        trap '_upgrade_exit_trap $?' EXIT
+        _progress reset=1 state=running phase=plan
+    fi
+
     echo ""
     echo "=== AION Agent — Modalità Upgrade GHCR (v2) ==="
     echo ""
@@ -230,28 +521,39 @@ do_upgrade() {
 
     # Legge CADDY_HTTP_PORT dal .env locale se non già impostato dall'environment
     if [ -z "${CADDY_HTTP_PORT:-}" ]; then
-        CADDY_HTTP_PORT=$(python3 -c "
-import re
-try:
-    txt = open('.env').read()
-    m = re.search(r'^CADDY_HTTP_PORT=(.+)$', txt, re.MULTILINE)
-    print(m.group(1).strip() if m else '80')
-except: print('80')
-" 2>/dev/null || echo "80")
+        CADDY_HTTP_PORT=$(_env_get CADDY_HTTP_PORT)
+        CADDY_HTTP_PORT="${CADDY_HTTP_PORT:-80}"
+    fi
+    # Health check post-hop. Nel sidecar `localhost` non è l'host: il compose
+    # imposta AION_UPGRADE_HEALTH_URL=http://backend:8001/health (rete aion_net).
+    local HEALTH_URL="${AION_UPGRADE_HEALTH_URL:-http://localhost:${CADDY_HTTP_PORT}/api/health}"
+
+    # ------------------------------------------------------------------
+    # 1b. Modalità ibrida (build locali): hop di release da GHCR come in
+    #     produzione + hop finale "local" costruito dal clone del repository.
+    #     L'environment ha la precedenza sul .env.
+    # ------------------------------------------------------------------
+    local FINAL_LOCAL LOCAL_REPO
+    FINAL_LOCAL="${AION_UPGRADE_FINAL_LOCAL:-$(_env_get AION_UPGRADE_FINAL_LOCAL)}"
+    LOCAL_REPO="${AION_LOCAL_REPO_DIR:-$(_env_get AION_LOCAL_REPO_DIR)}"
+    if [ "$FINAL_LOCAL" = "1" ]; then
+        if [ -z "$LOCAL_REPO" ] || [ ! -f "$LOCAL_REPO/docker/Dockerfile.backend" ]; then
+            echo "[error] AION_UPGRADE_FINAL_LOCAL=1 ma AION_LOCAL_REPO_DIR='$LOCAL_REPO'"
+            echo "        non punta a un clone di AION_Agent (manca docker/Dockerfile.backend)."
+            exit 1
+        fi
+        echo "[info] Modalità ibrida: release da GHCR + hop finale 'local' da $LOCAL_REPO"
+    else
+        FINAL_LOCAL=0
     fi
 
     # ------------------------------------------------------------------
     # 2. Versione corrente (fonte autoritativa: AION_VERSION in .env)
     # ------------------------------------------------------------------
-    CURRENT_VERSION=$(python3 -c "
-import re, sys
-try:
-    txt = open('.env').read()
-    m = re.search(r'^AION_VERSION=(.+)$', txt, re.MULTILINE)
-    v = m.group(1).strip() if m else ''
-    print(v if v and v != 'latest' else '')
-except: print('')
-" 2>/dev/null || true)
+    CURRENT_VERSION=$(_env_get AION_VERSION)
+    if [ "$CURRENT_VERSION" = "latest" ]; then
+        CURRENT_VERSION=""
+    fi
 
     if [ -z "$CURRENT_VERSION" ]; then
         echo "[error] AION_VERSION non trovata o non valorizzata nel .env."
@@ -259,28 +561,28 @@ except: print('')
         exit 1
     fi
     echo "[info] Versione installata: $CURRENT_VERSION"
-    if [ "$CURRENT_VERSION" = "local" ]; then
+    if [ "$CURRENT_VERSION" = "local" ] && [ "$FINAL_LOCAL" != "1" ]; then
         # Senza semver il calcolo degli hop partirebbe da 0.0.0.
         echo "[error] Installazione costruita dal clone (--local): upgrade non supportato."
         echo "        Aggiornare il codice e rieseguire: bash ./scripts/install.sh --local --force"
+        echo "        oppure attivare la modalità ibrida (AION_UPGRADE_FINAL_LOCAL=1 +"
+        echo "        AION_LOCAL_REPO_DIR nel .env) per ricostruire dal clone."
         exit 1
     fi
 
     # ------------------------------------------------------------------
     # 3. Elenco release GitHub (ordinate per semver crescente)
+    #    Da "local" non serve: si può solo ricostruire dal clone.
     # ------------------------------------------------------------------
-    echo "[info] Recupero lista release da GitHub..."
-    RELEASES_JSON=$(curl -fsSL --retry 3 --max-time 15 \
-        -H "Accept: application/vnd.github+json" \
-        "https://api.github.com/repos/${AION_REPO}/releases" 2>/dev/null || true)
+    SORTED_VERSIONS=""
+    if [ "$CURRENT_VERSION" != "local" ]; then
+        echo "[info] Recupero lista release da GitHub..."
+        RELEASES_JSON=$(curl -fsSL --retry 3 --max-time 15 \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${AION_REPO}/releases" 2>/dev/null || true)
 
-    if [ -z "$RELEASES_JSON" ]; then
-        echo "[error] Impossibile recuperare la lista delle release da GitHub."
-        echo "        Verificare la connessione di rete e riprovare."
-        exit 1
-    fi
-
-    SORTED_VERSIONS=$(python3 -c "
+        if [ -n "$RELEASES_JSON" ]; then
+            SORTED_VERSIONS=$(python3 -c "
 import json, sys
 try:
     releases = json.loads(sys.stdin.read())
@@ -301,28 +603,49 @@ except Exception as e:
     print(f'[error] {e}', file=sys.stderr)
     sys.exit(1)
 " <<< "$RELEASES_JSON" 2>/dev/null || true)
+        fi
 
-    if [ -z "$SORTED_VERSIONS" ]; then
-        echo "[error] Nessuna release stabile trovata su GitHub."
-        exit 1
+        if [ -z "$SORTED_VERSIONS" ]; then
+            if [ "$FINAL_LOCAL" = "1" ]; then
+                # In sviluppo si può restare offline: resta il solo hop locale.
+                echo "[warning] Release GitHub non disponibili — si esegue solo l'hop locale."
+            else
+                echo "[error] Impossibile recuperare la lista delle release da GitHub."
+                echo "        Verificare la connessione di rete e riprovare."
+                exit 1
+            fi
+        fi
     fi
 
     # ------------------------------------------------------------------
     # 4. Versione target e catena di hop
     # ------------------------------------------------------------------
-    if [ "${AION_VERSION:-latest}" = "latest" ]; then
-        TARGET_VERSION=$(echo "$SORTED_VERSIONS" | tail -n1)
+    LATEST_RELEASE=$(echo "$SORTED_VERSIONS" | tail -n1)
+    HOP_CHAIN=""
+    if [ "$CURRENT_VERSION" = "local" ]; then
+        # Già su una build locale: l'unico hop possibile è ricostruire il clone.
+        TARGET_VERSION="local"
+        HOP_CHAIN="local"
     else
-        TARGET_VERSION="$AION_VERSION"
-        if ! echo "$SORTED_VERSIONS" | grep -qx "$TARGET_VERSION"; then
-            echo "[error] Versione '$TARGET_VERSION' non trovata nelle release pubblicate."
-            echo "        Release disponibili:"
-            echo "$SORTED_VERSIONS" | sed 's/^/          /'
-            exit 1
+        if [ "${AION_VERSION:-latest}" = "latest" ]; then
+            TARGET_VERSION="$LATEST_RELEASE"
+        else
+            TARGET_VERSION="$AION_VERSION"
+            if [ "$FINAL_LOCAL" = "1" ]; then
+                # Una versione esplicita vince sulla modalità ibrida.
+                echo "[info] --version $TARGET_VERSION: hop locale finale disattivato."
+                FINAL_LOCAL=0
+            fi
+            if ! echo "$SORTED_VERSIONS" | grep -qx "$TARGET_VERSION"; then
+                echo "[error] Versione '$TARGET_VERSION' non trovata nelle release pubblicate."
+                echo "        Release disponibili:"
+                echo "$SORTED_VERSIONS" | sed 's/^/          /'
+                exit 1
+            fi
         fi
-    fi
 
-    SEMVER_CHECK=$(python3 -c "
+        if [ -n "$TARGET_VERSION" ]; then
+            SEMVER_CHECK=$(python3 -c "
 def parse(v):
     try: return tuple(int(x) for x in v.split('.'))
     except: return (0,0,0)
@@ -333,19 +656,13 @@ elif target == current: print('same')
 else:                  print('downgrade')
 " 2>/dev/null || echo "same")
 
-    if [ "$SEMVER_CHECK" = "same" ]; then
-        echo ""
-        echo "[ok] Già alla versione $CURRENT_VERSION — nessun aggiornamento necessario."
-        echo "======================================="
-        exit 0
-    fi
-    if [ "$SEMVER_CHECK" = "downgrade" ]; then
-        echo "[error] La versione target ($TARGET_VERSION) è precedente a quella installata ($CURRENT_VERSION)."
-        echo "        Il downgrade non è supportato."
-        exit 1
-    fi
+            if [ "$SEMVER_CHECK" = "downgrade" ] && [ "$FINAL_LOCAL" != "1" ]; then
+                echo "[error] La versione target ($TARGET_VERSION) è precedente a quella installata ($CURRENT_VERSION)."
+                echo "        Il downgrade non è supportato."
+                exit 1
+            fi
 
-    HOP_CHAIN=$(python3 -c "
+            HOP_CHAIN=$(python3 -c "
 def parse(v):
     try: return tuple(int(x) for x in v.split('.'))
     except: return (0,0,0)
@@ -355,15 +672,46 @@ target_t  = parse('${TARGET_VERSION}')
 chain = [v for v in versions if current_t < parse(v) <= target_t]
 print(' '.join(chain))
 " 2>/dev/null || true)
+        fi
+
+        if [ "$FINAL_LOCAL" = "1" ]; then
+            HOP_CHAIN="${HOP_CHAIN:+$HOP_CHAIN }local"
+            TARGET_VERSION="local"
+        fi
+    fi
+
+    # --plan: stampa il piano in JSON (ultima riga dello stdout) ed esce.
+    if [ "$AION_PLAN_ONLY" -eq 1 ]; then
+        python3 -c "
+import json, sys
+current, target, latest_release, final_local, chain = sys.argv[1:6]
+hops = chain.split()
+print(json.dumps({
+    'current': current,
+    'target': target or current,
+    'latest_release': latest_release or None,
+    'chain': hops,
+    'update_available': bool(hops),
+    'mode': 'hybrid-local' if final_local == '1' else 'github',
+}))
+" "$CURRENT_VERSION" "$TARGET_VERSION" "$LATEST_RELEASE" "$FINAL_LOCAL" "$HOP_CHAIN" >&3
+        exit 0
+    fi
 
     if [ -z "$HOP_CHAIN" ]; then
-        echo "[error] Impossibile costruire la catena di hop (current=$CURRENT_VERSION, target=$TARGET_VERSION)."
-        exit 1
+        echo ""
+        echo "[ok] Già alla versione $CURRENT_VERSION — nessun aggiornamento necessario."
+        echo "======================================="
+        _progress state=succeeded phase=done "current=$CURRENT_VERSION" "target=$CURRENT_VERSION" chain=
+        trap - EXIT
+        exit 0
     fi
 
     echo "[info] Versione target:     $TARGET_VERSION"
     echo "[info] Hop da attraversare: $HOP_CHAIN"
     echo ""
+    _progress "current=$CURRENT_VERSION" "target=$TARGET_VERSION" "chain=$HOP_CHAIN" hop_index=0 \
+        "mode=$([ "$FINAL_LOCAL" = "1" ] && echo hybrid-local || echo github)"
 
     # ------------------------------------------------------------------
     # 5. Lock (bash puro — nessun download Python dall'esterno)
@@ -374,15 +722,19 @@ print(' '.join(chain))
     if ! _lock_acquire "$LOCK_FILE"; then
         exit 1
     fi
+    # Il trap EXIT (_upgrade_exit_trap) rilascia il lock in caso di uscita anticipata.
+    UPGRADE_LOCK_HELD=1
 
-    # Rilascia il lock in caso di uscita anticipata (ERR trap o Ctrl+C)
-    trap '_lock_release "$LOCK_FILE"; echo "[info] Lock rilasciato (trap EXIT)."' EXIT
+    # Chiavi .env del sidecar aion-updater (idempotente): servono già al primo
+    # `up` di una release che contiene il servizio `updater`.
+    _ensure_updater_env
 
     # ------------------------------------------------------------------
     # 6a. Backup file host (via container dell'immagine CORRENTE)
     #     Usa la versione pre-upgrade così il backup riflette lo stato attuale
     # ------------------------------------------------------------------
     echo "--- Backup pre-upgrade: file host ---"
+    _progress phase=backup
     mkdir -p data/_backups
     BACKUP_OK=0
 
@@ -423,6 +775,7 @@ print(' '.join(chain))
             tar -czpf "/backup/$(basename "$VOLUME_BACKUP_FILE")" \
                 --numeric-owner -C /volume . 2>/dev/null; then
             echo "[ok] Backup volume Docker: $VOLUME_BACKUP_FILE"
+            _progress "backup=$VOLUME_BACKUP_FILE"
         else
             echo "[warning] Backup volume non riuscito — si continua ugualmente."
         fi
@@ -435,14 +788,22 @@ print(' '.join(chain))
     # ------------------------------------------------------------------
     HOP_SUMMARY=""
     PREV_VERSION="$CURRENT_VERSION"
+    HOP_INDEX=0
 
     for NEXT in $HOP_CHAIN; do
+        HOP_INDEX=$((HOP_INDEX + 1))
         echo ""
         echo "--- Hop: $PREV_VERSION → $NEXT ---"
         NEXT_REF="v${NEXT}"
+        _progress "hop_index=$HOP_INDEX" "hop_from=$PREV_VERSION" "hop_to=$NEXT" phase=fetch
 
-        # 7a. Aggiorna file infrastrutturali dall'host (non sono nell'immagine)
-        echo "[hop] Aggiorno file infrastrutturali da ${NEXT_REF}..."
+        # 7a. Aggiorna file infrastrutturali dall'host (non sono nell'immagine).
+        #     Hop locale: dal clone invece che da raw.githubusercontent.com.
+        if [ "$NEXT" = "local" ]; then
+            echo "[hop] Copio file infrastrutturali dal clone $LOCAL_REPO..."
+        else
+            echo "[hop] Aggiorno file infrastrutturali da ${NEXT_REF}..."
+        fi
         for SRC in \
             "docker-compose.ghcr.yml" \
             "docker/Caddyfile" \
@@ -450,18 +811,30 @@ print(' '.join(chain))
             "scripts/env_tuning_profiles.py"; do
 
             mkdir -p "$(dirname "$SRC")"
-            if ! curl -fsSL --retry 3 \
+            if [ "$NEXT" = "local" ]; then
+                if ! cp "$LOCAL_REPO/$SRC" "$SRC"; then
+                    echo "[warning] Impossibile copiare $SRC dal clone — si usa la versione esistente."
+                fi
+            elif ! curl -fsSL --retry 3 \
                 "https://raw.githubusercontent.com/${AION_REPO}/${NEXT_REF}/${SRC}" \
                 -o "$SRC" 2>/dev/null; then
                 echo "[warning] Impossibile aggiornare $SRC per ${NEXT_REF} — si usa la versione esistente."
             fi
         done
 
-        # 7b. Pull del solo backend (serve per il container di migrazione)
-        echo "[hop] Pull ${BACKEND_IMAGE}:${NEXT}..."
-        if ! docker pull "${BACKEND_IMAGE}:${NEXT}"; then
-            echo "[error] Impossibile scaricare ${BACKEND_IMAGE}:${NEXT} — abort hop."
-            exit 1
+        # 7b. Immagine del backend per il container di migrazione:
+        #     build dal clone (hop locale) oppure pull da GHCR.
+        if [ "$NEXT" = "local" ]; then
+            echo "[hop] Build immagini locali (tag: local) da $LOCAL_REPO..."
+            _progress phase=build
+            build_local_images "$LOCAL_REPO" "local"
+        else
+            echo "[hop] Pull ${BACKEND_IMAGE}:${NEXT}..."
+            _progress phase=pull
+            if ! docker pull "${BACKEND_IMAGE}:${NEXT}"; then
+                echo "[error] Impossibile scaricare ${BACKEND_IMAGE}:${NEXT} — abort hop."
+                exit 1
+            fi
         fi
 
         # 7c. Container usa e getta: migrazione dalla nuova immagine
@@ -469,6 +842,7 @@ print(' '.join(chain))
         #     Monta .env, config/, mcp_servers/, data/ in lettura/scrittura
         #     Al termine: AION_VERSION=<next> sarà già scritto nel .env montato
         echo "[hop] Eseguo container migrazione ${NEXT}..."
+        _progress phase=migrate
         mkdir -p config mcp_servers
 
         if ! docker run --rm \
@@ -488,14 +862,7 @@ print(' '.join(chain))
         fi
 
         # Verifica che AION_VERSION sia stata aggiornata dal container
-        UPDATED_VERSION=$(python3 -c "
-import re
-try:
-    txt = open('.env').read()
-    m = re.search(r'^AION_VERSION=(.+)$', txt, re.MULTILINE)
-    print(m.group(1).strip() if m else '')
-except: print('')
-" 2>/dev/null || true)
+        UPDATED_VERSION=$(_env_get AION_VERSION)
 
         if [ "$UPDATED_VERSION" != "$NEXT" ]; then
             echo "[error] AION_VERSION nel .env è '$UPDATED_VERSION' invece di '$NEXT'."
@@ -504,24 +871,32 @@ except: print('')
         fi
         echo "[ok] AION_VERSION aggiornata a $NEXT nel .env."
 
-        # 7d. Pull di tutte le immagini (.env ha già AION_VERSION=<next>)
-        echo "[hop] docker compose pull (tutte le immagini)..."
-        docker compose -f docker-compose.ghcr.yml pull
-        _upgrade_sandbox_image "${NEXT}"
+        # 7d. Pull di tutte le immagini (.env ha già AION_VERSION=<next>).
+        #     Hop locale: immagini già costruite; caddy/redis arrivano da `up`.
+        _progress phase=restart
+        if [ "$NEXT" = "local" ]; then
+            echo "[info] Hop locale: pull saltato."
+            echo "[info] Hop locale: sandbox Podman non aggiornata (immagine solo in Docker)."
+        else
+            echo "[hop] docker compose pull (tutte le immagini)..."
+            docker compose -f docker-compose.ghcr.yml pull
+            _upgrade_sandbox_image "${NEXT}"
+        fi
 
         # 7e. Restart stack
         echo "[hop] docker compose up -d..."
-        docker compose -f docker-compose.ghcr.yml up -d --no-build --remove-orphans
+        _compose_up_stack
 
         # 7f. Health check: 36 × 5s = 3 minuti max
         echo "[hop] Health check backend..."
+        _progress phase=health
         HOP_HEALTHY=0
         for i in {1..36}; do
             HEALTH_STATUS_CHK=$(docker compose -f docker-compose.ghcr.yml ps --format json \
                 | grep -i '"Service":"backend"' \
                 | grep -io '"Health":"healthy"' || true)
             if [ -n "$HEALTH_STATUS_CHK" ]; then
-                if curl -fsS "http://localhost:${CADDY_HTTP_PORT}/api/health" >/dev/null 2>&1; then
+                if curl -fsS "$HEALTH_URL" >/dev/null 2>&1; then
                     echo "[ok] Backend $NEXT è healthy."
                     HOP_HEALTHY=1
                     break
@@ -545,6 +920,7 @@ except: print('')
             alembic current 2>/dev/null || echo "[info] alembic current non disponibile."
 
         HOP_SUMMARY="$HOP_SUMMARY ${PREV_VERSION}→${NEXT}[ok]"
+        _progress "done_hop=$NEXT"
         PREV_VERSION="$NEXT"
     done
 
@@ -565,9 +941,11 @@ EOF
     echo "[ok] .aion-install.json aggiornato."
 
     # ------------------------------------------------------------------
-    # 9. Rilascia lock + riepilogo
+    # 9. Esito + rilascia lock + riepilogo
     # ------------------------------------------------------------------
+    _progress state=succeeded phase=done
     _lock_release "$LOCK_FILE"
+    UPGRADE_LOCK_HELD=0
     trap - EXIT
 
     echo ""
@@ -579,6 +957,11 @@ EOF
     echo "  Chat UI             : http://localhost:${CADDY_HTTP_PORT}/"
     echo "  Admin UI            : http://localhost:${CADDY_HTTP_PORT}/admin"
     echo "=========================="
+
+    # 10. Lanciato dal sidecar: ricrea l'updater alla nuova versione.
+    if [ "${AION_UPDATER_MODE:-0}" = "1" ]; then
+        _schedule_updater_recreate
+    fi
 }
 
 # ===========================================================================
@@ -587,19 +970,34 @@ EOF
 if [[ "$SUBCOMMAND" == "upgrade" ]]; then
     # In modalità upgrade si opera nella directory corrente (non AION_INSTALL_DIR)
     # I preflight check Docker sono comunque necessari
+    # Con --plan serve solo calcolare la catena: niente controlli su Docker e
+    # messaggi su stderr (lo stdout è riservato al JSON).
+    if [ "$AION_PLAN_ONLY" -eq 1 ]; then
+        for cmd in curl python3; do
+            if ! command -v $cmd >/dev/null 2>&1; then
+                echo "[error] Comando richiesto non trovato: $cmd" >&2
+                exit 1
+            fi
+        done
+        do_upgrade
+        exit 0
+    fi
     echo "--- Preflight Checks (upgrade) ---"
     for cmd in curl python3 docker; do
         if ! command -v $cmd >/dev/null 2>&1; then
             echo "[error] Comando richiesto non trovato: $cmd"
+            _progress reset=1 state=failed "error=Comando richiesto non trovato: $cmd"
             exit 1
         fi
     done
     if ! docker compose version >/dev/null 2>&1; then
         echo "[error] docker compose v2 è richiesto."
+        _progress reset=1 state=failed "error=docker compose v2 è richiesto"
         exit 1
     fi
     if ! docker info >/dev/null 2>&1; then
         echo "[error] Docker daemon non in esecuzione o non accessibile."
+        _progress reset=1 state=failed "error=Docker daemon non accessibile"
         exit 1
     fi
     echo "[ok] Preflight checks superati."
@@ -677,7 +1075,6 @@ if [ -f "$AION_INSTALL_DIR/.env" ] && [ "$FORCE" -eq 0 ]; then
 fi
 
 mkdir -p "$AION_INSTALL_DIR"/{docker,scripts,config,mcp_servers,data/sessions,data/db_test,data/_backups}
-mkdir -p "$HOME/.wren"
 echo "[ok] Directory tree created at $AION_INSTALL_DIR"
 
 # --- Step 2: Download Files ---
@@ -720,36 +1117,10 @@ chmod +x scripts/setup-podman-sandbox.sh
 echo "[ok] Files downloaded."
 
 # --- Step 2.5: Build local images (--local) ---
-# Stessi Dockerfile e build-arg di .github/workflows/release-images.yml, con i
-# nomi delle immagini GHCR: docker-compose.ghcr.yml le usa senza modifiche.
-build_local_images() {
-    local spec name file args
-    local specs=(
-        "aion-backend|docker/Dockerfile.backend|"
-        "aion-chat-ui|docker/Dockerfile.chat-ui|NEXT_PUBLIC_AION_API_URL=/api NEXT_PUBLIC_AION_ADMIN_UI_URL=/admin"
-        "aion-admin-ui|docker/Dockerfile.admin-ui|NEXT_PUBLIC_AION_API_URL=/api"
-        "aion-website|docker/Dockerfile.website|DOCUSAURUS_BASE_URL=/docs/"
-        "aion-sandbox|docker/Dockerfile.sandbox|"
-    )
-    for spec in "${specs[@]}"; do
-        IFS='|' read -r name file args <<<"$spec"
-        local image="ghcr.io/aion-by-asa-computer/${name}:${AION_VERSION}"
-        local cmd=(docker build -f "$LOCAL_REPO_DIR/$file" -t "$image")
-        for a in $args; do
-            cmd+=(--build-arg "$a")
-        done
-        cmd+=("$LOCAL_REPO_DIR")
-        echo "Building $image..."
-        "${cmd[@]}" || {
-            echo "[error] Build fallita per $image"
-            exit 1
-        }
-    done
-}
-
+# build_local_images è definita in alto (condivisa con l'hop locale dell'upgrade).
 if [ "$USE_LOCAL" -eq 1 ]; then
     echo "--- Step 2.5: Building Local Images ---"
-    build_local_images
+    build_local_images "$LOCAL_REPO_DIR" "$AION_VERSION"
     echo "[ok] Local images built (tag: $AION_VERSION)."
 fi
 
@@ -902,6 +1273,10 @@ EOF
 
 chmod 644 .env
 echo "[ok] .env generated."
+
+# Chiavi del sidecar aion-updater (aggiornamento dall'admin-ui): path dell'host,
+# UID/GID di deploy, token condiviso col backend, profilo compose `updater`.
+_ensure_updater_env
 
 # Fix ownership if run with sudo
 if [ -n "${SUDO_USER:-}" ]; then
