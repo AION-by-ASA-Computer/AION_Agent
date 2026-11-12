@@ -1,0 +1,33 @@
+# aion-updater — sidecar that applies AION upgrades requested from the admin-ui.
+#
+# Runs docker/updater/server.py (stdlib-only HTTP API on :8090, internal network
+# only) which executes the bundled scripts/install.sh `upgrade` flow against the
+# host Docker daemon through the mounted /var/run/docker.sock.
+# Service definition: `updater` in docker-compose.ghcr.yml (profile "updater").
+# Docs: docs/deployment/self-update.md
+#
+# Base image: the official Docker CLI image (alpine) already ships the docker
+# CLI with the compose and buildx plugins; install.sh additionally needs bash,
+# python3 (JSON/.env helpers) and curl (GitHub API, raw files).
+FROM docker:27-cli
+
+RUN apk add --no-cache bash python3 curl
+
+WORKDIR /opt/aion-updater
+COPY scripts/install.sh /opt/aion-updater/install.sh
+COPY docker/updater/server.py /opt/aion-updater/server.py
+
+# DOCKER_CONFIG: the container runs with the host deploy UID, whose HOME does
+# not exist here, so the docker CLI config goes to a writable location.
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    AION_UPDATER_INSTALL_SCRIPT=/opt/aion-updater/install.sh \
+    AION_UPDATER_PORT=8090 \
+    DOCKER_CONFIG=/tmp/.docker
+
+EXPOSE 8090
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python3 -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/healthz', timeout=3)"
+
+ENTRYPOINT ["python3", "/opt/aion-updater/server.py"]
