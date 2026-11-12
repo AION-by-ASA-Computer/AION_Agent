@@ -1179,9 +1179,8 @@ async def oauth_callback_redirect(
             msg.splitlines()[0].strip()[:300] if msg.strip() else "Login non completato"
         )
         logger.info(
-            "oauth_callback: provider error slug=%s error=%s",
-            (pending or {}).get("server_slug"),
-            error,
+            "oauth_callback: provider error received (has_error=%s)",
+            bool(error),
         )
         return RedirectResponse(
             url=f"{chat_base}/integrations?oauth_status=error&error={urllib.parse.quote_plus(msg)}"
