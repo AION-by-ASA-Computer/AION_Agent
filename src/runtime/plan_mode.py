@@ -16,6 +16,8 @@ DEFAULT_PLAN_MODE_BLOCKED_TOOLS: FrozenSet[str] = frozenset(
         "sandbox_install_npm_packages",
         "sandbox_run_node_file",
         "mark_task_completed",
+        # Plan-closing tool: only meaningful after an approved plan ran.
+        "complete_execution_plan",
         "delegate_to_subagent",
         # Full skill bodies are large; load them in post-approval tasks only.
         "skill_view",

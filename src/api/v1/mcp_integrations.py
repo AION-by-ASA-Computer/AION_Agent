@@ -8,7 +8,7 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy import select
 
 from src.api.auth_login import ChatAuthIdentity, require_chat_auth
@@ -23,10 +23,13 @@ from src.runtime.credential_store import (
 )
 from src.runtime.mcp_integration_helpers import (
     batch_list_credentials_hints,
+    boolean_display_hint,
     credentials_feature_enabled,
     get_user_mcp_preference_map,
     integration_row_to_public_dict,
+    is_boolean_display_hint,
     list_pending_for_profile,
+    parse_boolean_token,
     set_user_mcp_preference,
 )
 
@@ -343,9 +346,49 @@ async def patch_integration_preference(
 
 
 class CredentialSetBody(BaseModel):
+    """Payload of ``POST /integrations/credentials`` (Integrations dialog save).
+
+    Credentials end up as MCP process env vars, so they are stored as strings.
+    Clients may still send JSON booleans/numbers for toggle or numeric fields:
+    they are coerced here ("true"/"false", "993") instead of failing with 422.
+    """
+
     server_slug: str
     credentials: Dict[str, str] = Field(default_factory=dict)
     display_hints: Optional[Dict[str, str]] = None
+
+    @field_validator("credentials", mode="before")
+    @classmethod
+    def _coerce_scalar_values(cls, raw: Any) -> Any:
+        if not isinstance(raw, dict):
+            return raw
+        out: Dict[Any, Any] = {}
+        for key, value in raw.items():
+            if isinstance(value, bool):
+                # Check bool before int: bool is an int subclass in Python.
+                out[key] = "true" if value else "false"
+            elif isinstance(value, (int, float)):
+                out[key] = str(value)
+            else:
+                out[key] = value
+        return out
+
+
+def _resolve_credential_display_hint(value: str, hint: Optional[str]) -> Optional[str]:
+    """Return the display hint to persist next to a saved credential.
+
+    For boolean values the hint is what the chat-ui uses to restore the toggle
+    on reload (the value itself is encrypted), so it must agree with the value.
+    Only a literal "true"/"false" value is considered, and only when the hint
+    is missing or already a canonical boolean hint ("Attivo"/"Disattivo"):
+    then it is rewritten to match the value. Any other hint (secret mask, text
+    preview such as "0" or "true" of a plain text field) is kept untouched.
+    """
+    if str(value).strip().lower() not in ("true", "false"):
+        return hint
+    if hint is not None and not is_boolean_display_hint(hint):
+        return hint
+    return boolean_display_hint(parse_boolean_token(value) is True)
 
 
 @router.post("/credentials")
@@ -377,7 +420,9 @@ async def save_credentials(
         )
 
     for key, value in body.credentials.items():
-        hint = (body.display_hints or {}).get(key)
+        hint = _resolve_credential_display_hint(
+            value, (body.display_hints or {}).get(key)
+        )
         await set_credential(
             user_id,
             body.server_slug,
@@ -469,6 +514,28 @@ from datetime import datetime, timezone
 import httpx
 
 logger = logging.getLogger("aion.api.mcp_integrations")
+
+
+def _redact_url_for_log(url: str) -> str:
+    """Return ``url`` reduced to ``scheme://host[:port]/path`` for safe logging.
+
+    Endpoint URLs come from MCP server config / authorization-server metadata
+    and could carry credentials (``https://user:pass@host/...``) or tokens in the
+    query string; neither must reach the logs in clear text (CodeQL
+    py/clear-text-logging-sensitive-data, alert #672). Userinfo, query and
+    fragment are dropped. Unparseable input yields a fixed placeholder.
+    """
+    from urllib.parse import urlsplit, urlunsplit
+
+    try:
+        parts = urlsplit(str(url or ""))
+        host = parts.hostname or ""
+        if parts.port:
+            host = f"{host}:{parts.port}"
+        return urlunsplit((parts.scheme, host, parts.path, "", ""))
+    except ValueError:
+        # e.g. an invalid port; never echo the raw value back.
+        return "<invalid-url>"
 
 
 def _oauth_dynamic_registration_enabled() -> bool:
@@ -605,8 +672,8 @@ async def _oauth_dynamic_client_register(
                     "oauth_start: retry dynamic registration slug=%s with rediscovered "
                     "registration_endpoint=%s (was %s)",
                     server_slug,
-                    fresh_reg,
-                    reg_endpoint,
+                    _redact_url_for_log(fresh_reg),
+                    _redact_url_for_log(reg_endpoint),
                 )
                 reg_data = await _oauth_post_client_registration(
                     server_slug=server_slug,
@@ -671,7 +738,7 @@ async def _oauth_post_client_registration(
                     "oauth_start: dynamic registration HTTP %s slug=%s endpoint=%s body=%s",
                     reg_resp.status_code,
                     server_slug,
-                    reg_endpoint,
+                    _redact_url_for_log(reg_endpoint),
                     reg_resp.text[:300],
                 )
                 return None
@@ -681,7 +748,7 @@ async def _oauth_post_client_registration(
         logger.warning(
             "oauth_start: dynamic client registration failed slug=%s endpoint=%s: %s",
             server_slug,
-            reg_endpoint,
+            _redact_url_for_log(reg_endpoint),
             reg_exc,
         )
     return None
@@ -1080,7 +1147,7 @@ async def oauth_start(
     logger.info(
         "oauth_start: slug=%s auth_endpoint=%s client_id=%s redirect=%s",
         server_slug,
-        authorization_endpoint,
+        _redact_url_for_log(authorization_endpoint),
         client_id or "(none)",
         redirect_uri,
     )

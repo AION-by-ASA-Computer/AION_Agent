@@ -95,6 +95,33 @@ export function isBooleanField(field: { key: string; type?: string }): boolean {
   );
 }
 
+/** Display hints stored by the Integrations dialog for toggle (boolean) credentials. */
+export const BOOLEAN_HINT_TRUE = "Attivo";
+export const BOOLEAN_HINT_FALSE = "Disattivo";
+
+const BOOLEAN_TRUE_TOKENS = new Set(["attivo", "true", "on", "yes", "1"]);
+const BOOLEAN_FALSE_TOKENS = new Set(["disattivo", "false", "off", "no", "0"]);
+
+/**
+ * Parse a boolean credential value, default value or display hint.
+ *
+ * The saved value of a credential is encrypted server-side, so the toggle state
+ * is rebuilt from its display hint ("Attivo" / "Disattivo"). Matching is by
+ * EXACT token on purpose: a substring check such as `includes("attivo")` also
+ * matches "disattivo", which made every saved `false` reload as `true`.
+ * Mirrors `parse_boolean_token` in `src/runtime/mcp_integration_helpers.py`.
+ *
+ * @returns `true`/`false`, or `null` when the input is not boolean-like.
+ */
+export function parseBooleanToken(raw: unknown): boolean | null {
+  if (typeof raw === "boolean") return raw;
+  if (raw === null || raw === undefined) return null;
+  const token = String(raw).trim().toLowerCase();
+  if (BOOLEAN_TRUE_TOKENS.has(token)) return true;
+  if (BOOLEAN_FALSE_TOKENS.has(token)) return false;
+  return null;
+}
+
 export function isSecretField(field: { key: string; type?: string }): boolean {
   if (field.type === "password" || field.type === "oauth") return true;
   const cleaned = cleanFieldPrefix(field.key);

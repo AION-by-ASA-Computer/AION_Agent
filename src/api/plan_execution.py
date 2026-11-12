@@ -233,19 +233,21 @@ async def plan_execution_result(
     _require_owner(run_id, owner)
     handler = get_plan_execution_handler()
     result = handler.get_result(run_id)
+    data = handler.load_json(run_id) or {}
     if result is None:
-        data = handler.load_json(run_id)
         if not data:
             raise HTTPException(404, "No plan execution result available")
         return {
             "summary": data.get("result", ""),
             "plan_id": data.get("plan_id", ""),
             "deliverable_path": data.get("deliverable_path"),
+            # Set when the backend already saved the summary message (with the
+            # deliverable attached): the chat-ui must then not save it again.
+            "summary_message_id": data.get("summary_message_id"),
         }
     return {
         "summary": result,
-        "plan_id": handler.load_json(run_id).get("plan_id", "")
-        if handler.load_json(run_id)
-        else "",
+        "plan_id": data.get("plan_id", ""),
         "deliverable_path": handler.get_deliverable_path(run_id),
+        "summary_message_id": data.get("summary_message_id"),
     }

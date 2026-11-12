@@ -18,6 +18,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
@@ -566,7 +567,6 @@ class StreamLoop:
         )
         from src.runtime.artifact_parser import ArtifactEvent
         from src.runtime.stream_sync import StreamSync
-        from src.memory.context_compressor import count_tokens
 
         # Chart events (emitted by the MCP wrapper when a charts tool returns a
         # payload) are display-only: forward them immediately so chat-ui renders
@@ -866,20 +866,43 @@ class StreamLoop:
             and evt.get("name") == "mark_task_completed"
             and self._msg_src == "internal_trigger"
         ):
+            # The turn ends here, before the generic tool_end handling at the
+            # bottom of this method: close the tool step first (DB write) and
+            # forward the tool_end itself (SSE + timeline via _track_sse).
+            # Otherwise the mark_task_completed card stays "running" forever,
+            # live and after a reload, although the task is done.
+            async for budget_evt in self._persist_tool_end(evt):
+                yield budget_evt
+            yield self._track_sse(chunk)
             self._request_stop(
                 "plan_task_completed",
                 location="stream_loop:mark_task_completed",
             )
+            # Machine-readable outcome for the plan execution handler (it waits
+            # for this code to schedule the next task or the closing turn).
+            # No "message": the old "Turn interrupted — the server will continue
+            # with the next task" banner was noise in every task chat, and wrong
+            # after the last task. The timeline / chat-ui skip outcomes without
+            # message, so nothing is rendered.
             outcome: Dict[str, Any] = {
                 "type": "turn_outcome",
                 "code": "plan_task_completed",
-                "message": (
-                    "Task marked completed. Turn interrupted — "
-                    "the server will continue with the next task."
-                ),
+                "details": {
+                    "plan_tasks_remaining": not _all_plan_tasks_done(evt.get("output"))
+                },
             }
             yield self._track_sse(outcome)
             yield _BreakSignal()
+            return
+
+        # --- complete_execution_plan tool_end (plan-closing turn) ---
+        elif (
+            evt.get("type") == "tool_end"
+            and evt.get("name") == "complete_execution_plan"
+            and self._msg_src == "internal_trigger"
+        ):
+            async for out in self._handle_complete_plan(chunk, evt):
+                yield out
             return
 
         # --- sandbox_write_workspace_file tool_end ---
@@ -1103,36 +1126,8 @@ class StreamLoop:
                     include_attachments=False,
                 )
         elif evt.get("type") == "tool_end":
-            try:
-                call_id = str(evt.get("id") or "").strip()
-                out_tokens = count_tokens(str(evt.get("output") or ""))
-                inp_tokens = 0
-                for ps in self.turn_persist.pending_db_steps:
-                    if ps.get("step_id") == call_id:
-                        inp_tokens = count_tokens(ps.get("input") or "")
-                        break
-                evt["tokens_in"] = inp_tokens
-                evt["tokens_out"] = out_tokens
-            except Exception as e:
-                logger.warning("Failed to count tool tokens: %s", e)
-            try:
-                from src.runtime.turn_compaction import try_build_context_budget_event
-
-                budget_evt = try_build_context_budget_event(
-                    phase="tool",
-                    session_id=self.session_id,
-                )
-                if budget_evt:
-                    yield self._track_sse(budget_evt)
-            except Exception:
-                pass
-            self.turn_persist.queue_tool_step(evt)
-            if self.assistant_message_id:
-                await self.turn_persist.persist_pending_turn_records(
-                    self.assistant_message_id,
-                    only_new=True,
-                    include_attachments=False,
-                )
+            async for budget_evt in self._persist_tool_end(evt):
+                yield budget_evt
         elif evt.get("type") == "tool_error":
             self.turn_persist.queue_tool_step(evt, is_error=True)
             if self.assistant_message_id:
@@ -1143,6 +1138,144 @@ class StreamLoop:
                 )
 
         yield self._track_sse(chunk)
+
+    async def _handle_complete_plan(
+        self, chunk: Dict[str, Any], evt: Dict[str, Any]
+    ) -> AsyncGenerator[Any, None]:
+        """End of the plan-closing turn: summary text + one card per document.
+
+        ``complete_execution_plan`` returns a JSON payload (see
+        ``orchestration_tools.run_complete_execution_plan``). From it:
+
+        1. the tool step is closed and its tool_end forwarded (as for
+           ``mark_task_completed``);
+        2. the summary becomes the turn's answer text — streamed as a token
+           event and added to ``full_response``, so it is persisted as the
+           assistant message content — unless the agent already wrote text;
+        3. each deliverable is emitted as ``artifact_start`` + ``artifact_end``
+           with its saved path (rendered by chat-ui as a GeneratedFileCard with
+           download link) and queued as an ``artifact`` attachment of the
+           assistant message (survives reloads, listed in the Files panel);
+        4. a ``turn_outcome`` ``plan_completed`` (no message, nothing rendered)
+           carries summary / deliverables / message id for the plan execution
+           handler, then the turn stops: nothing else to do after closing.
+
+        A non-JSON or ``ok`` = false output (should not happen: failures are
+        tool_error events) still closes the step but does not stop the turn.
+        """
+        async for budget_evt in self._persist_tool_end(evt):
+            yield budget_evt
+        yield self._track_sse(chunk)
+
+        try:
+            payload = json.loads(str(evt.get("output") or ""))
+        except Exception:
+            payload = None
+        if not isinstance(payload, dict) or not payload.get("ok"):
+            return
+
+        summary = str(payload.get("summary") or "").strip()
+        files = [f for f in (payload.get("deliverables") or []) if isinstance(f, dict)]
+
+        if summary and not "".join(self.full_response).strip():
+            self.full_response.append(summary)
+            yield self._track_sse({"type": "token", "content": summary})
+
+        for f in files:
+            path = str(f.get("path") or "").strip()
+            if not path:
+                continue
+            name = str(f.get("name") or Path(path).name)
+            ext = Path(path).suffix.lower().lstrip(".") or "text"
+            # Stable id per file so a re-emission updates the same card.
+            aid = "plan_deliverable_" + re.sub(r"[^A-Za-z0-9]+", "_", path).strip("_")
+            yield self._track_sse(
+                {
+                    "type": "artifact_start",
+                    "artifact": {"identifier": aid, "type": ext, "title": name},
+                }
+            )
+            yield self._track_sse(
+                {
+                    "type": "artifact_end",
+                    "artifact": {
+                        "identifier": aid,
+                        "type": ext,
+                        "title": name,
+                        "path": path,
+                        "saved": True,
+                        "version": 1,
+                    },
+                }
+            )
+            self.turn_persist.queue_attachment(
+                storage_key=path,
+                original_name=name,
+                mime=str(f.get("mime") or "application/octet-stream"),
+                size_bytes=int(f.get("size_bytes") or 0),
+            )
+
+        self._request_stop("plan_completed", location="stream_loop:complete_plan")
+        yield self._track_sse(
+            {
+                "type": "turn_outcome",
+                "code": "plan_completed",
+                "details": {
+                    "plan_id": payload.get("plan_id"),
+                    "summary": summary,
+                    "deliverables": [f.get("path") for f in files],
+                    "assistant_message_id": self.assistant_message_id,
+                },
+            }
+        )
+        yield _BreakSignal()
+
+    async def _persist_tool_end(
+        self, evt: Dict[str, Any]
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """Close a tool step on ``tool_end``: token counts, budget event, DB write.
+
+        Shared by the generic ``tool_end`` path and by the ``mark_task_completed``
+        early exit (plan execution), which interrupts the turn right after the
+        tool: without this the step stays persisted with only its ``tool_start``
+        and the chat-ui shows the tool card as still running, also after reload.
+
+        Mutates ``evt`` (adds ``tokens_in`` / ``tokens_out``) and yields the
+        optional ``context_budget`` SSE event; the caller still forwards the
+        ``tool_event`` chunk itself.
+        """
+        from src.memory.context_compressor import count_tokens
+
+        try:
+            call_id = str(evt.get("id") or "").strip()
+            out_tokens = count_tokens(str(evt.get("output") or ""))
+            inp_tokens = 0
+            for ps in self.turn_persist.pending_db_steps:
+                if ps.get("step_id") == call_id:
+                    inp_tokens = count_tokens(ps.get("input") or "")
+                    break
+            evt["tokens_in"] = inp_tokens
+            evt["tokens_out"] = out_tokens
+        except Exception as e:
+            logger.warning("Failed to count tool tokens: %s", e)
+        try:
+            from src.runtime.turn_compaction import try_build_context_budget_event
+
+            budget_evt = try_build_context_budget_event(
+                phase="tool",
+                session_id=self.session_id,
+            )
+            if budget_evt:
+                yield self._track_sse(budget_evt)
+        except Exception:
+            pass
+        self.turn_persist.queue_tool_step(evt)
+        if self.assistant_message_id:
+            await self.turn_persist.persist_pending_turn_records(
+                self.assistant_message_id,
+                only_new=True,
+                include_attachments=False,
+            )
 
     # ------------------------------------------------------------------
     # Private: artifact finalizer (shared by token and tool_event)
@@ -1339,6 +1472,17 @@ class StreamLoop:
 # ---------------------------------------------------------------------------
 # Sentinel used internally to signal "break the outer loop"
 # ---------------------------------------------------------------------------
+
+
+def _all_plan_tasks_done(mark_output: Any) -> bool:
+    """True when a ``mark_task_completed`` result says no task is left.
+
+    Matches the progress line written by
+    ``orchestration_tools.format_plan_progress_summary`` ("Remaining steps: 0").
+    Informational only (``turn_outcome.details``): the plan execution handler
+    re-reads the plan from the DB to decide whether to close it.
+    """
+    return "remaining steps: 0" in str(mark_output or "").lower()
 
 
 class _BreakSignal:

@@ -412,6 +412,29 @@ class ChatHistoryManager:
                 message_id, timeline_json
             )
 
+    async def append_message_text(
+        self,
+        session_id: str,
+        message_id: str,
+        text_to_append: str,
+        *,
+        replaceable_texts: frozenset[str] = frozenset(),
+    ) -> bool:
+        """Append markdown to an existing message (content + timeline).
+
+        Unified DB only (see ``UnifiedHistoryBridge.append_message_text``); the
+        legacy SQLite store has no timelines, so this is a no-op returning False.
+        """
+        if not self._unified:
+            return False
+        await self._init_unified_once()
+        return await self._unified.append_message_text(
+            session_id,
+            message_id,
+            text_to_append,
+            replaceable_texts=replaceable_texts,
+        )
+
     async def upsert_message_content(
         self,
         session_id: str,

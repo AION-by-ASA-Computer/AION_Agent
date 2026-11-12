@@ -63,7 +63,13 @@ export function PlanPanel({
   onAdoptHandled?: () => void;
   onPlanApproved?: (runId: string, planId: string) => void;
   onPlanRejected?: (planId?: string) => void;
-  onFinalSummary?: (summary: string, planId: string, runId?: string) => void;
+  /** `serverMessageId`: id of the summary message already saved by the backend, if any. */
+  onFinalSummary?: (
+    summary: string,
+    planId: string,
+    runId?: string,
+    serverMessageId?: string | null,
+  ) => void;
   onTaskSelect?: (taskId: string | null) => void;
   onPromptSuggestion?: (text: string) => void;
 }) {

@@ -72,6 +72,19 @@ def _make_plan_execution_pipeline(
     )
 
 
+def _last_task_assistant_id(entry: dict) -> Optional[str]:
+    """Assistant message id of the last task in ``entry["tasks"]`` that has one.
+
+    Fallback for ``_run_plan_loop`` when the loop itself ran no task (e.g. a
+    resume after every task was already marked done).
+    """
+    for task in reversed(entry.get("tasks") or []):
+        mid = str(task.get("assistant_message_id") or "").strip()
+        if mid:
+            return mid
+    return None
+
+
 def plan_execution_data_dir() -> Path:
     raw = (os.getenv("AION_PLAN_EXECUTION_DATA_DIR") or "data/plan_execution").strip()
     p = Path(raw)
@@ -178,6 +191,8 @@ def _tool_activity_label(tool_name: str, status: str, detail: str) -> str:
         base = "Editing file nel workspace"
     elif tn == "mark_task_completed":
         base = "Segno task completed"
+    elif tn == "complete_execution_plan":
+        base = "Closing plan"
     elif tn == "web_search":
         base = "Web search"
     elif tn == "web_fetch_page":
@@ -411,6 +426,7 @@ class PlanExecutionHandler:
         from src.runtime.plan_execution import (
             build_plan_execution_trigger,
             infer_deliverable_path,
+            resolve_existing_deliverable,
             task_title_from_markdown,
         )
 
@@ -436,6 +452,10 @@ class PlanExecutionHandler:
             user_id=owner,
             agent_mode="normal",
         )
+
+        # Assistant message of the last task completed by this loop: the final
+        # summary is also written there (see _append_summary_to_last_task).
+        last_task_asst_id: Optional[str] = None
 
         while True:
             if entry.get("_cancel"):
@@ -470,6 +490,11 @@ class PlanExecutionHandler:
             sub_completed = False
             task_user_id: Optional[str] = None
             task_asst_id: Optional[str] = None
+            # Set when an attempt ended with reasoning only (no answer, no tool
+            # call): the model spent its whole output budget thinking. Retrying
+            # with the same settings fails the same way, so the retry runs with
+            # thinking disabled (reasoning_effort="off").
+            reasoning_stalled = False
             for attempt in range(2):
                 if attempt > 0:
                     on_progress(
@@ -483,10 +508,21 @@ class PlanExecutionHandler:
                         }
                     )
                 trigger = build_plan_execution_trigger(task_id, attempt=attempt)
+                # None keeps the session/profile default; "off" only after a stall.
+                turn_effort = "off" if reasoning_stalled else None
+                if reasoning_stalled:
+                    logger.info(
+                        "Plan execution run=%s task=%s: previous attempt produced "
+                        "reasoning only — retrying with thinking off.",
+                        run_id,
+                        task_id,
+                    )
+                reasoning_stalled = False
                 sub_completed = False
                 turn_finished = False
                 async for chunk in pipe.run_stream(
                     trigger,
+                    reasoning_effort=turn_effort,
                     message_source="internal_trigger",
                     plan_id=plan_id,
                     plan_execution_task_id=task_id,
@@ -545,6 +581,13 @@ class PlanExecutionHandler:
                     ):
                         sub_completed = True
                         turn_finished = True
+                    # Diagnostic outcomes from src/runtime/turn_diagnostics.py
+                    # for a turn that produced only reasoning.
+                    if chunk.get("type") == "turn_outcome" and chunk.get("code") in (
+                        "reasoning_only_no_answer",
+                        "reasoning_budget_no_answer",
+                    ):
+                        reasoning_stalled = True
                 if sub_completed:
                     break
 
@@ -591,6 +634,7 @@ class PlanExecutionHandler:
                 self._save_result(run_id, entry)
                 return entry.get("result") or "", infer_deliverable_path(approved_md)
 
+            last_task_asst_id = task_asst_id or last_task_asst_id
             rec_after = await odb.fetch_plan_record(plan_id)
             rev = int(rec_after.get("revision") or 1) if rec_after else 1
             for t in entry.get("tasks") or []:
@@ -612,20 +656,283 @@ class PlanExecutionHandler:
         final_md = (
             (rec_final.get("approved_markdown") or "").strip() if rec_final else ""
         )
-        deliverable = infer_deliverable_path(final_md) if final_md else None
+        summary_session = chat_session_id or stored_sess or ""
+        # The plan text may name a file the agent never produced (or only the
+        # template example): prefer what really exists in the session workspace.
+        deliverable = (
+            resolve_existing_deliverable(
+                summary_session, infer_deliverable_path(final_md)
+            )
+            if final_md
+            else None
+        )
         goal = _extract_goal(final_md)
 
+        # "writing" tells the chat-ui that no task turn will stream any more
+        # (it releases its stream recovery); the closing turn below and the
+        # fallback summary both belong to this phase.
         on_progress({"phase": "writing", "plan_id": plan_id})
+
+        # Preferred path: a closing agent turn calls complete_execution_plan,
+        # which writes the summary as a regular assistant message and renders
+        # one card per generated document (persisted as attachments).
+        closing = await self._run_closing_turn(
+            pipe, plan_id=plan_id, entry=entry, on_progress=on_progress
+        )
+        if closing is not None:
+            summary = str(closing.get("summary") or "").strip()
+            paths = [p for p in (closing.get("deliverables") or []) if p]
+            deliverable = paths[0] if paths else deliverable
+            entry["summary_message_id"] = closing.get("assistant_message_id")
+            on_progress(
+                {"phase": "complete", "plan_id": plan_id, "message": "Plan completed"}
+            )
+            return summary, deliverable
+
+        # Fallback (agent did not close the plan): LLM summary saved by the
+        # server, as before the closing tool existed.
         summary = await self._synthesize_final_summary(
             plan_id=plan_id,
             goal=goal,
             plan_markdown=final_md,
             deliverable_path=deliverable,
+            on_text=self._summary_publisher(run_id, entry),
+        )
+        # Persist the final message server-side (with the deliverable attached)
+        # so it survives reloads and shows the file card; the chat-ui only
+        # falls back to saving it itself when this id is missing.
+        entry["summary_message_id"] = await self._persist_final_summary(
+            session_id=summary_session,
+            summary=summary,
+            deliverable_path=deliverable,
+            profile_name=str(entry.get("profile_name") or "default"),
+            owner=owner,
+        )
+        # The last task's turn ends on mark_task_completed, usually with no (or
+        # only placeholder) text: write the summary there too, so the task chat
+        # shows the plan outcome and not just the tool call.
+        await self._append_summary_to_last_task(
+            session_id=summary_session,
+            message_id=last_task_asst_id or _last_task_assistant_id(entry),
+            summary=summary,
         )
         on_progress(
             {"phase": "complete", "plan_id": plan_id, "message": "Plan completed"}
         )
         return summary, deliverable
+
+    async def _run_closing_turn(
+        self,
+        pipe,
+        *,
+        plan_id: str,
+        entry: dict,
+        on_progress: Callable[[dict], None],
+        attempts: int = 2,
+    ) -> Optional[dict]:
+        """Run the plan-closing agent turn (after the last task) and return its outcome.
+
+        The turn is an ``internal_trigger`` turn with no task id: ``turn_context``
+        then injects the closing reminder (``build_plan_completion_reminder``)
+        and the agent is asked to call ``complete_execution_plan``. The stream
+        loop turns that call into the final answer (summary + document cards)
+        and emits ``turn_outcome`` ``plan_completed``, whose ``details`` are
+        returned here (``summary``, ``deliverables``, ``assistant_message_id``).
+
+        Returns None when the agent never closed the plan after ``attempts``
+        turns, or on error: the caller falls back to the server-side summary.
+        Tool activity is forwarded to the progress feed like task turns.
+        """
+        from src.runtime.plan_execution import build_plan_completion_trigger
+
+        for attempt in range(max(1, attempts)):
+            details: Optional[dict] = None
+            asst_id: Optional[str] = None
+            try:
+                async for chunk in pipe.run_stream(
+                    build_plan_completion_trigger(plan_id),
+                    message_source="internal_trigger",
+                    plan_id=plan_id,
+                    plan_execution_task_id=None,
+                ):
+                    if entry.get("_cancel"):
+                        raise asyncio.CancelledError()
+                    ctype = chunk.get("type")
+                    if ctype == "turn_started":
+                        asst_id = (
+                            chunk.get("assistant_message_id") or ""
+                        ).strip() or None
+                    elif ctype == "tool_event" and details is None:
+                        evt = chunk.get("event") or {}
+                        et = str(evt.get("type") or "")
+                        if et in ("tool_start", "tool_end", "tool_error"):
+                            on_progress(
+                                {
+                                    "phase": "tool",
+                                    "plan_id": plan_id,
+                                    "tool_name": str(evt.get("name") or ""),
+                                    "status": "running"
+                                    if et == "tool_start"
+                                    else ("error" if et == "tool_error" else "done"),
+                                    "detail": _tool_detail_from_input(evt),
+                                }
+                            )
+                    elif (
+                        ctype == "turn_outcome"
+                        and chunk.get("code") == "plan_completed"
+                    ):
+                        raw = chunk.get("details")
+                        details = dict(raw) if isinstance(raw, dict) else {}
+                    # Keep consuming after the outcome: the pipeline persists the
+                    # message and clears stream_active in its own finally.
+            except asyncio.CancelledError:
+                raise
+            except Exception as exc:
+                logger.warning(
+                    "Plan execution plan=%s: closing turn failed (attempt %s): %s",
+                    plan_id,
+                    attempt + 1,
+                    exc,
+                )
+                continue
+            if details is not None:
+                # The stream loop sends its message id; turn_started is the backup.
+                if not details.get("assistant_message_id"):
+                    details["assistant_message_id"] = asst_id
+                return details
+            logger.info(
+                "Plan execution plan=%s: closing turn ended without "
+                "complete_execution_plan (attempt %s/%s)",
+                plan_id,
+                attempt + 1,
+                attempts,
+            )
+        return None
+
+    async def _append_summary_to_last_task(
+        self,
+        *,
+        session_id: str,
+        message_id: Optional[str],
+        summary: str,
+    ) -> bool:
+        """Write the final plan summary into the last task's assistant message.
+
+        Placeholder bodies (``PLAN_TASK_PLACEHOLDER_TEXTS``) are replaced, real
+        task output is kept and the summary appended below it. Best effort:
+        failures are logged and never fail the run (the summary is still saved
+        as its own message in the plan session).
+        """
+        if not session_id or not message_id or not (summary or "").strip():
+            return False
+        try:
+            from src.api.history import history_manager
+            from src.runtime.turn_diagnostics import PLAN_TASK_PLACEHOLDER_TEXTS
+
+            return await history_manager.append_message_text(
+                session_id,
+                message_id,
+                summary,
+                replaceable_texts=PLAN_TASK_PLACEHOLDER_TEXTS,
+            )
+        except Exception as exc:
+            logger.warning(
+                "Plan execution: could not write summary into task message %s: %s",
+                message_id,
+                exc,
+            )
+            return False
+
+    def _summary_publisher(self, run_id: str, entry: dict) -> Callable[[str], None]:
+        """Build the ``on_text`` callback that streams the final summary to the UI.
+
+        The partial text goes into ``entry["progress"]["summary_partial"]`` (not
+        persisted, not added to activities) and wakes the SSE status stream,
+        which forwards it to the chat-ui as a live preview. Throttled (~40 new
+        chars or 300 ms) because every SSE payload carries the full status.
+        """
+        state = {"at": 0.0, "chars": 0}
+
+        def publish(text: str) -> None:
+            now = time.monotonic()
+            if len(text) - state["chars"] < 40 and now - state["at"] < 0.3:
+                return
+            state["at"] = now
+            state["chars"] = len(text)
+            progress = dict(entry.get("progress") or {})
+            progress["summary_partial"] = text
+            entry["progress"] = progress
+            self._notify_stream(run_id)
+
+        return publish
+
+    async def _persist_final_summary(
+        self,
+        *,
+        session_id: str,
+        summary: str,
+        deliverable_path: Optional[str],
+        profile_name: str,
+        owner: str,
+    ) -> Optional[str]:
+        """Save the final summary as an assistant message, deliverable attached.
+
+        Returns the new message id, or None when there is no chat session or the
+        write fails (the chat-ui then saves the summary itself, without file).
+        The attachment uses the session-relative path as ``storage_key``, the
+        same form as artifacts saved during normal turns, so the chat renders
+        its download card.
+        """
+        if not session_id or not (summary or "").strip():
+            return None
+        try:
+            import mimetypes
+
+            from src.api.history import history_manager
+            from src.data.ids import new_uuid7_str
+
+            message_id = new_uuid7_str()
+            await history_manager.add_message(
+                session_id,
+                "assistant",
+                summary,
+                profile_name=profile_name,
+                user_id=owner,
+                message_id=message_id,
+            )
+            # Attach the main deliverable first, then the other documents of
+            # the workspace (same detection as complete_execution_plan), so the
+            # fallback message also shows every generated document.
+            from src.runtime.orchestration_tools import collect_plan_deliverables
+
+            files = collect_plan_deliverables(
+                session_id, [deliverable_path] if deliverable_path else None
+            )
+            others = collect_plan_deliverables(session_id, None)
+            seen = {f["path"] for f in files}
+            files += [f for f in others if f["path"] not in seen]
+            for f in files:
+                # collect_plan_deliverables only returns real files inside
+                # the session folder.
+                await history_manager.add_attachment(
+                    session_id,
+                    storage_key=f["path"],
+                    original_name=f["name"],
+                    mime=f.get("mime")
+                    or mimetypes.guess_type(f["name"])[0]
+                    or "application/octet-stream",
+                    size_bytes=int(f.get("size_bytes") or 0),
+                    kind="artifact",
+                    message_id=message_id,
+                )
+            return message_id
+        except Exception as exc:
+            logger.warning(
+                "Plan execution: could not persist final summary for session %s: %s",
+                session_id,
+                exc,
+            )
+            return None
 
     async def _synthesize_final_summary(
         self,
@@ -634,9 +941,18 @@ class PlanExecutionHandler:
         goal: str,
         plan_markdown: str,
         deliverable_path: Optional[str],
+        on_text: Optional[Callable[[str], None]] = None,
     ) -> str:
+        """Write the user-facing completion message (LLM, markdown).
+
+        ``on_text`` receives the message as it streams — header included, so the
+        live preview matches the final text — for the chat-ui preview.
+        """
         from src.research.llm_bridge import complete_messages
 
+        header = f"## Plan completed — `{plan_id}`\n\n"
+        if deliverable_path:
+            header += f"**Deliverable:** `{deliverable_path}`\n\n"
         deliverable = deliverable_path or "workspace/deliverable.md"
         prompt = (
             f"The execution plan `{plan_id}` has been fully completed.\n\n"
@@ -660,6 +976,7 @@ class PlanExecutionHandler:
             temperature=0.3,
             max_tokens=2048,
             timeout=120.0,
+            on_text=(lambda partial: on_text(header + partial)) if on_text else None,
         )
         if not (text or "").strip():
             return (
@@ -667,9 +984,6 @@ class PlanExecutionHandler:
                 f"Deliverable: `{deliverable}`\n\n"
                 f"**Goal:** {goal or 'see plan in the Plan panel.'}"
             )
-        header = f"## Plan completed — `{plan_id}`\n\n"
-        if deliverable:
-            header += f"**Deliverable:** `{deliverable}`\n\n"
         return header + text.strip()
 
     def get_status(self, run_id: str) -> Optional[dict]:
@@ -1072,6 +1386,9 @@ class PlanExecutionHandler:
                 "status": entry.get("status"),
                 "result": entry.get("result"),
                 "deliverable_path": entry.get("deliverable_path"),
+                # Id of the final summary message saved server-side (with the
+                # deliverable attached); None when the chat-ui must save it.
+                "summary_message_id": entry.get("summary_message_id"),
                 "progress": entry.get("progress") or {},
                 "activities": list(entry.get("activities") or [])[-100:],
                 "tasks": list(entry.get("tasks") or []),

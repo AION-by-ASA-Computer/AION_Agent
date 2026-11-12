@@ -49,6 +49,8 @@ export type PlanExecutionProgress = {
   assistant_message_id?: string;
   tool_name?: string;
   detail?: string;
+  /** Final summary text so far, streamed while phase === "writing" (live chat preview). */
+  summary_partial?: string;
 };
 
 export type PlanExecutionJob = {
@@ -217,7 +219,13 @@ export async function fetchPlanExecutionResult(
   runId: string,
   userId: string,
   token?: string | null
-): Promise<{ summary: string; plan_id: string; deliverable_path?: string } | null> {
+): Promise<{
+  summary: string;
+  plan_id: string;
+  deliverable_path?: string;
+  /** Set when the backend already saved the summary message (deliverable attached). */
+  summary_message_id?: string | null;
+} | null> {
   const r = await fetch(`${apiBase()}/plan-execution/result/${encodeURIComponent(runId)}`, {
     method: "POST",
     headers: baseUserHeaders(userId, token),
