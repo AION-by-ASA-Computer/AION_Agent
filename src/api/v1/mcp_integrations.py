@@ -1155,12 +1155,37 @@ async def oauth_start(
 
 
 @router.get("/oauth/callback")
-async def oauth_callback_redirect(code: str, state: str, request: Request):
+async def oauth_callback_redirect(
+    request: Request,
+    code: Optional[str] = None,
+    state: Optional[str] = None,
+    error: Optional[str] = None,
+    error_description: Optional[str] = None,
+):
     _require_credentials_enabled()
     _cleanup_expired_states()
 
-    pending = _oauth_pending.pop(state, None)
+    pending = _oauth_pending.pop(state, None) if state else None
     chat_base = _chat_base_url(request)
+
+    # Il provider torna qui anche quando il login non riesce (utente che annulla,
+    # consenso admin richiesto: es. Entra AADSTS65004) con ?error=... e senza code.
+    # Rimandiamo a chat-ui con il messaggio del provider invece di un 422.
+    if error or not code:
+        import urllib.parse
+
+        msg = error_description or error or "Codice di autorizzazione mancante"
+        msg = (
+            msg.splitlines()[0].strip()[:300] if msg.strip() else "Login non completato"
+        )
+        logger.info(
+            "oauth_callback: provider error slug=%s error=%s",
+            (pending or {}).get("server_slug"),
+            error,
+        )
+        return RedirectResponse(
+            url=f"{chat_base}/integrations?oauth_status=error&error={urllib.parse.quote_plus(msg)}"
+        )
 
     if not pending:
         return RedirectResponse(
