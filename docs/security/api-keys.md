@@ -64,7 +64,7 @@ Unknown or legacy scopes stored on a key are ignored. `last_used_at` is updated 
 
 | Scope | Endpoints |
 |---|---|
-| `chat` | `POST /chat`, `/chat/stop`, `/sessions/{id}/charts`, `GET /profiles`; `/v1/chat`, `/v1/chat/stream`, `/v1/chat/stream/reconnect/*`, `/v1/chat/prepare` (+ status), `/v1/chat/stop`; `/v1/models*`, `/v1/chat/completions`; `/v1/llm-providers`; `POST /a2a/invoke` |
+| `chat` | `POST /chat`, `/chat/stop`, `/sessions/{id}/charts`, `GET /profiles`; `/v1/chat`, `/v1/chat/stream`, `/v1/chat/stream/reconnect/*`, `/v1/chat/prepare` (+ status), `/v1/chat/stop`; `/v1/models*`, `/v1/chat/completions`; `/v1/llm-providers`; `/v1/voice/status`, `POST /v1/voice/transcribe` (chat-ui dictation); `POST /a2a/invoke` |
 | `conversations:read` | `GET /chat-ui/conversations*`, `/sessions/{id}/tool-ledger`, `/sessions/{id}/events/stream`; `GET /v1/conversations*`, steps |
 | `conversations:write` | `POST/PATCH/DELETE /chat-ui/conversations*`; `POST/PATCH/DELETE /v1/conversations*`, `POST` steps |
 | `files:read` | `/sessions/{id}/files`, `/sessions/{id}/download`; `GET /v1/conversations/{id}/files` |
@@ -117,7 +117,7 @@ The script first checks that each key has exactly the scopes of its variable and
 python scripts/security/check_api_key_scopes.py --base-url http://localhost:8001
 ```
 
-Add `--detail` to print, for each of the 44 scoped operations, the URL called and one line per key: key label and prefix, expected result and actual response.
+Add `--detail` to print, for each of the 48 scoped operations, the URL called and one line per key: key label and prefix, expected result and actual response.
 
 In the matrix, operations with a scope are probed with all six keys. Every other operation is probed with the all-scopes key only: scopes only add permissions, so if that key is rejected, every key is. It is sent both as `X-Api-Key` and as `Authorization: Bearer`, because some handlers read only `Authorization`.
 

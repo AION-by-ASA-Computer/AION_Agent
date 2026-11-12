@@ -51,7 +51,7 @@ Uso tipico:
   python scripts/security/check_api_key_scopes.py --base-url https://host/api \\
       --only '^/v1/' --verbose
 
-``--detail`` stampa, per ognuno dei 44 endpoint con scope, l'URL chiamato e una
+``--detail`` stampa, per ognuno dei 48 endpoint con scope, l'URL chiamato e una
 riga per chiave: header inviato, esito atteso e risposta ottenuta.
 
 Exit code 0 se nessun LEAK/BROKEN/FAIL, 1 altrimenti, 2 per errori di setup.
@@ -90,12 +90,12 @@ KEY_SCOPES: dict[str, tuple[str, ...]] = {**{s: (s,) for s in SCOPES}, ALL: SCOP
 # Incolla qui le chiavi (``aion_...``) create da chat-ui -> Impostazioni ->
 # API key, tutte dello stesso utente: una per scope e una con tutti gli scope.
 API_KEYS: dict[str, str] = {
-    "chat": "aion_cwlrq0pb_5q7ps5g3msbyhf56qpy0r4fbcauuqp6s",
-    "conversations:read": "aion_gumkegrg_lk58q9yyb4bggd0vy6uxe1w4byl32ohn",
-    "conversations:write": "aion_g0mry3kf_ay2zgqmkjv734cu106tn1vyqjwqr8fh1",
-    "files:read": "aion_5b41duwd_mkz2ae2jw41h592im589gvsnsjh2ms2m",
-    "files:write": "aion_f0544bt1_lug04rvdizoapo6q3a60uutpdjtqxlms",
-    ALL: "aion_bb5qhpr5_fi5voo4m47bj7q9a28vdkdobb3ugxw9m",
+    "chat": "aion_kde0nt16_32x7i85qgjkdlg3lscypcynmoos6imip",
+    "conversations:read": "aion_86ha37uq_u3lom977v84iue18w4xqlis64jgvw8jy",
+    "conversations:write": "aion_edk60g0g_9qb8jykfq093etkv4ranzbaad6e5u9vv",
+    "files:read": "aion_lcyp5nc3_4sp3jtc57kklk8hjpkgncg3rxrejl7tx",
+    "files:write": "aion_iw4jku1q_rzn2ncpehq5ydczq15wazmuefq9h0z2j",
+    ALL: "aion_kxcjf2n2_er2jufsb5xg2fa11o7iqak1le0fmybps",
 }
 # Opzionale: una chiave dello stesso utente gia' revocata da chat-ui.
 REVOKED_KEY = ""
@@ -119,9 +119,14 @@ EXPECTED_SCOPE: dict[tuple[str, str], str] = {
     ("GET", "/v1/llm-providers"): "chat",
     ("GET", "/v1/models"): "chat",
     ("GET", "/v1/models/{model_id}"): "chat",
+    # chat-ui voice dictation (src/api/v1/voice.py): speech-to-text for the
+    # composer, same scope as sending the message it produces.
+    ("GET", "/v1/voice/status"): "chat",
+    ("POST", "/v1/voice/transcribe"): "chat",
     # conversations:read
     ("GET", "/chat-ui/conversations"): "conversations:read",
     ("GET", "/chat-ui/conversations/{conv_id}"): "conversations:read",
+    ("GET", "/chat-ui/conversations/{conv_id}/branches"): "conversations:read",
     ("GET", "/chat-ui/conversations/{conv_id}/messages"): "conversations:read",
     ("GET", "/chat-ui/conversations/{conv_id}/stream-status"): "conversations:read",
     ("GET", "/chat-ui/conversations/{conv_id}/threads"): "conversations:read",
@@ -134,6 +139,8 @@ EXPECTED_SCOPE: dict[tuple[str, str], str] = {
     # conversations:write
     ("POST", "/chat-ui/conversations"): "conversations:write",
     ("DELETE", "/chat-ui/conversations/{conv_id}"): "conversations:write",
+    # Branching: copies the turns before a user message into a new conversation.
+    ("POST", "/chat-ui/conversations/{conv_id}/fork"): "conversations:write",
     ("POST", "/chat-ui/conversations/{conv_id}/messages"): "conversations:write",
     (
         "DELETE",
