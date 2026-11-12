@@ -129,6 +129,11 @@ Il comando esegue automaticamente:
 
 `config/` e `mcp_servers/` locali non vengono mai sovrascritti.
 
+**Dall'admin-ui**: con il sidecar `aion-updater` attivo (default da quando
+`install.sh` lo configura), lo stesso flusso parte dal pulsante **Aggiorna ora**
+del banner versione, con avanzamento in tempo reale. Vedi
+[Aggiornamento dall'admin-ui](../deployment/self-update.md).
+
 #### Nota per i contributor (file di upgrade per-versione)
 
 Quando una release introduce chiavi `.env` nuove, rinominate o rimosse, aggiungere

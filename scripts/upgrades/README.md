@@ -24,6 +24,15 @@ docker run --rm \
 3. `scripts/upgrades/<next>.py` se presente (con UpgradeContext — pieno stack Python)
 4. Aggiorna `AION_VERSION=<next>` nel `.env` montato
 
+### Target `local` (modalità ibrida di test)
+
+Con `AION_UPGRADE_FINAL_LOCAL=1` l'ultimo hop di `install.sh upgrade` è
+`<ultima release> → local` e costruisce le immagini dal clone. Non esiste un
+file `local.py`: `upgrade_runner.py --to local` esegue, in ordine semver, **tutti**
+i `scripts/upgrades/<ver>.py` con versione maggiore di `--from` (cioè gli script
+non ancora rilasciati presenti nel clone). È il modo per testare lo script della
+prossima release nel flusso reale. Vedi `docs/deployment/self-update.md`.
+
 ## Convenzione
 
 Ogni file si chiama `<versione_arrivo>.py` (es. `1.6.0.py`).
