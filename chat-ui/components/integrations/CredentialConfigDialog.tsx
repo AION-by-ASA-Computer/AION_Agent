@@ -24,10 +24,13 @@ import { apiBase, oauthCallbackRedirectUri } from "@/lib/config";
 import { jsonHeaders } from "@/lib/api/aion";
 import { oauthManagedFieldKeys, oauthProviderDisplayName } from "@/lib/integrations/oauthLabels";
 import {
+  BOOLEAN_HINT_FALSE,
+  BOOLEAN_HINT_TRUE,
   formatFieldLabel,
   isAdvancedField,
   isBooleanField,
   isSecretField,
+  parseBooleanToken,
 } from "@/lib/integrations/field-labels";
 import { Switch } from "@/components/ui/Switch";
 import { useT } from "@/lib/i18n/use-t";
@@ -113,8 +116,12 @@ export function CredentialConfigDialog({
 
       if (hint) {
         if (isBool) {
-          const val = (hint.display_hint || "").toLowerCase();
-          init[f.key] = val.includes("attivo") || val.includes("true") ? "true" : "false";
+          // Toggle state comes from the hint ("Attivo"/"Disattivo"): exact match,
+          // never `includes("attivo")`, which is also true for "disattivo".
+          // An unreadable hint falls back to the schema default.
+          const parsed =
+            parseBooleanToken(hint.display_hint) ?? parseBooleanToken(f.default_value) ?? false;
+          init[f.key] = parsed ? "true" : "false";
         } else if (isSec) {
           // Campi secret salvati: testo censurato
           init[f.key] = MASKED_SECRET_VALUE;
@@ -127,7 +134,11 @@ export function CredentialConfigDialog({
           init[f.key] = val || (f.default_value !== undefined ? String(f.default_value) : "");
         }
       } else if (f.default_value !== undefined) {
-        init[f.key] = String(f.default_value);
+        // Booleans are normalised to "true"/"false" so the Switch (which checks
+        // `=== "true"`) and the saved env value agree, e.g. for a "True" default.
+        const parsedDefault = isBool ? parseBooleanToken(f.default_value) : null;
+        init[f.key] =
+          parsedDefault !== null ? (parsedDefault ? "true" : "false") : String(f.default_value);
       }
     }
     return init;
@@ -304,16 +315,11 @@ export function CredentialConfigDialog({
     if (values[key] !== undefined) {
       return values[key] === "true";
     }
+    // Same exact-token parsing as `initialValues` (see parseBooleanToken).
     const hint = integration.credentials_hints.find((h) => h.key === key);
-    if (hint && hint.display_hint) {
-      const p = hint.display_hint.toLowerCase();
-      if (p.includes("attivo") || p.includes("true")) return true;
-      if (p.includes("disattivo") || p.includes("false")) return false;
-    }
-    if (defaultValue !== undefined) {
-      return defaultValue === true || defaultValue === "true";
-    }
-    return false;
+    const fromHint = parseBooleanToken(hint?.display_hint);
+    if (fromHint !== null) return fromHint;
+    return parseBooleanToken(defaultValue) ?? false;
   }
 
   function isFieldMissing(f: CredentialField): boolean {
@@ -345,13 +351,19 @@ export function CredentialConfigDialog({
       // la vera credenziale cifrata sul server
       if (val === MASKED_SECRET_VALUE) continue;
 
+      // Skip saved values the user did not touch: text values are prefilled from
+      // their display hint, which is capped at 128 chars, so re-sending them
+      // would silently truncate the stored value. Unsaved keys (e.g. defaults)
+      // are always sent so the MCP process gets them.
+      if (savedKeys.has(key) && val === initialValues[key]) continue;
+
       toSave[key] = val;
       const field = formFields.find((f) => f.key === key);
       const isBool = field && isBooleanField(field);
       const isSec = field && isSecretField(field);
 
       if (isBool) {
-        hints[key] = val === "true" ? "Attivo" : "Disattivo";
+        hints[key] = val === "true" ? BOOLEAN_HINT_TRUE : BOOLEAN_HINT_FALSE;
       } else if (isSec) {
         hints[key] = "****";
       } else {

@@ -9,7 +9,43 @@ from typing import Dict, List, Any, Optional, Iterator
 
 logger = logging.getLogger("aion.agent_profile")
 
+# A profile slug is the YAML file stem. The loader skips any file whose stem does
+# not match this pattern (see _iter_profile_yaml_files), so it is also the only
+# shape a slug may take when the admin API writes a profile to disk.
 _PROFILE_STEM_RE = re.compile(r"^[a-z0-9_]+$")
+# Runs of characters that cannot appear in a slug; collapsed to one "_".
+_PROFILE_SLUG_INVALID_RUN_RE = re.compile(r"[^a-z0-9]+")
+
+
+class InvalidProfileSlugError(ValueError):
+    """Raised when a profile slug is not a bare, safe file stem (path traversal guard)."""
+
+
+def normalize_profile_slug(raw: str) -> str:
+    """Turn a user-supplied profile name/slug into a canonical, filesystem-safe slug.
+
+    Used by the admin API when a profile is created or saved, so display names
+    such as ``"Qualità & Rischi"`` become ``"qualita_rischi"`` instead of a file
+    the loader would silently skip (or a path outside the profiles directory).
+    Accents are transliterated, every run of characters outside ``[a-z0-9]``
+    becomes a single ``_`` and leading/trailing ``_`` are stripped.
+
+    Idempotent on valid slugs (``normalize_profile_slug("aion_std") == "aion_std"``),
+    so re-saving an existing profile keeps its file name.
+
+    Returns an empty string when nothing usable is left (e.g. ``"../"`` or ``"???"``);
+    callers must reject that.
+    """
+    import unicodedata
+
+    # NFKD splits "à" into "a" + combining accent; dropping non-ASCII keeps the base letter.
+    ascii_text = (
+        unicodedata.normalize("NFKD", raw or "")
+        .encode("ascii", "ignore")
+        .decode("ascii")
+    )
+    return _PROFILE_SLUG_INVALID_RUN_RE.sub("_", ascii_text.lower()).strip("_")
+
 
 from .runtime.profile_schema import (
     ProfileSchema,
@@ -374,13 +410,40 @@ class ProfileManager:
             return [self.std_path]
         return [self.std_path, self.write_path]
 
+    @staticmethod
+    def _contained_yaml_path(directory: Path, slug: str) -> Path:
+        """Return ``<directory>/<slug>.yaml`` after checking it cannot escape ``directory``.
+
+        Two independent checks (defence in depth against path traversal, CodeQL
+        ``py/path-injection``): the slug must be a canonical stem, and the
+        resolved path must still live directly inside the resolved directory.
+        The returned path is the resolved (real) one.
+
+        Raises:
+            InvalidProfileSlugError: slug is not ``[a-z0-9_]+`` or resolves outside.
+        """
+        if not isinstance(slug, str) or not _PROFILE_STEM_RE.match(slug):
+            raise InvalidProfileSlugError(f"Invalid profile slug: {slug!r}")
+        base = os.path.realpath(directory)
+        candidate = os.path.realpath(os.path.join(base, f"{slug}.yaml"))
+        if not candidate.startswith(base + os.sep):
+            raise InvalidProfileSlugError(f"Invalid profile slug: {slug!r}")
+        return Path(candidate)
+
     def profile_yaml_path(self, slug: str, *, for_write: bool = False) -> Path:
-        if for_write:
-            return self.write_path / f"{slug}.yaml"
-        overlay = self.write_path / f"{slug}.yaml"
-        if overlay.is_file():
+        """Path of the YAML file backing profile ``slug``.
+
+        ``for_write`` returns the location in the writable overlay; otherwise the
+        overlay copy wins when present, falling back to the std directory.
+
+        Raises:
+            InvalidProfileSlugError: ``slug`` is not a safe file stem (see
+                :meth:`_contained_yaml_path`). Admin endpoints map it to HTTP 400.
+        """
+        overlay = self._contained_yaml_path(self.write_path, slug)
+        if for_write or overlay.is_file():
             return overlay
-        return self.std_path / f"{slug}.yaml"
+        return self._contained_yaml_path(self.std_path, slug)
 
     def _compute_dir_mtime(self) -> float:
         mtimes: List[float] = []

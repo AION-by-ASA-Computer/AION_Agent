@@ -42,13 +42,26 @@ def _is_memorization_assistant(row: Any) -> bool:
     return bool((meta.get("memorized_message_id") or "").strip())
 
 
+# Roles that open a new agent turn. ``internal`` rows are server-issued triggers
+# (plan execution tasks, the plan-closing turn, …): each one gets its own
+# assistant reply, so it must start a new group too. Grouping only on ``user``
+# folded a whole plan run (every task reply + the final summary) into the
+# approving user's turn and kept just one assistant row: task chats and the
+# final message with the generated-document cards vanished from history.
+_TURN_START_ROLES = frozenset({"user", "internal"})
+
+
 def _group_messages_by_user_turn(messages: Sequence[T]) -> List[List[T]]:
+    """Split ``messages`` into agent turns, each starting at a user/internal row."""
     if not messages:
         return []
     turns: List[List[T]] = []
     current: List[T] = []
     for row in messages:
-        if normalize_message_role(getattr(row, "role", None)) == "user" and current:
+        # Raw role, not normalize_message_role(): that maps empty/unknown roles
+        # to "internal" too, which must not split a turn.
+        role = str(getattr(row, "role", None) or "").strip().lower()
+        if role in _TURN_START_ROLES and current:
             turns.append(current)
             current = [row]
         else:

@@ -20,7 +20,11 @@ import zipfile
 import shutil
 import copy
 from pydantic import BaseModel, Field
-from ..agent_profile import profile_manager
+from ..agent_profile import (
+    InvalidProfileSlugError,
+    normalize_profile_slug,
+    profile_manager,
+)
 from ..skill_registry import skill_registry
 from ..mcp_manager import mcp_manager
 from ..security.checker import AIONAntivirus
@@ -762,10 +766,23 @@ async def save_profile(p: ProfileUpdate):
     from ..skill_registry import skill_registry
     from ..mcp_manager import mcp_manager
 
-    slug = (getattr(p, "slug", None) or p.name).strip().lower().replace(" ", "_")
-    file_path = profile_manager.profile_yaml_path(slug, for_write=True)
+    # The slug becomes a file name on disk, so it comes from the request only in
+    # normalized form: "Qualità & Rischi" -> "qualita_rischi", "../x" -> "x".
+    # Normalization is idempotent, so existing profiles keep their file name.
+    slug = normalize_profile_slug(getattr(p, "slug", None) or p.name)
+    if not slug:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid profile name: it must contain at least one letter or digit.",
+        )
+    try:
+        # profile_yaml_path re-checks the slug and that the path stays inside
+        # the profiles directory (path traversal guard, CodeQL py/path-injection).
+        file_path = profile_manager.profile_yaml_path(slug, for_write=True)
+        existing_path = profile_manager.profile_yaml_path(slug)
+    except InvalidProfileSlugError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     existing: Dict[str, Any] = {}
-    existing_path = profile_manager.profile_yaml_path(slug)
     if existing_path.is_file():
         with open(existing_path, encoding="utf-8") as f:
             existing = yaml.safe_load(f) or {}
