@@ -3297,15 +3297,23 @@ class AgentPipeline:
                                     and evt.get("name") == "mark_task_completed"
                                     and _msg_src == "internal_trigger"
                                 ):
+                                    # Legacy loop: same fix as StreamLoop — close
+                                    # the tool step and forward its tool_end before
+                                    # breaking, or the card stays "running".
+                                    queue_tool_step(evt)
+                                    if assistant_message_id:
+                                        await persist_pending_turn_records(
+                                            assistant_message_id,
+                                            only_new=True,
+                                            include_attachments=False,
+                                        )
+                                    yield _track_sse(chunk)
                                     stop_event.set()
                                     stop_reason = "plan_task_completed"
+                                    # Code only, no banner message (see StreamLoop).
                                     outcome: Dict[str, Any] = {
                                         "type": "turn_outcome",
                                         "code": "plan_task_completed",
-                                        "message": (
-                                            "Task marked completed. Turn interrupted â€” "
-                                            "the server will continue with the next task."
-                                        ),
                                     }
                                     yield _track_sse(outcome)
                                     break

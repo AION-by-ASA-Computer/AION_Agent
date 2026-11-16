@@ -6,7 +6,7 @@ import asyncio
 import json
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import httpx
 
@@ -72,6 +72,7 @@ async def _post_chat(
     payload: Dict[str, Any],
     headers: Dict[str, str],
     diag: Optional[Dict[str, Any]] = None,
+    on_text: Optional[Callable[[str], None]] = None,
 ) -> tuple[int, str, str]:
     """POST one chat completion; return ``(status, error_text, content)``.
 
@@ -82,7 +83,20 @@ async def _post_chat(
     On HTTP >= 400 ``content`` is empty and ``error_text`` holds the body.
     ``diag`` (optional) receives ``finish_reason`` and ``reasoning_chars`` of
     the streamed answer, logged by the caller when the content is empty.
+    ``on_text`` (optional) is called with the visible content accumulated so
+    far each time a streamed content delta arrives (live previews, e.g. the
+    plan-execution final summary); callback errors are ignored.
     """
+
+    def _emit(text: str) -> None:
+        if on_text is None or not text:
+            return
+        try:
+            on_text(text)
+        except Exception:
+            # A broken preview must never break the completion itself.
+            pass
+
     diag = diag if diag is not None else {}
     if not _stream_enabled():
         r = await client.post(url, json=payload, headers=headers)
@@ -116,7 +130,10 @@ async def _post_chat(
                 continue
             for choice in event.get("choices") or []:
                 delta = choice.get("delta") or {}
-                parts.append(_content_text(delta.get("content")))
+                piece = _content_text(delta.get("content"))
+                parts.append(piece)
+                if piece:
+                    _emit("".join(parts))
                 reasoning = delta.get("reasoning_content") or delta.get("reasoning")
                 if isinstance(reasoning, str):
                     diag["reasoning_chars"] = diag.get("reasoning_chars", 0) + len(
@@ -141,12 +158,18 @@ async def complete_messages(
     max_tokens: Optional[int] = None,
     timeout: float = 60.0,
     raise_errors: bool = False,
+    on_text: Optional[Callable[[str], None]] = None,
 ) -> str:
     """Async chat completion; returns stripped text.
 
     Errors are logged and swallowed (``""`` returned) so one failed call does
     not abort a research round, unless ``raise_errors`` is True (used by
     :func:`probe_model` to fail fast on a broken endpoint/credential).
+
+    ``on_text`` receives the partial visible answer while it streams (direct
+    HTTP path only; the LiteLLM path is not streamed and never calls it). The
+    partial text is raw: the final return value may differ after
+    ``strip_thinking``.
     """
     from src.runtime.llm_adapter import resolve_llm_credentials
     from src.runtime.llm_lite_llm_adapter import LiteLLMChatGeneratorWrapper
@@ -245,7 +268,7 @@ async def complete_messages(
 
         async def _bounded_post(diag: Dict[str, Any]) -> tuple[int, str, str]:
             return await asyncio.wait_for(
-                _post_chat(client, url, payload, headers, diag),
+                _post_chat(client, url, payload, headers, diag, on_text),
                 timeout=max(1.0, _left()),
             )
 

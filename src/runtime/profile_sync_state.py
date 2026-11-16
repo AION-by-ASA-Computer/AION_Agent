@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from pathlib import Path
 from typing import Dict, Tuple
 
@@ -103,13 +104,26 @@ def record_profile_after_admin_save(
 
     Drops the baseline instead of recording the new hash: with no baseline the
     file is preserved until it again matches the template byte for byte.
+
+    Only files directly inside ``<config>/profiles`` are considered; anything else
+    (e.g. saves to a separate ``AION_PROFILES_WRITE_DIR`` overlay, or a path that
+    escapes the directory) is ignored without touching the filesystem.
     """
-    rel_key = profile_rel_key(Path("profiles") / yaml_path.name)
-    if not rel_key or not yaml_path.is_file():
+    # Containment check first, before any filesystem access on ``yaml_path``: the
+    # path derives from the admin-supplied profile slug (CodeQL py/path-injection,
+    # alert #674). realpath + startswith is the guard pattern CodeQL recognizes;
+    # profile_yaml_path already applies it upstream, this keeps the helper safe
+    # for any future caller. It also excludes the overlay dir, which never
+    # touches the synced copy.
+    synced_dir = os.path.realpath(_config_dir(config_root) / "profiles")
+    candidate = os.path.realpath(yaml_path)
+    if not candidate.startswith(synced_dir + os.sep):
         return
-    # Saves to a separate overlay (AION_PROFILES_WRITE_DIR) never touch the synced copy.
-    synced_dir = (_config_dir(config_root) / "profiles").resolve()
-    if yaml_path.resolve().parent != synced_dir:
+    if os.path.dirname(candidate) != synced_dir:
+        return  # nested sub-directories are not profiles
+    safe_path = Path(candidate)
+    rel_key = profile_rel_key(Path("profiles") / safe_path.name)
+    if not rel_key or not safe_path.is_file():
         return
     state = load_profile_sync_state(config_root)
     if state.pop(rel_key, None) is not None:

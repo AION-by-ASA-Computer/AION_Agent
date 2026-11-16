@@ -33,6 +33,44 @@ export function planTaskTurns(task: PlanExecutionTask | null | undefined): PlanT
   ];
 }
 
+/**
+ * Rebuild a finished plan run's task list from history messages.
+ *
+ * Used by the chat when no plan run is adopted any more (the run ended, or the
+ * page was reloaded afterwards): task turns are recognised by their
+ * `metadata.plan_task_id`, in transcript order. Each internal trigger opens a
+ * turn and the following assistant reply of the same task closes it, so
+ * retries show up as separate turns, like the live run payload. Tasks are
+ * reported as "done" and titled with their id (titles only live in the run).
+ * When several plans ran in the chat, `planId` restricts to one of them.
+ */
+export function planTasksFromMessages(
+  messages: PlanViewMessage[],
+  planId?: string | null,
+): PlanExecutionTask[] {
+  const pid = (planId || "").trim();
+  const byId = new Map<string, PlanExecutionTask>();
+  for (const m of messages) {
+    const tid = (m.metadata?.plan_task_id || "").trim();
+    if (!tid) continue;
+    if (pid && (m.metadata?.plan_id || "").trim() !== pid) continue;
+    let task = byId.get(tid);
+    if (!task) {
+      task = { task_id: tid, title: tid, status: "done", turns: [] };
+      byId.set(tid, task);
+    }
+    const turns = task.turns!;
+    const last = turns[turns.length - 1];
+    if (m.role === "internal" || m.role === "user") {
+      turns.push({ user_message_id: m.id });
+    } else if (m.role === "assistant") {
+      if (last && !last.assistant_message_id) last.assistant_message_id = m.id;
+      else turns.push({ assistant_message_id: m.id });
+    }
+  }
+  return [...byId.values()];
+}
+
 /** Message IDs belonging to a plan execution task turn (internal trigger + assistant reply). */
 export function messageIdsForPlanTask(task: PlanExecutionTask | null | undefined): Set<string> {
   const ids = new Set<string>();

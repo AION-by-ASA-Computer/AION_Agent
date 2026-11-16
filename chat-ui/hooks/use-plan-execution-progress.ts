@@ -26,6 +26,8 @@ type SharedRun = {
   listeners: Set<Listener>;
   unsub: (() => void) | null;
   refCount: number;
+  /** (Re)opens the SSE stream for this run; see restartPlanExecutionSubscription. */
+  connect: () => void;
 };
 
 const sharedRuns = new Map<string, SharedRun>();
@@ -98,51 +100,85 @@ function ensureSubscription(
   let shared = sharedRuns.get(runId);
   if (shared) return shared;
 
+  const notify = () => {
+    for (const fn of shared!.listeners) fn(shared!.state);
+  };
+
+  // Seed from the status endpoint, then follow the SSE stream. The backend
+  // closes the stream with a `final` event whenever the run stops being
+  // "running" (done, error, cancelled or paused).
+  // Incremented on every (re)connect: callbacks from a superseded stream (its
+  // reader still calls onDone when it exits) must not touch the new state.
+  let generation = 0;
+  const connect = () => {
+    shared!.unsub?.();
+    const gen = ++generation;
+    const isCurrent = () => gen === generation;
+    void fetchPlanExecutionStatus(runId, userId, token).then((st) => {
+      const seed = statusToProgressEvent(st);
+      if (!seed || !isCurrent()) return;
+      shared!.state = applyEvent(shared!.state, seed);
+      notify();
+    });
+
+    shared!.unsub = subscribePlanExecutionStream(
+      runId,
+      userId,
+      token,
+      (ev) => {
+        if (!isCurrent()) return;
+        const prevPhase = shared!.state.progress?.phase;
+        shared!.state = applyEvent(shared!.state, ev);
+        notify();
+        if (ev.phase === "task_turn_started") {
+          onTaskTurnStarted?.(ev);
+        }
+        if (ev.phase === "task_done" && ev.task_id && prevPhase !== "task_done") {
+          onTaskDone?.(String(ev.task_id));
+        }
+        if (ev.final) {
+          shared!.state.done = true;
+          notify();
+        }
+      },
+      () => {
+        if (!isCurrent()) return;
+        shared!.state = { ...shared!.state, done: true };
+        notify();
+      },
+    );
+  };
+
   shared = {
     state: emptyState(),
     listeners: new Set(),
     unsub: null,
     refCount: 0,
+    connect,
   };
   sharedRuns.set(runId, shared);
-
-  const notify = () => {
-    for (const fn of shared!.listeners) fn(shared!.state);
-  };
-
-  void fetchPlanExecutionStatus(runId, userId, token).then((st) => {
-    const seed = statusToProgressEvent(st);
-    if (!seed) return;
-    shared!.state = applyEvent(shared!.state, seed);
-    notify();
-  });
-
-  shared.unsub = subscribePlanExecutionStream(
-    runId,
-    userId,
-    token,
-    (ev) => {
-      const prevPhase = shared!.state.progress?.phase;
-      shared!.state = applyEvent(shared!.state, ev);
-      notify();
-      if (ev.phase === "task_turn_started") {
-        onTaskTurnStarted?.(ev);
-      }
-      if (ev.phase === "task_done" && ev.task_id && prevPhase !== "task_done") {
-        onTaskDone?.(String(ev.task_id));
-      }
-      if (ev.final) {
-        shared!.state.done = true;
-        notify();
-      }
-    },
-    () => {
-      shared!.state = { ...shared!.state, done: true };
-      notify();
-    },
-  );
+  connect();
 
   return shared;
+}
+
+/**
+ * Re-open the progress stream of a run that was resumed in place.
+ *
+ * Resuming a paused/interrupted run keeps the same run_id, so components that
+ * already subscribed to it do not re-run their effect. Their stream, however,
+ * was closed by the `final` event of the previous stop; without reconnecting,
+ * the UI would show the run as running forever and miss the next pause or the
+ * completion. Called by the plan panel right after a successful resume.
+ * No-op when nobody is subscribed to ``runId``.
+ */
+export function restartPlanExecutionSubscription(runId: string): void {
+  const shared = sharedRuns.get(runId);
+  if (!shared) return;
+  // Back to "running" while keeping the known tasks/activities on screen.
+  shared.state = { ...shared.state, status: "running", done: false, error: null };
+  for (const fn of shared.listeners) fn(shared.state);
+  shared.connect();
 }
 
 function releaseSubscription(runId: string) {

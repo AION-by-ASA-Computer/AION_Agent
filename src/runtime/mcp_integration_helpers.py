@@ -30,6 +30,45 @@ from src.runtime.credential_store import (
 
 _OAUTH_MANAGED_KEYS = frozenset({"OAUTH_TOKEN", "OAUTH_REFRESH_TOKEN"})
 
+# Display hints the chat-ui stores next to boolean (toggle) credentials. The
+# value itself is encrypted, so the Integrations dialog rebuilds the toggle
+# state from this hint on reload. Matching must be EXACT: "disattivo" contains
+# "attivo", so a substring check turns a saved ``false`` back into ``true``.
+BOOLEAN_HINT_TRUE = "Attivo"
+BOOLEAN_HINT_FALSE = "Disattivo"
+_BOOLEAN_TRUE_TOKENS = frozenset({"attivo", "true", "on", "yes", "1"})
+_BOOLEAN_FALSE_TOKENS = frozenset({"disattivo", "false", "off", "no", "0"})
+
+
+def parse_boolean_token(raw: Any) -> Optional[bool]:
+    """Parse a boolean credential value or display hint.
+
+    Accepts real booleans and the canonical string forms ("true"/"false",
+    "Attivo"/"Disattivo", "on"/"off", ...), case-insensitively and by exact
+    token match. Returns ``None`` when ``raw`` is not boolean-like, so callers
+    can tell "false" apart from "not a boolean".
+    """
+    if isinstance(raw, bool):
+        return raw
+    if raw is None:
+        return None
+    token = str(raw).strip().lower()
+    if token in _BOOLEAN_TRUE_TOKENS:
+        return True
+    if token in _BOOLEAN_FALSE_TOKENS:
+        return False
+    return None
+
+
+def boolean_display_hint(value: bool) -> str:
+    """Canonical display hint stored for a boolean credential."""
+    return BOOLEAN_HINT_TRUE if value else BOOLEAN_HINT_FALSE
+
+
+def is_boolean_display_hint(hint: Any) -> bool:
+    """True when ``hint`` is one of the canonical boolean hints (exact match)."""
+    return str(hint or "").strip() in (BOOLEAN_HINT_TRUE, BOOLEAN_HINT_FALSE)
+
 
 def oauth_access_token_fresh(hints: List[Dict[str, Any]]) -> bool:
     return any(
@@ -392,11 +431,19 @@ async def integration_row_to_public_dict(
                 continue
             if has_oauth and hk in _OAUTH_MANAGED_KEYS:
                 continue
+            # Custom variables added by the user in the dialog are not part of
+            # the admin schema. A boolean one is recognisable from its canonical
+            # hint: re-expose it as a toggle, otherwise it would come back as a
+            # masked password field and the toggle state would be lost.
+            # The label is the key: the hint is a preview of the VALUE
+            # ("Attivo", "****", first chars of a text), not a field name.
+            is_bool = is_boolean_display_hint(h.get("display_hint"))
             schema.append(
                 {
                     "key": hk,
-                    "label": h.get("display_hint") or hk,
-                    "type": "password",
+                    "label": hk,
+                    "type": "boolean" if is_bool else "password",
+                    "category": "advanced",
                     "required": False,
                     "description": "Campo salvato in precedenza (opzionale)",
                 }

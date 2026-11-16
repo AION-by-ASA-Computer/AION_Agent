@@ -448,7 +448,11 @@ def _schema_from_keys(
         ftype = meta.get("type") or _field_type(k, defaults.get(k))
         fcat = meta.get("category") or _field_category(k)
         desc = meta.get("description")
-        default_v = defaults.get(k) or meta.get("default_value")
+        # ``is None`` instead of ``or``: a falsy default (``False``, "0") is a
+        # real default (toggle off) and must not fall back to the catalog one.
+        default_v = defaults.get(k)
+        if default_v is None:
+            default_v = meta.get("default_value")
 
         is_required = True
         if ftype == "boolean":

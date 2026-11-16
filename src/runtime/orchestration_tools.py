@@ -32,7 +32,34 @@ ORCHESTRATION_BUILTIN_TOOL_NAMES: tuple[str, ...] = (
     "get_execution_plan",
     "update_execution_plan",
     "mark_task_completed",
+    "complete_execution_plan",
 )
+
+# Closing tool of plan execution: called once, in a dedicated turn, after the
+# last task is marked completed (see run_complete_execution_plan).
+COMPLETE_PLAN_TOOL_NAME = "complete_execution_plan"
+
+# Document formats the closing tool surfaces as "generated documents" when the
+# agent does not list the deliverables itself. Scripts and data files (py, js,
+# json…) are working files, not documents for the user: the agent can still
+# pass them explicitly in ``deliverables``.
+_PLAN_DOCUMENT_EXTENSIONS = frozenset(
+    {
+        "docx",
+        "doc",
+        "pptx",
+        "xlsx",
+        "xls",
+        "pdf",
+        "html",
+        "md",
+        "markdown",
+        "csv",
+        "txt",
+    }
+)
+# Cap on the number of document cards rendered by the closing tool.
+_PLAN_MAX_DELIVERABLES = 10
 
 
 def format_plan_tasks_excerpt(markdown: str, *, max_lines: int = 40) -> str:
@@ -376,6 +403,179 @@ async def run_mark_task_completed(
         highlight_task_id=highlight,
     )
     return format_mark_task_result(plan_id, task_id, updated_md, revision)
+
+
+def _session_file_info(root, rel: str) -> Optional[Dict[str, Any]]:
+    """Describe ``rel`` (session-relative path) if it is a real file under ``root``.
+
+    Returns ``{"path", "name", "mime", "size_bytes"}`` or None for a missing
+    file or a path escaping the session folder (``..``, absolute paths).
+    """
+    import mimetypes
+    from pathlib import Path
+
+    clean = (rel or "").strip().strip("`\"'").replace("\\", "/").lstrip("/")
+    if not clean:
+        return None
+    # Agents sometimes omit the workspace/ prefix: try both forms.
+    candidates = (
+        [clean] if clean.startswith("workspace/") else [f"workspace/{clean}", clean]
+    )
+    root_resolved = Path(root).resolve()
+    for cand in candidates:
+        try:
+            p = (root_resolved / cand).resolve()
+        except OSError:
+            continue
+        if p.is_file() and root_resolved in p.parents:
+            return {
+                "path": p.relative_to(root_resolved).as_posix(),
+                "name": p.name,
+                "mime": mimetypes.guess_type(p.name)[0] or "application/octet-stream",
+                "size_bytes": p.stat().st_size,
+            }
+    return None
+
+
+def collect_plan_deliverables(
+    session_id: str,
+    requested: Optional[List[str]] = None,
+    *,
+    plan_markdown: str = "",
+    limit: int = _PLAN_MAX_DELIVERABLES,
+) -> List[Dict[str, Any]]:
+    """Files to show as the plan's generated documents (cards in the chat).
+
+    ``requested`` (paths listed by the agent) wins: each existing file inside
+    the session folder is kept, in order, unknown ones are dropped. Without a
+    usable list, falls back to the plan's inferred deliverable plus the
+    document files in ``workspace/`` (newest first, hidden folders and
+    ``node_modules`` skipped). Never raises: an unresolvable session gives [].
+    """
+    try:
+        from src.session_workspace import normalize_session_id, session_root
+
+        root = session_root(normalize_session_id(session_id))
+    except Exception:
+        return []
+
+    out: List[Dict[str, Any]] = []
+    seen: set[str] = set()
+
+    def _add(rel: str) -> None:
+        info = _session_file_info(root, rel)
+        if info and info["path"] not in seen and len(out) < limit:
+            seen.add(info["path"])
+            out.append(info)
+
+    for rel in requested or []:
+        if isinstance(rel, str):
+            _add(rel)
+    if out:
+        return out
+
+    # Fallback: the plan's main deliverable first, then other documents.
+    from src.runtime.plan_execution import (
+        infer_deliverable_path,
+        resolve_existing_deliverable,
+    )
+
+    main = resolve_existing_deliverable(
+        session_id, infer_deliverable_path(plan_markdown) if plan_markdown else None
+    )
+    if main:
+        _add(main)
+    workspace = root / "workspace"
+    if workspace.is_dir():
+        docs = []
+        for path in workspace.rglob("*"):
+            parts = path.relative_to(workspace).parts
+            if any(p.startswith(".") or p == "node_modules" for p in parts):
+                continue
+            ext = path.suffix.lower().lstrip(".")
+            if ext not in _PLAN_DOCUMENT_EXTENSIONS or not path.is_file():
+                continue
+            try:
+                docs.append((path.stat().st_mtime, "workspace/" + "/".join(parts)))
+            except OSError:
+                continue
+        for _mtime, rel in sorted(docs, reverse=True):
+            _add(rel)
+    return out
+
+
+async def run_complete_execution_plan(
+    plan_id: str | None,
+    summary: str,
+    deliverables: Optional[List[str]] = None,
+    *,
+    session_id: str,
+    user_id: str,
+) -> str:
+    """Close a plan whose tasks are all completed (last step of plan execution).
+
+    Called by the agent in the closing turn scheduled by the plan execution
+    handler after the last ``mark_task_completed``. It refuses while tasks are
+    still pending, records a ``plan_completed`` audit entry, and returns a JSON
+    payload ``{ok, plan_id, summary, deliverables:[{path,name,mime,size_bytes}]}``.
+    The stream loop reads that payload on ``tool_end`` to write the summary as
+    the turn's answer and render one document card per deliverable (see
+    ``StreamLoop._handle_complete_plan``). The plan DB status is left as is
+    (``approved`` with every checkbox ticked = completed in the sidebar).
+    """
+    from src.runtime import orchestration_db as odb
+    from src.runtime.plan_engine import next_pending_task_id
+
+    pid = (plan_id or "").strip() or await resolve_active_plan_id(session_id) or ""
+    if not pid:
+        raise ValueError("No orchestration plan for this session.")
+    stored = await odb.fetch_plan_session(pid)
+    if stored and stored != session_id:
+        raise ValueError(f"Plan `{pid}` does not belong to this session")
+    rec = await odb.fetch_plan_record(pid)
+    if not rec:
+        raise ValueError(f"Plan `{pid}` not found")
+    md = (rec.get("approved_markdown") or rec.get("draft_markdown") or "").strip()
+
+    # Closing a plan with work left would hide unfinished tasks from the user.
+    pending = next_pending_task_id(md) if md else None
+    if pending:
+        raise ValueError(
+            f"Plan `{pid}` still has pending tasks (next: `{pending}`). "
+            "Only call complete_execution_plan after every task is marked completed."
+        )
+
+    text = (summary or "").strip()
+    if not text:
+        raise ValueError(
+            "summary is required: 2–5 sentences on what the plan produced."
+        )
+
+    if isinstance(deliverables, str):
+        # Some models send the array as a JSON string (or a single path).
+        raw = deliverables.strip()
+        try:
+            parsed = json.loads(raw) if raw.startswith("[") else [raw]
+        except Exception:
+            parsed = [raw]
+        deliverables = [str(x) for x in parsed if x]
+    files = collect_plan_deliverables(session_id, deliverables, plan_markdown=md)
+
+    try:
+        await odb.insert_audit(
+            pid,
+            session_id,
+            user_id or "agent",
+            "plan_completed",
+            {"deliverables": [f["path"] for f in files]},
+        )
+    except Exception as exc:
+        logger.warning("complete_execution_plan audit failed plan=%s: %s", pid, exc)
+
+    return json.dumps(
+        {"ok": True, "plan_id": pid, "summary": text, "deliverables": files},
+        ensure_ascii=False,
+    )
 
 
 async def run_get_execution_plan(
@@ -726,6 +926,21 @@ def build_orchestration_haystack_tools(session_id: str, user_id: str) -> List[An
             _mark_used()
             return result
 
+    def complete_execution_plan_fn(
+        summary: str = "",
+        plan_id: str | None = None,
+        deliverables: list | str | None = None,
+    ) -> str:
+        return _run_async(
+            run_complete_execution_plan(
+                plan_id,
+                summary,
+                deliverables,
+                session_id=session_id,
+                user_id=user_id,
+            )
+        )
+
     def _orch_tool(name: str, description: str, fn, parameters: dict) -> Any:
         return Tool(
             name=name,
@@ -838,6 +1053,37 @@ def build_orchestration_haystack_tools(session_id: str, user_id: str) -> List[An
                     "task_id": {"type": "string"},
                 },
                 "required": ["task_id"],
+            },
+        ),
+        _orch_tool(
+            COMPLETE_PLAN_TOOL_NAME,
+            (
+                "Close an execution plan whose tasks are ALL completed. Call it once, "
+                "only in the plan-closing turn (never while tasks are pending). "
+                "summary = the final message for the user (2–5 sentences: what was "
+                "produced and key results). deliverables = workspace paths of the "
+                "generated documents to show (e.g. workspace/report.docx); empty = "
+                "auto-detect. The chat shows the summary plus one card per document."
+            ),
+            complete_execution_plan_fn,
+            parameters={
+                "type": "object",
+                "properties": {
+                    "summary": {
+                        "type": "string",
+                        "description": "Final message for the user, markdown, 2–5 sentences.",
+                    },
+                    "deliverables": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Workspace paths of the generated documents.",
+                    },
+                    "plan_id": {
+                        "type": "string",
+                        "description": "Sidebar id. Empty = active approved session plan.",
+                    },
+                },
+                "required": ["summary"],
             },
         ),
     ]

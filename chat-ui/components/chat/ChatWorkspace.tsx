@@ -121,13 +121,17 @@ import { PlanPanel } from "@/components/plan/PlanPanel";
 import { TaskChatView } from "@/components/plan/TaskChatView";
 import { cancelPlanExecution, pausePlanExecution, rememberWatchedPlanExecution, resumePlanExecution } from "@/lib/api/plan-execution";
 import { usePlanDockState } from "@/hooks/use-plan-dock-state";
-import { usePlanExecutionProgress } from "@/hooks/use-plan-execution-progress";
+import {
+  usePlanExecutionProgress,
+  type PlanExecutionProgressState,
+} from "@/hooks/use-plan-execution-progress";
 import { usePlanExecutionRehydrate } from "@/hooks/use-plan-execution-rehydrate";
 import {
   allPlanExecutionMessageIds,
   findPlanTask,
   isMessageInPlanTask,
   messageIdsForPlanTask,
+  planTasksFromMessages,
 } from "@/lib/plan-execution-view";
 import { rememberWatchedResearch } from "@/lib/api/research";
 import { researchLog } from "@/lib/research-debug";
@@ -170,6 +174,8 @@ import type { DockTab } from "@/lib/layout/dock-tab";
 import { randomUUID } from "@/lib/uuid";
 
 type PlanPendingChunk = ChatChunk & { type: "orchestration_plan_pending" };
+/** Id prefix of the temporary chat bubble showing the plan's final summary while it streams. */
+const PLAN_SUMMARY_LIVE_ID_PREFIX = "plan-summary-live:";
 type AgentMode = "normal" | "plan" | "ask" | "debug" | "deep_research";
 type LiveArtifactMessage = {
   id: string;
@@ -1761,28 +1767,28 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     },
   });
 
-  const handlePlanFinalSummary = useCallback(
-    (summary: string, _planId: string, runId?: string) => {
-      const text = (summary || "").trim();
-      if (!text) return;
-      const rid = (runId || planExecAdoptRunId || "").trim();
-      if (rid) {
-        if (planFinalSummaryHandledRef.current.has(rid)) return;
-        planFinalSummaryHandledRef.current.add(rid);
-      }
-      const aid = randomUUID();
-      setMessages((m) => [...m, { id: aid, role: "assistant", content: text }]);
-      // Documented exception: plan final summary is not persisted by the standard turn pipeline.
-      void saveAssistantMessage(conversationId, aid, text, undefined, userId, token).catch((err) =>
-        console.error("[aion-chat-ui] save plan summary:", err),
-      );
-      setPlanExecAdoptRunId(null);
-      setPlanExecAdoptPlanId(null);
-      setChatView({ kind: "main" });
-      void refreshThreads();
-    },
-    [conversationId, userId, token, refreshThreads, planExecAdoptRunId],
-  );
+  /**
+   * Stop the stream recovery that follows background plan-execution turns and
+   * release the streaming flag it holds.
+   *
+   * While a plan runs, the recovery effect re-attaches to each background task
+   * turn and keeps `streaming` true. Once the tasks are over it must let go:
+   * otherwise the composer stays busy, history refreshes are skipped (they bail
+   * while streaming) and the chat stays frozen on the last live turn.
+   * No-op when no recovery is active (a user stream is never touched).
+   */
+  const releaseStreamRecovery = useCallback(() => {
+    if (!streamRecoveryRef.current) return;
+    recoveryAbortRef.current?.abort();
+    streamRecoveryRef.current = false;
+    setStreamRecovery(false);
+    setRecoveryAssistantId(null);
+    setActiveMessageId(null);
+    streamingRef.current = false;
+    setStreaming(false);
+    setTurnVisual(null);
+    clearActiveStreamMarker(conversationId);
+  }, [conversationId]);
 
   const handlePlanExecutionAdoptHandled = useCallback(() => {
     setPlanExecAdoptRunId(null);
@@ -1851,11 +1857,90 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     [conversationId, userId, token, transcriptStreaming, streamingConversationIdRef],
   );
 
+  /**
+   * Final plan summary handed over by the plan panel once the run is done.
+   *
+   * `serverMessageId` set: the backend already saved the message with the
+   * deliverable attached — just reload history so it appears with its file
+   * card. Otherwise (older backend / save failed) keep the legacy path: append
+   * locally and save it from the client (documented exception: the summary is
+   * not persisted by the standard turn pipeline).
+   */
+  const handlePlanFinalSummary = useCallback(
+    (summary: string, _planId: string, runId?: string, serverMessageId?: string | null) => {
+      const text = (summary || "").trim();
+      if (!text) return;
+      const rid = (runId || planExecAdoptRunId || "").trim();
+      if (rid) {
+        if (planFinalSummaryHandledRef.current.has(rid)) return;
+        planFinalSummaryHandledRef.current.add(rid);
+      }
+      releaseStreamRecovery();
+      // The live preview bubble is replaced by the saved message.
+      setMessages((m) => m.filter((msg) => !msg.id.startsWith(PLAN_SUMMARY_LIVE_ID_PREFIX)));
+      if (serverMessageId) {
+        void refreshPlanExecutionHistory();
+      } else {
+        const aid = randomUUID();
+        setMessages((m) => [...m, { id: aid, role: "assistant", content: text }]);
+        void saveAssistantMessage(conversationId, aid, text, undefined, userId, token).catch((err) =>
+          console.error("[aion-chat-ui] save plan summary:", err),
+        );
+      }
+      setPlanExecAdoptRunId(null);
+      setPlanExecAdoptPlanId(null);
+      setChatView({ kind: "main" });
+      void refreshThreads();
+    },
+    [
+      conversationId,
+      userId,
+      token,
+      refreshThreads,
+      planExecAdoptRunId,
+      releaseStreamRecovery,
+      refreshPlanExecutionHistory,
+    ],
+  );
+
   const planExecutionProgress = usePlanExecutionProgress(planExecAdoptRunId, userId, token, {
     onTaskDone: () => {
       void refreshPlanExecutionHistory();
     },
   });
+
+  // All tasks are over once the backend starts writing the final summary: no
+  // more background turns will stream, so release the recovery stream and load
+  // the task turns from the DB (the chat was frozen on the last live turn).
+  const planExecPhase = planExecutionProgress?.progress?.phase;
+  const planSummaryWritingRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!planExecAdoptRunId || planExecPhase !== "writing") return;
+    if (planSummaryWritingRef.current === planExecAdoptRunId) return;
+    planSummaryWritingRef.current = planExecAdoptRunId;
+    releaseStreamRecovery();
+    void refreshPlanExecutionHistory();
+  }, [planExecAdoptRunId, planExecPhase, releaseStreamRecovery, refreshPlanExecutionHistory]);
+
+  // Live preview of the final summary while it streams (progress.summary_partial):
+  // one temporary assistant bubble at the end of the chat, upserted on each update
+  // and removed when the saved message arrives (handlePlanFinalSummary).
+  const planSummaryPartial =
+    planExecPhase === "writing" ? planExecutionProgress?.progress?.summary_partial || "" : "";
+  useEffect(() => {
+    if (!planExecAdoptRunId || !planSummaryPartial) return;
+    const liveId = `${PLAN_SUMMARY_LIVE_ID_PREFIX}${planExecAdoptRunId}`;
+    setMessages((prev) => {
+      const idx = prev.findIndex((m) => m.id === liveId);
+      if (idx === -1) {
+        return [...prev, { id: liveId, role: "assistant", content: planSummaryPartial }];
+      }
+      if (prev[idx].content === planSummaryPartial) return prev;
+      const next = prev.slice();
+      next[idx] = { ...prev[idx], content: planSummaryPartial };
+      return next;
+    });
+  }, [planExecAdoptRunId, planSummaryPartial]);
 
   useEffect(() => {
     if (!planExecAdoptRunId || !planExecutionProgress?.tasks?.length) return;
@@ -1869,10 +1954,45 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
     refreshPlanExecutionHistory,
   ]);
 
+  // Task chats must stay reachable after the run ends: the adopted run id (and
+  // so planExecutionProgress) is cleared once the final summary arrives, and
+  // it is absent after a reload. Keep the last live state of the run, scoped
+  // to its conversation, and otherwise rebuild the task list from the history
+  // messages tagged with plan_task_id.
+  const [finishedPlanProgress, setFinishedPlanProgress] = useState<{
+    conversationId: string;
+    state: PlanExecutionProgressState;
+  } | null>(null);
+  useEffect(() => {
+    if (planExecutionProgress?.tasks?.length) {
+      setFinishedPlanProgress({ conversationId, state: planExecutionProgress });
+    }
+  }, [planExecutionProgress, conversationId]);
+  const historyPlanTasks = useMemo(
+    () => (planExecutionProgress ? [] : planTasksFromMessages(messages)),
+    [planExecutionProgress, messages],
+  );
+  const taskViewProgress = useMemo<PlanExecutionProgressState | null>(() => {
+    if (planExecutionProgress) return planExecutionProgress;
+    if (finishedPlanProgress?.conversationId === conversationId) {
+      return { ...finishedPlanProgress.state, status: "done", done: true };
+    }
+    if (!historyPlanTasks.length) return null;
+    return {
+      status: "done",
+      label: "",
+      tasks: historyPlanTasks,
+      activities: [],
+      progress: null,
+      done: true,
+      error: null,
+    };
+  }, [planExecutionProgress, finishedPlanProgress, conversationId, historyPlanTasks]);
+
   const openPlanTaskId = chatView.kind === "task" ? chatView.taskId : null;
   const openPlanTask = useMemo(
-    () => findPlanTask(planExecutionProgress?.tasks, openPlanTaskId),
-    [planExecutionProgress?.tasks, openPlanTaskId],
+    () => findPlanTask(taskViewProgress?.tasks, openPlanTaskId),
+    [taskViewProgress?.tasks, openPlanTaskId],
   );
 
   const openPlanTaskView = useCallback(
@@ -1887,16 +2007,15 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
 
   const mainFeedMessages = useMemo(() => {
     let list = visibleMessages.filter((m) => m.role !== "internal" && !m.metadata?.memorized_message_id);
-    if (planExecAdoptRunId && planExecutionProgress?.tasks?.length) {
-      const planMsgIds = allPlanExecutionMessageIds(planExecutionProgress.tasks);
-      if (planMsgIds.size) {
-        list = list.filter(
-          (m) => !planMsgIds.has(m.id) && !(m.metadata?.plan_task_id || "").trim(),
-        );
-      }
-    }
+    // Plan task turns live in their task chat (TaskChatView), during and after
+    // the run: hide them from the main feed. The plan-closing message has no
+    // plan_task_id, so the final summary + document cards stay in the main chat.
+    const planMsgIds = allPlanExecutionMessageIds(taskViewProgress?.tasks);
+    list = list.filter(
+      (m) => !planMsgIds.has(m.id) && !(m.metadata?.plan_task_id || "").trim(),
+    );
     return list;
-  }, [visibleMessages, planExecAdoptRunId, planExecutionProgress?.tasks]);
+  }, [visibleMessages, taskViewProgress?.tasks]);
 
   const taskViewLiveAssistantId = useMemo(() => {
     if (chatView.kind !== "task" || !openPlanTask || !recoveryAssistantId) return null;
@@ -2211,9 +2330,6 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
         );
 
         await consumeChatStream(stream, (chunk) => {
-
-          console.log("CHUNK RECEIVED", chunk)
-
           if (chunk.type === "turn_started") {
             const uid = String(chunk.user_message_id || uidMsg);
             const asst = String(chunk.assistant_message_id || aid);
@@ -3415,12 +3531,19 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
       if (cancelled || recoveryAc.signal.aborted) return;
       if (streamingRef.current && !streamRecoveryRef.current) return;
 
+      // An adopted plan run keeps recovery armed between task turns, but only
+      // until all tasks are over: once the backend is writing the final summary
+      // (planSummaryWritingRef) no task turn will stream again, and re-arming
+      // here would bring back "thinking…" + the stop button after the plan ended.
+      const planRunStillStreaming = Boolean(
+        planExecAdoptRunId && planSummaryWritingRef.current !== planExecAdoptRunId,
+      );
       // Stale sessionStorage marker after stop/reload — trust Redis stream-status.
-      if (!status.active && marker && !planExecAdoptRunId) {
+      if (!status.active && marker && !planRunStillStreaming) {
         clearActiveStreamMarker(conversationId);
         return;
       }
-      if (status.active || planExecAdoptRunId) {
+      if (status.active || planRunStillStreaming) {
         await runSseRecovery();
       }
     };
@@ -5465,12 +5588,12 @@ export function ChatWorkspace({ conversationId: initialConversationId }: { conve
                       </div>
                     </div>
                   ) : null}
-                  {chatView.kind === "task" && openPlanTask && planExecutionProgress ? (
+                  {chatView.kind === "task" && openPlanTask && taskViewProgress ? (
                     <TaskChatView
                       task={openPlanTask}
-                      tasks={planExecutionProgress.tasks}
+                      tasks={taskViewProgress.tasks}
                       messages={taskViewMessages}
-                      progress={planExecutionProgress}
+                      progress={taskViewProgress}
                       onBack={() => setChatView({ kind: "main" })}
                       onOpenTask={openPlanTaskView}
                       onCancel={handleCancelPlanExecution}

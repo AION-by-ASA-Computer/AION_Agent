@@ -110,3 +110,72 @@ G
     out = plan_to_markdown(plan)
     assert "(profile:" not in out
     assert plan.tasks[0].id == "task_01"
+
+
+def test_build_plan_execution_trigger_long_output_guidance():
+    """Both attempts tell the agent to write long text to file in appended sections."""
+    from src.runtime.plan_execution import build_plan_execution_trigger
+
+    for attempt in (0, 1):
+        t = build_plan_execution_trigger("task_06", attempt=attempt)
+        assert "sandbox_append_workspace_file" in t
+        assert "do not draft it in your reasoning" in t
+    assert "Reuse the files already written" in build_plan_execution_trigger(
+        "task_06", attempt=1
+    )
+
+
+# --- Deliverable inference (template placeholder, format ranking, existence) ---
+
+_TEMPLATE_PLAN = """# Execution Plan
+
+## Goal
+Scrivere un articolo in formato Word (.docx).
+
+## Deliverable
+_Percorso file unico del documento finale, es. `workspace/progetto.md` — tutte le task di scrittura usano `sandbox_edit_workspace_file` dopo la prima._
+
+## Tasks
+- [x] `task_01` **Ricerca** (deps: none)
+  - Description: salva in workspace/articolo_ai_data.json.
+- [x] `task_02` **Bozza** (deps: none)
+  - Description: bozza in workspace/articolo_ai_bozza.md.
+- [x] `task_03` **Word** (deps: none)
+  - Description: genera workspace/articolo_AI.docx dalla bozza.
+"""
+
+
+def test_infer_deliverable_ignores_template_placeholder():
+    """The template's example path is not the deliverable; the .docx mentioned in tasks is."""
+    assert infer_deliverable_path(_TEMPLATE_PLAN) == "workspace/articolo_AI.docx"
+
+
+def test_infer_deliverable_prefers_final_formats_and_last_mention():
+    """docx/pdf beat md; among equal formats the last mention wins; trailing dots ignored."""
+    md = "## Tasks\n- a: workspace/a.md.\n- b: workspace/b.md.\n- c: workspace/report.pdf\n"
+    assert infer_deliverable_path(md) == "workspace/report.pdf"
+    md2 = "## Tasks\n- a: workspace/a.md.\n- b: workspace/b.md.\n"
+    assert infer_deliverable_path(md2) == "workspace/b.md"
+
+
+def test_resolve_existing_deliverable(tmp_path, monkeypatch):
+    """Keep the inferred file when it exists, else pick the best real document in workspace/."""
+    import src.session_workspace as sw
+    from src.runtime.plan_execution import resolve_existing_deliverable
+
+    root = tmp_path / "sess"
+    (root / "workspace" / ".versions").mkdir(parents=True)
+    (root / "workspace" / "notes.md").write_text("x", encoding="utf-8")
+    (root / "workspace" / "articolo_AI.docx").write_bytes(b"docx")
+    (root / "workspace" / ".versions" / "old.docx").write_bytes(b"old")
+    (root / "workspace" / "build_doc.py").write_text("x", encoding="utf-8")
+    monkeypatch.setattr(sw, "normalize_session_id", lambda s: s)
+    monkeypatch.setattr(sw, "session_root", lambda _s: root)
+
+    assert (
+        resolve_existing_deliverable("s1", "workspace/notes.md") == "workspace/notes.md"
+    )
+    assert (
+        resolve_existing_deliverable("s1", "workspace/progetto.md")
+        == "workspace/articolo_AI.docx"
+    )

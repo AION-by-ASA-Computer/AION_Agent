@@ -8,6 +8,7 @@ import {
   resumePlanExecution,
   startPlanExecution,
 } from "@/lib/api/plan-execution";
+import { restartPlanExecutionSubscription } from "@/hooks/use-plan-execution-progress";
 import {
   Target,
   BookOpen,
@@ -420,6 +421,9 @@ export default function TaskPlanManagerV4(props) {
   const [executionLabel, setExecutionLabel] = useState("");
   const [executionActivities, setExecutionActivities] = useState([]);
   const [executionStatus, setExecutionStatus] = useState("");
+  // Bumped after an in-place resume so the local SSE subscription below re-opens
+  // (the run_id does not change on resume, and its old stream already ended).
+  const [streamEpoch, setStreamEpoch] = useState(0);
   const [executionDeliverablePath, setExecutionDeliverablePath] = useState("");
   const [expandedTasks, setExpandedTasks] = useState({});
 
@@ -454,7 +458,14 @@ export default function TaskPlanManagerV4(props) {
         const result = await fetchPlanExecutionResult(rid, userIdProp, authToken);
         if (result?.deliverable_path) setExecutionDeliverablePath(result.deliverable_path);
         if (result?.summary && typeof onFinalSummaryRef.current === "function") {
-          onFinalSummaryRef.current(result.summary, result.plan_id || planId, rid);
+          // summary_message_id: the backend already saved the message (with the
+          // deliverable attached), so the chat only has to reload history.
+          onFinalSummaryRef.current(
+            result.summary,
+            result.plan_id || planId,
+            rid,
+            result.summary_message_id || null,
+          );
         }
         if (typeof onExecutionAdoptHandledRef.current === "function") {
           onExecutionAdoptHandledRef.current();
@@ -561,7 +572,7 @@ export default function TaskPlanManagerV4(props) {
     );
 
     return () => unsub();
-  }, [executionProgress, executionRunId, userIdProp, authToken, planId, emitExecutionFinalOnce]);
+  }, [executionProgress, executionRunId, userIdProp, authToken, planId, emitExecutionFinalOnce, streamEpoch]);
 
   useEffect(() => {
     if (!executionProgress?.done || !executionRunId || !userIdProp) return undefined;
@@ -942,6 +953,17 @@ export default function TaskPlanManagerV4(props) {
     executionStatus !== "running" &&
     pendingTasks.length > 0;
 
+  // Status shown in the overview banner. Once every task is checked the plan
+  // is complete even when this panel has no run status (remounted after the
+  // run finished, or the run id was released after the final summary): without
+  // this the banner fell back to "Piano in pausa (4/4 completate)".
+  const allTasksCompleted =
+    parsedTasks.length > 0 && completedTasks.length === parsedTasks.length;
+  const bannerStatus =
+    allTasksCompleted && executionStatus !== "running" && executionStatus !== "error"
+      ? "done"
+      : executionStatus;
+
   const isPartialReview =
     !isExecutingPhase &&
     completedTasks.length > 0 &&
@@ -958,6 +980,11 @@ export default function TaskPlanManagerV4(props) {
           setIsLocked(true);
           setExecutionStatus("running");
           setStatusMsg("Esecuzione ripresa con successo.");
+          // Same run_id after resume: re-open the progress streams (shared hook
+          // and local fallback), otherwise the next pause/completion is never
+          // received and the task looks "in progress" forever.
+          restartPlanExecutionSubscription(executionRunId);
+          setStreamEpoch((n) => n + 1);
           setIsSubmitting(false);
           return;
         }
@@ -999,7 +1026,9 @@ export default function TaskPlanManagerV4(props) {
     if (!executionStartTimeRef.current) {
       executionStartTimeRef.current = Date.now();
     }
-    if (executionStatus === "done" || executionStatus === "error") {
+    // Any non-running terminal/stop state freezes the elapsed-time counter
+    // ("paused"/"interrupted" included: the backend is no longer working).
+    if (["done", "error", "paused", "interrupted", "cancelled"].includes(executionStatus)) {
       return;
     }
     const timer = setInterval(() => {
@@ -1012,6 +1041,9 @@ export default function TaskPlanManagerV4(props) {
 
   useEffect(() => {
     if (!isExecutingPhase) return;
+    // Per-task timers must stop too when the run is no longer running (e.g. a
+    // task paused after its retries), otherwise the card keeps counting up.
+    if (["done", "error", "paused", "interrupted", "cancelled"].includes(executionStatus)) return;
 
     parsedTasks.forEach((p) => {
       const { meta, block } = p;
@@ -1052,7 +1084,7 @@ export default function TaskPlanManagerV4(props) {
     }, 1000);
 
     return () => clearInterval(taskInterval);
-  }, [isExecutingPhase, parsedTasks, hlTask, currentTask]);
+  }, [isExecutingPhase, parsedTasks, hlTask, currentTask, executionStatus]);
 
   return (
     <div className="flex flex-col h-full max-h-full bg-card/60 text-card-foreground overflow-hidden select-text">
@@ -1137,11 +1169,11 @@ export default function TaskPlanManagerV4(props) {
             <div className="rounded-2xl border border-orange-500/25 bg-orange-500/5 dark:bg-orange-500/10 p-3.5 backdrop-blur-md">
               <div className="flex items-start justify-between gap-2">
                 <div className="flex items-center gap-2">
-                  {executionStatus === "running" ? (
+                  {bannerStatus === "running" ? (
                     <Loader2 className="size-4 animate-spin text-orange-500 shrink-0" />
-                  ) : executionStatus === "done" ? (
+                  ) : bannerStatus === "done" ? (
                     <CheckCircle2 className="size-4 text-emerald-500 shrink-0" />
-                  ) : executionStatus === "error" || userDecision === "rejected" ? (
+                  ) : bannerStatus === "error" || userDecision === "rejected" ? (
                     <X className="size-4 text-destructive shrink-0" />
                   ) : (isInterruptedOrPaused || isPartialReview || completedTasks.length > 0) ? (
                     <PauseCircle className="size-4 text-amber-500 shrink-0" />
@@ -1152,9 +1184,9 @@ export default function TaskPlanManagerV4(props) {
                     {userDecision === "rejected"
                       ? "Piano rifiutato dall'utente"
                       : executionLabel ||
-                        (executionStatus === "done"
+                        (bannerStatus === "done"
                           ? "Piano completato con successo"
-                          : executionStatus === "running"
+                          : bannerStatus === "running"
                           ? "Esecuzione piano in corso..."
                           : completedTasks.length > 0
                           ? `Piano in pausa (${completedTasks.length}/${parsedTasks.length} completate)`
@@ -1166,9 +1198,9 @@ export default function TaskPlanManagerV4(props) {
                     "text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full shrink-0",
                     userDecision === "rejected"
                       ? "bg-destructive/15 text-destructive border border-destructive/30"
-                      : executionStatus === "done"
+                      : bannerStatus === "done"
                       ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400"
-                      : executionStatus === "running"
+                      : bannerStatus === "running"
                       ? "bg-orange-500/20 text-orange-600 dark:text-orange-400 animate-pulse"
                       : (isInterruptedOrPaused || isPartialReview || completedTasks.length > 0)
                       ? "bg-amber-500/20 text-amber-600 dark:text-amber-400"
@@ -1177,11 +1209,11 @@ export default function TaskPlanManagerV4(props) {
                 >
                   {userDecision === "rejected"
                     ? "Rifiutato"
-                    : executionStatus === "running"
+                    : bannerStatus === "running"
                     ? "In corso"
-                    : executionStatus === "done"
+                    : bannerStatus === "done"
                     ? "Completato"
-                    : executionStatus === "error"
+                    : bannerStatus === "error"
                     ? "Errore"
                     : (isInterruptedOrPaused || isPartialReview || completedTasks.length > 0)
                     ? "In pausa"
