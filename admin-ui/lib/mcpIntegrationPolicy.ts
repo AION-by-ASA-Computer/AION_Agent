@@ -11,6 +11,8 @@ export type CredentialSchemaField = {
   description?: string;
   env_placeholder?: string;
   registry_env_key?: string;
+  /** Catalog flag: value never readable back by users; must survive Hub saves. */
+  write_only?: boolean;
 };
 
 export type CredentialSchemaLoose = Array<{
@@ -20,6 +22,7 @@ export type CredentialSchemaLoose = Array<{
   type?: string;
   required?: boolean;
   description?: string;
+  write_only?: boolean;
 }>;
 
 function parseSchemaFieldType(raw?: string): CredentialSchemaField["type"] {
@@ -45,6 +48,7 @@ export function normalizeCredentialSchema(
       type: parseSchemaFieldType(f.type),
       required: Boolean(f.required),
       ...(f.description ? { description: f.description } : {}),
+      ...(f.write_only ? { write_only: true } : {}),
     });
   }
   return out;

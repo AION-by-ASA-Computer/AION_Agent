@@ -95,6 +95,7 @@ const sidebars: SidebarsConfig = {
         'mcp/user-isolation-and-credentials',
         'mcp/connector-catalog',
         'mcp/microsoft-365',
+        'mcp/smb-files',
         'mcp/hub-wizard',
         'mcp/orchestration',
       ],

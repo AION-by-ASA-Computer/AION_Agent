@@ -580,6 +580,7 @@
     "field_saved_encrypted": "Saved & secured value",
     "field_saved_placeholder": "•••••••••••• (secured value)",
     "modify_field_hint": "Leave unchanged to keep saved value, or type to replace it.",
+    "write_only_field_hint": "For security the saved password cannot be displayed: type to replace it.",
     "badge_connected": "connected",
     "badge_disabled": "disabled",
     "badge_pending_short": "needs setup",
