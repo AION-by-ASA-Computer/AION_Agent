@@ -173,3 +173,30 @@ def test_clickup_catalog_per_user_env_e2e() -> None:
     assert env["CLICKUP_API_KEY"] == "${AION_USER_CLICKUP__CLICKUP_API_KEY}"
     mode = infer_credential_mode({"env": env}, clickup)
     assert mode == "per_user"
+
+
+def test_credential_schema_from_connector_write_only() -> None:
+    """write_only is propagated, forces type=password, and is omitted when unset."""
+    schema = credential_schema_from_connector(
+        {
+            "credential_fields": [
+                {"key": "A_USER", "label": "u", "secret": False},
+                {"key": "A_PWD", "label": "p", "secret": False, "write_only": True},
+            ]
+        }
+    )
+    by_key = {f["key"]: f for f in schema}
+    assert "write_only" not in by_key["A_USER"]
+    assert by_key["A_PWD"]["write_only"] is True
+    assert by_key["A_PWD"]["type"] == "password"
+
+
+def test_merge_schema_keeps_write_only_from_catalog() -> None:
+    """A DB row without the flag acquires write_only when merged with the catalog."""
+    merged = merge_schema_sources(
+        catalog_schema=[{"key": "A_PWD", "label": "p", "type": "password"}],
+        discovered_schema=[
+            {"key": "A_PWD", "label": "p", "type": "password", "write_only": True}
+        ],
+    )
+    assert merged[0]["write_only"] is True
