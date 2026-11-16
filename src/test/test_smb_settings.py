@@ -145,6 +145,7 @@ async def test_servers_feed_mcp_config(monkeypatch, tmp_path):
         "name": "Archivio",
         "read_only": True,
         "label": "",
+        "folder": "",
     }
 
     cfg = await settings_store.get_smb_config("default")
@@ -198,10 +199,31 @@ async def test_server_validation(monkeypatch, tmp_path):
         ({"shares": [{"name": ".."}]}, "invalid_share_name"),
         ({"shares": [{"name": "Docs\\sub"}]}, "invalid_share_name"),
         ({"shares": [{"name": "Do*cs"}]}, "invalid_share_name"),
+        ({"shares": [{"name": "IPC$"}]}, "invalid_share_name"),
+        (
+            {"shares": [{"name": "home$", "folder": "../{user}"}]},
+            "invalid_share_folder",
+        ),
+        ({"shares": [{"name": "home$", "folder": "{utente}"}]}, "invalid_share_folder"),
         ({"shares": [{"name": "Docs"}, {"name": "DOCS"}]}, "duplicate_share"),
         ({"shares": []}, "shares_required"),
     ):
         await _expect(code, create_server(_server(**kw), auth=_auth()), 400)
+
+
+@pytest.mark.anyio
+async def test_hidden_share_with_personal_folder_saved(monkeypatch, tmp_path):
+    """Hidden non-system shares (home$) are allowed and keep their normalised folder template."""
+    await _setup(monkeypatch, tmp_path)
+    from src.api.admin_smb import create_server
+
+    res = await create_server(
+        _server(shares=[{"name": "home$", "folder": "\\Utenti\\{user}\\"}]),
+        auth=_auth(),
+    )
+    srv = next(x for x in res["servers"] if x["id"] == res["server_id"])
+    share = srv["shares"][0]
+    assert share["name"] == "home$" and share["folder"] == "Utenti/{user}"
 
 
 @pytest.mark.anyio
@@ -224,7 +246,9 @@ async def test_alias_and_host_are_unique_per_tenant(monkeypatch, tmp_path):
     )
     await _expect(
         "duplicate_host",
-        update_server(second, _server(alias="fs02", host="fs01.corp.local"), auth=_auth()),
+        update_server(
+            second, _server(alias="fs02", host="fs01.corp.local"), auth=_auth()
+        ),
         409,
     )
     # Saving a server with its own alias/host is not a conflict.
@@ -265,7 +289,9 @@ async def test_enabled_connector_needs_a_default_set_server(monkeypatch, tmp_pat
     await put_smb(_global(), auth=_auth())
 
     # The only DEFAULT server cannot be removed, disabled or moved to another set.
-    await _expect("default_credential_set_required", delete_server(main, auth=_auth()), 409)
+    await _expect(
+        "default_credential_set_required", delete_server(main, auth=_auth()), 409
+    )
     await _expect(
         "default_credential_set_required",
         update_server(main, _server(enabled=False), auth=_auth()),
@@ -292,7 +318,9 @@ async def test_unknown_server_ids(monkeypatch, tmp_path):
     await _setup(monkeypatch, tmp_path)
     from src.api.admin_smb import SmbTestBody, delete_server, test_server, update_server
 
-    await _expect("server_not_found", update_server("nope", _server(), auth=_auth()), 404)
+    await _expect(
+        "server_not_found", update_server("nope", _server(), auth=_auth()), 404
+    )
     await _expect("server_not_found", delete_server("nope", auth=_auth()), 404)
     await _expect(
         "server_not_found", test_server("nope", SmbTestBody(), auth=_auth()), 404
@@ -341,7 +369,9 @@ async def test_connection_test_endpoint(monkeypatch, tmp_path, caplog):
 
     # Incomplete server (no share yet): nothing to test.
     draft = await _add(alias="fs09", host="fs09", enabled=False, shares=[])
-    await _expect("smb_not_configured", test_server(draft, SmbTestBody(), auth=_auth()), 409)
+    await _expect(
+        "smb_not_configured", test_server(draft, SmbTestBody(), auth=_auth()), 409
+    )
 
     # Works on a disabled (but complete) server: the admin tests before enabling.
     other = await _add(alias="fs02", host="fs02.estero.local", credential_set="ESTERO")

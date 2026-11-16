@@ -1280,9 +1280,7 @@ class SmbSettings(Base):
     # Disabled by default: the connector stays off until the admin opts in.
     enabled: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     max_read_mb: Mapped[int] = mapped_column(Integer, default=25, server_default="25")
-    max_write_mb: Mapped[int] = mapped_column(
-        Integer, default=25, server_default="25"
-    )
+    max_write_mb: Mapped[int] = mapped_column(Integer, default=25, server_default="25")
     # How long a local AD-lockout block lasts (see smb_files/auth_guard.py).
     lockout_minutes: Mapped[int] = mapped_column(
         Integer, default=30, server_default="30"

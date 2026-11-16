@@ -52,17 +52,22 @@ def credential_keys(credential_set: str) -> tuple[str, str]:
 def normalize_username(raw: str, default_domain: str = "") -> str:
     """Accept ``DOM\\user``, ``user@dom`` or bare ``user`` (+ default domain).
 
-    ``user@dom`` is rewritten to ``DOM\\user`` so NTLM always receives an
-    explicit domain; a bare name falls back to the server's default domain.
+    ``user@dom`` (a UPN, e.g. ``mario.rossi@azienda.com`` or a Microsoft
+    account e-mail on a standalone PC) is passed through unchanged; a bare name
+    falls back to the server's default domain.
     """
     name = (raw or "").strip()
     if "\\" in name:
         dom, _, user = name.partition("\\")
         return f"{dom.strip()}\\{user.strip()}"
     if "@" in name:
+        # Keep the UPN as-is: pyspnego sends it with an empty NTLM domain and
+        # Windows resolves it (MS-NLMP). Rewriting it to ``DOM\\user`` was wrong
+        # whenever the UPN suffix differs from the NetBIOS domain (azienda.com
+        # vs CORP) or the UPN prefix differs from sAMAccountName (mario.rossi
+        # vs mrossi), and each such failure counts towards AD lockout.
         user, _, dom = name.rpartition("@")
-        # UPN suffix is a DNS name; NTLM wants the NetBIOS-style first label.
-        return f"{dom.split('.')[0].upper()}\\{user.strip()}"
+        return f"{user.strip()}@{dom.strip()}"
     return f"{default_domain.strip()}\\{name}" if default_domain.strip() else name
 
 

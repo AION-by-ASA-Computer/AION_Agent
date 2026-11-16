@@ -26,10 +26,21 @@ mostra la persona reale, non un account di servizio condiviso.
 - **Server e share decisi dall'admin.** L'utente non sceglie a cosa connettersi: l'agente
   raggiunge solo i server configurati e solo le share in allowlist di ciascuno. Questo limita il danno
   di una prompt injection (un file che dice «leggi `\\altroserver\...`») e impedisce
-  l'accesso alle share amministrative.
+  l'accesso alle share di sistema (`C$`, `ADMIN$`, `IPC$`). L'elenco è un **tetto
+  massimo**, non un'assegnazione: l'admin elenca tutte le share che AION può usare e ogni
+  utente lavora solo su quelle che Windows gli lascia aprire.
 - **Tutti i server a chi ha il connettore, filtrati dalle ACL.** Non esiste un'allowlist
   AION per utente o gruppo: chi ha `smb_files` vede tutti i server abilitati, e il file
   server decide cosa può leggere o scrivere. Una sola fonte di verità per i permessi (AD).
+  `smb_list_shares` apre ogni share con le credenziali dell'utente e **nasconde quelle
+  negate** (`omitted` ne riporta il numero): utenti diversi vedono share diverse, anche
+  più di una, senza configurazioni per utente in AION.
+- **Cartelle personali.** Una share può avere una **cartella personale** (es. `{user}` o
+  `Utenti/{user}`): `{user}` è sostituito col nome account Windows dell'utente (la parte
+  dopo `DOMINIO\` o prima di `@`), il percorso proposto all'agente è già la sua cartella e
+  ogni percorso fuori da essa è rifiutato (`outside_personal_folder`), anche se un'ACL
+  sbagliata lo permetterebbe. Le share nascoste non di sistema (`home$`, `utenti$`) sono
+  ammesse proprio per questo uso.
 - **Nessuna cancellazione.** SMB non ha cestino: un errore dell'agente sarebbe
   irreversibile. Per questo il connettore espone solo lettura, creazione, aggiornamento
   esplicito e rinomina.
@@ -177,13 +188,15 @@ file server, con **Aggiungi server**.
 | Host / Porta | Nome DNS o IP del file server (solo host, niente `\\` o `/`), unico nel tenant, e porta SMB (default 445) |
 | Dominio predefinito | Usato quando l'utente scrive solo `mario.rossi`; con `utente@dominio` o `DOMINIO\utente` viene ignorato |
 | Set di credenziali | `DEFAULT` oppure un nome (es. `ESTERO`) per server di un altro dominio; stesso dominio → stesso set |
-| Share | Allowlist di nomi share, ciascuna con etichetta e interruttore **sola lettura** |
+| Share | Allowlist di nomi share, ciascuna con etichetta, **cartella personale** facoltativa (`{user}`) e interruttore **sola lettura** |
 | Protocollo di autenticazione | `ntlm` (default) o `negotiate` (predisposizione Kerberos, vedi sotto) |
 | Richiedi cifratura SMB3 | Rifiuta server che non cifrano il traffico |
 | Abilitato | Un server disabilitato resta in bozza (anche senza share) e l'agente non lo vede |
 
-Il salvataggio valida i dati: rifiuta share amministrative (`C$`, `ADMIN$`, `IPC$`, qualunque
-nome che finisce con `$`), nomi con sotto-percorsi (l'allowlist è per share, non per cartella),
+Il salvataggio valida i dati: rifiuta share di sistema (`C$`…`Z$`, `ADMIN$`, `IPC$`, `PRINT$`,
+`FAX$`; le altre share nascoste come `home$` sono ammesse), nomi con sotto-percorsi (la
+sottocartella per utente va nel campo cartella personale), cartelle personali con `..`,
+caratteri non validi o segnaposto diversi da `{user}` (`invalid_share_folder`),
 share duplicate (i nomi share non distinguono maiuscole), alias o host già usati da un altro
 server (409) e un server abilitato senza share. Con il connettore abilitato serve almeno un
 server abilitato con share **e** con set `DEFAULT`: le modifiche che violerebbero la regola
@@ -218,8 +231,11 @@ e aggiungerlo a `mcp_servers:` dei profili che devono usarlo (es. `generic_assis
 
 In chat-ui → **Le mie integrazioni → File server Windows (SMB)** l'utente inserisce:
 
-- **Utente Windows**: `DOMINIO\mario.rossi`, `mario.rossi@azienda.local` oppure solo
-  `mario.rossi` se l'admin ha impostato il dominio predefinito;
+- **Utente Windows**: `DOMINIO\mario.rossi`, `mario.rossi@azienda.com` oppure solo
+  `mario.rossi` se l'admin ha impostato il dominio predefinito. La forma con `@` (UPN,
+  l'«email» aziendale con cui si entra in Windows) viene passata così com'è al file
+  server, che la risolve da sé: non serve conoscere il nome breve del dominio. Su un PC
+  fuori dominio vale anche l'email di un account Microsoft, con la sua password (non il PIN);
 - **Password Windows**: campo **write-only**. Dopo il salvataggio compare solo `****` e
   non esiste modo di rileggerla (nemmeno con l'icona «occhio», che per questi campi è
   nascosta).
@@ -310,7 +326,8 @@ presentarsi al server come tentativo fallito.
 | Rischio | Contromisura |
 |---------|--------------|
 | Lettura/scrittura oltre i permessi dell'utente | Credenziali per utente: il file server applica le ACL NTFS |
-| Accesso a dischi o share di sistema | Allowlist per share; nomi `*$` rifiutati sia dall'admin-ui sia a runtime |
+| Accesso a dischi o share di sistema | Allowlist per share; share di sistema (`C$`, `ADMIN$`, `IPC$`…) rifiutate sia dall'admin-ui sia a runtime |
+| Accesso alla cartella personale di un collega | Con la cartella personale `{user}` ogni percorso fuori dalla propria cartella è rifiutato prima di contattare il server |
 | Path traversal (`..`, segmenti con punto/spazio finale, caratteri non validi) | `paths.resolve_path`: validazione **prima** di ogni chiamata di rete |
 | Server diverso da quelli configurati (UNC arbitrario, alias sconosciuto) | Rifiutato con `server_not_allowed` |
 | Perdita irreversibile di dati | Nessun tool di cancellazione; niente overwrite senza flag esplicito; niente spostamenti tra share o server |
@@ -340,6 +357,7 @@ presentarsi al server come tentativo fallito.
 | `password_expired` | Password scaduta o da cambiare | Cambiarla in Windows, poi aggiornarla in chat-ui |
 | `access_denied` | ACL NTFS o permessi di share | Verificare i diritti dell'utente sul file server |
 | `share_not_allowed` | Share fuori allowlist di quel server | L'admin la aggiunge nella scheda del server |
+| `outside_personal_folder` | Percorso fuori dalla cartella personale dell'utente su una share con `{user}` | Usare il `path` restituito da `smb_list_shares` |
 | `server_not_allowed` | Alias o host non configurati (o percorso senza alias, es. `Documenti/...`) | Usare `alias/Share/...` (vedi `smb_list_shares`) o aggiungere il server |
 | `unreachable` / `timeout` | Rete, DNS o firewall (TCP 445) | **Testa connessione** dal backend; controllare `dns:` e firewall |
 | `not_configured` | Connettore disabilitato o nessun server abilitato con share | Completare e salvare la configurazione admin |
@@ -347,7 +365,7 @@ presentarsi al server come tentativo fallito.
 ## Fuori scope (roadmap)
 
 Autenticazione Kerberos, cancellazione file, allowlist dei server per utente o gruppo
-(oggi decide solo l'ACL NTFS), enumerazione automatica delle share, badge «credenziali non valide» in chat-ui, namespace DFS.
+(oggi decide solo l'ACL NTFS), modalità «tutte le share del server» con enumerazione automatica, badge «credenziali non valide» in chat-ui, namespace DFS.
 
 ## Test
 

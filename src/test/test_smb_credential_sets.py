@@ -32,7 +32,12 @@ REGISTRY_ENV = {
     "SMB_EXTRA_CREDENTIALS": WILDCARD,
 }
 _SCHEMA = [
-    {"key": "SMB_USERNAME", "label": "Utente Windows", "type": "text", "required": True},
+    {
+        "key": "SMB_USERNAME",
+        "label": "Utente Windows",
+        "type": "text",
+        "required": True,
+    },
     {
         "key": "SMB_PASSWORD",
         "label": "Password Windows",
@@ -45,10 +50,16 @@ CFG = SmbConfig(
     servers=(
         SmbServer(alias="fs01", host="fs01", shares=(SmbShare("Docs"),)),
         SmbServer(
-            alias="fs02", host="fs02", credential_set="ESTERO", shares=(SmbShare("Docs"),)
+            alias="fs02",
+            host="fs02",
+            credential_set="ESTERO",
+            shares=(SmbShare("Docs"),),
         ),
         SmbServer(
-            alias="fs03", host="fs03", credential_set="ESTERO", shares=(SmbShare("Docs"),)
+            alias="fs03",
+            host="fs03",
+            credential_set="ESTERO",
+            shares=(SmbShare("Docs"),),
         ),
     )
 )
@@ -157,7 +168,10 @@ async def test_probe_gets_a_non_json_mock(monkeypatch, tmp_path):
 
     await set_credential("admin-probe", "smb_files", "SMB_PASSWORD__ESTERO", SECRET)
     env = await resolve_mcp_env_for_user(
-        REGISTRY_ENV, user_id="admin-probe", tenant_id="default", server_slug="smb_files"
+        REGISTRY_ENV,
+        user_id="admin-probe",
+        tenant_id="default",
+        server_slug="smb_files",
     )
     extra = env["SMB_EXTRA_CREDENTIALS"]
     assert extra and SECRET not in extra
@@ -202,7 +216,12 @@ def test_discovery_ignores_wildcard_carrier(tmp_path, monkeypatch):
 
 def test_key_format_and_write_only_rules():
     """smb_files accepts only DEFAULT/per-set pairs; every SMB password is write-only."""
-    for key in ("SMB_USERNAME", "SMB_PASSWORD", "SMB_USERNAME__ESTERO", "SMB_PASSWORD__X1"):
+    for key in (
+        "SMB_USERNAME",
+        "SMB_PASSWORD",
+        "SMB_USERNAME__ESTERO",
+        "SMB_PASSWORD__X1",
+    ):
         assert dyn.credential_key_allowed("smb_files", key)
         assert dyn.credential_key_allowed("smb-files", key)
     for key in (
@@ -247,13 +266,17 @@ async def test_form_gets_one_optional_pair_per_extra_set(monkeypatch):
 async def test_form_unchanged_without_config_or_on_error(monkeypatch):
     """No admin config, a provider error or another connector: static schema as is."""
     _use_config(monkeypatch, None)
-    assert await dyn.apply_dynamic_credential_fields(_SCHEMA, "smb_files", "t") == _SCHEMA
+    assert (
+        await dyn.apply_dynamic_credential_fields(_SCHEMA, "smb_files", "t") == _SCHEMA
+    )
 
     async def _boom(_tenant):
         raise RuntimeError("db down")
 
     monkeypatch.setattr("src.tools.smb_files.settings_store.get_smb_config", _boom)
-    assert await dyn.apply_dynamic_credential_fields(_SCHEMA, "smb_files", "t") == _SCHEMA
+    assert (
+        await dyn.apply_dynamic_credential_fields(_SCHEMA, "smb_files", "t") == _SCHEMA
+    )
     assert await dyn.apply_dynamic_credential_fields(_SCHEMA, "mssql", "t") is _SCHEMA
 
 
@@ -281,10 +304,14 @@ async def test_extra_set_password_is_write_only(monkeypatch, tmp_path):
 
     await _save({"SMB_USERNAME__ESTERO": "m.rossi", "SMB_PASSWORD__ESTERO": SECRET})
     with pytest.raises(HTTPException) as exc:
-        await get_user_credential_value("smb_files", "SMB_PASSWORD__ESTERO", auth=_auth())
+        await get_user_credential_value(
+            "smb_files", "SMB_PASSWORD__ESTERO", auth=_auth()
+        )
     assert exc.value.status_code == 403
     assert exc.value.detail == "secret_write_only"
 
-    res = await get_user_credential_value("smb_files", "SMB_USERNAME__ESTERO", auth=_auth())
+    res = await get_user_credential_value(
+        "smb_files", "SMB_USERNAME__ESTERO", auth=_auth()
+    )
     assert SECRET not in json.dumps(res)
     assert "m.rossi" in json.dumps(res)

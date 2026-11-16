@@ -22,7 +22,8 @@ import { ChoiceList, Field, FieldGrid, ProbeBar, SecretInput, Switch, TextInput 
 import { K, type SectionCtx } from "./types";
 
 export type AuthProtocol = "ntlm" | "negotiate";
-export type Share = { name: string; read_only: boolean; label: string };
+/** `folder` (optional, e.g. "{user}") confines each user to their own sub-folder of the share. */
+export type Share = { name: string; read_only: boolean; label: string; folder: string };
 
 /** A saved server as returned by `GET /admin/smb` (`servers[]`). */
 export type SmbServer = {
@@ -108,16 +109,16 @@ const toDraft = (s: SmbServer | null): Draft =>
         port: String(s.port || 445),
         default_domain: s.default_domain,
         credential_set: s.credential_set || DEFAULT_SET,
-        shares: s.shares.map(withKey),
+        shares: s.shares.map((sh) => withKey({ ...sh, folder: sh.folder ?? "" })),
         auth_protocol: s.auth_protocol,
         require_encryption: s.require_encryption,
         enabled: s.enabled,
       }
-    : { ...EMPTY, shares: [withKey({ name: "", read_only: false, label: "" })] };
+    : { ...EMPTY, shares: [withKey({ name: "", read_only: false, label: "", folder: "" })] };
 
 /** Draft without the React keys, for the "unsaved changes" comparison. */
 const comparable = (d: Draft) =>
-  JSON.stringify({ ...d, shares: d.shares.map(({ name, label, read_only }) => ({ name, label, read_only })) });
+  JSON.stringify({ ...d, shares: d.shares.map(({ name, label, read_only, folder }) => ({ name, label, read_only, folder })) });
 
 /** Error codes from /admin/smb (and the probe) map to localized messages; unknown codes fall back. */
 export function errorText(t: SectionCtx["t"], code: string | undefined | null, fallback: string) {
@@ -172,7 +173,7 @@ export function SmbServerCard({
   const patch = (p: Partial<Draft>) => setDraft((d) => ({ ...d, ...p }));
   const patchShare = (key: number, p: Partial<Share>) =>
     setDraft((d) => ({ ...d, shares: d.shares.map((s) => (s.key === key ? { ...s, ...p } : s)) }));
-  const addShare = () => setDraft((d) => ({ ...d, shares: [...d.shares, withKey({ name: "", read_only: false, label: "" })] }));
+  const addShare = () => setDraft((d) => ({ ...d, shares: [...d.shares, withKey({ name: "", read_only: false, label: "", folder: "" })] }));
   const removeShare = (key: number) => setDraft((d) => ({ ...d, shares: d.shares.filter((s) => s.key !== key) }));
 
   /** Reads the error code of a failed call and shows it. */
@@ -186,7 +187,7 @@ export function SmbServerCard({
     const credentialSet = draft.credential_set.trim().toUpperCase() || DEFAULT_SET;
     const port = intIn(draft.port, 1, 65535);
     const shares = draft.shares
-      .map(({ name, label, read_only }) => ({ name: name.trim(), label: label.trim(), read_only }))
+      .map(({ name, label, read_only, folder }) => ({ name: name.trim(), label: label.trim(), read_only, folder: folder.trim() }))
       .filter((s) => s.name || s.label);
     if (!ALIAS_RE.test(alias)) return notify(t(`${m}.errors.invalid_alias`), "error");
     if (!draft.host.trim()) return notify(t(`${m}.v_host`), "error");
@@ -356,12 +357,16 @@ export function SmbServerCard({
             ) : (
               <ul className="divide-y divide-border/40">
                 {draft.shares.map((s) => (
-                  <li key={s.key} className="grid items-end gap-x-4 gap-y-3 px-5 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
+                  <li key={s.key} className="grid items-end gap-x-4 gap-y-3 px-5 py-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto_auto]">
                     <Field label={t(`${m}.share_name`)}>
                       <TextInput value={s.name} onChange={(v) => patchShare(s.key, { name: v })} placeholder="Documenti" mono />
                     </Field>
                     <Field label={t(`${m}.share_label`)}>
                       <TextInput value={s.label} onChange={(v) => patchShare(s.key, { label: v })} placeholder={t(`${m}.share_label_ph`)} />
+                    </Field>
+                    {/* Personal folder: "{user}" is replaced with each user's Windows account name. */}
+                    <Field label={t(`${m}.share_folder`)}>
+                      <TextInput value={s.folder} onChange={(v) => patchShare(s.key, { folder: v })} placeholder={t(`${m}.share_folder_ph`)} mono />
                     </Field>
                     <div className="flex h-10 items-center gap-2.5">
                       <Switch checked={s.read_only} onChange={(v) => patchShare(s.key, { read_only: v })} label={t(`${m}.share_read_only`)} />

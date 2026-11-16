@@ -20,7 +20,12 @@ from src.tools.smb_files.credentials import (
     load_credentials,
     normalize_username,
 )
-from src.tools.smb_files.paths import PathError, resolve_path
+from src.tools.smb_files.paths import (
+    PathError,
+    account_name,
+    is_system_share,
+    resolve_path,
+)
 from src.tools.smb_files.settings_store import SmbConfig, SmbServer, SmbShare
 
 FS01 = SmbServer(
@@ -72,11 +77,16 @@ class TestPaths:
             resolve_path(bad, CFG)
         assert e.value.code == "invalid_path"
 
-    @pytest.mark.parametrize("share", ["C$", "ADMIN$", "IPC$", "Altra"])
+    @pytest.mark.parametrize("share", ["C$", "d$", "ADMIN$", "IPC$", "print$", "Altra"])
     def test_admin_and_unknown_shares_rejected(self, share):
         with pytest.raises(PathError) as e:
             resolve_path(f"fs01/{share}/x", CFG)
         assert e.value.code == "share_not_allowed"
+
+    def test_system_vs_hidden_shares(self):
+        """Only Windows system shares are blocked; other hidden shares (home$) are not."""
+        assert is_system_share("C$") and is_system_share("admin$")
+        assert not is_system_share("home$") and not is_system_share("Docs")
 
     def test_share_of_another_server_rejected(self):
         with pytest.raises(PathError) as e:
@@ -104,7 +114,12 @@ class TestCredentials:
 
     def test_normalization_forms(self):
         assert normalize_username("DOM\\mario") == "DOM\\mario"
-        assert normalize_username("mario@corp.example.com") == "CORP\\mario"
+        # UPNs are passed through: Windows resolves them, the NetBIOS domain is not guessed.
+        assert normalize_username("mario@corp.example.com") == "mario@corp.example.com"
+        assert (
+            normalize_username(" mario@corp.example.com ", "ACME")
+            == "mario@corp.example.com"
+        )
         assert normalize_username("mario", "ACME") == "ACME\\mario"
         assert normalize_username("mario") == "mario"
 
@@ -224,7 +239,14 @@ class TestSettingsStore:
         lockout_minutes = 15
 
     class Row:
-        def __init__(self, alias, host, enabled=True, shares='[{"name": "Docs", "read_only": true}]', cred="DEFAULT"):
+        def __init__(
+            self,
+            alias,
+            host,
+            enabled=True,
+            shares='[{"name": "Docs", "read_only": true}]',
+            cred="DEFAULT",
+        ):
             self.alias, self.host, self.enabled = alias, host, enabled
             self.shares_json, self.credential_set = shares, cred
             self.port, self.default_domain, self.label = 445, "ACME", ""
@@ -245,7 +267,10 @@ class TestSettingsStore:
         calls = self._patch(
             monkeypatch,
             self.Settings(),
-            [self.Row("FS01", "FS01.acme.local"), self.Row("fs02", "fs02", cred="estero")],
+            [
+                self.Row("FS01", "FS01.acme.local"),
+                self.Row("fs02", "fs02", cred="estero"),
+            ],
         )
         cfg = asyncio.run(settings_store.get_smb_config("t1"))
         asyncio.run(settings_store.get_smb_config("t1"))
@@ -285,3 +310,47 @@ class TestSettingsStore:
         ):
             self._patch(monkeypatch, settings, rows)
             assert asyncio.run(settings_store.get_smb_config("t2")) is None
+
+
+class TestPersonalFolder:
+    """Scenario: a share with ``folder={user}`` confines each user to their own folder."""
+
+    HOME = SmbServer(
+        alias="fs01",
+        host="fs01",
+        shares=(SmbShare("home$", folder="Utenti/{user}"), SmbShare("Documenti")),
+    )
+    CFG = SmbConfig(servers=(HOME,))
+
+    @staticmethod
+    def _as(user):
+        return lambda server: user
+
+    def test_account_name_strips_domain(self):
+        assert account_name("ACME\\mario") == "mario"
+        assert account_name("mario@acme.com") == "mario"
+        assert account_name("mario") == "mario"
+
+    def test_own_folder_allowed_case_insensitive(self):
+        t = resolve_path(
+            "fs01/home$/utenti/MARIO/a.txt", self.CFG, self._as("ACME\\mario")
+        )
+        assert t.share == "home$" and t.rel == "utenti\\MARIO\\a.txt"
+
+    @pytest.mark.parametrize(
+        "bad", ["fs01/home$", "fs01/home$/Utenti", "fs01/home$/Utenti/luca/a.txt"]
+    )
+    def test_outside_own_folder_rejected(self, bad):
+        with pytest.raises(PathError) as e:
+            resolve_path(bad, self.CFG, self._as("ACME\\mario"))
+        assert e.value.code == "outside_personal_folder"
+        assert "fs01/home$/Utenti/mario" in e.value.message
+
+    def test_without_user_lookup_refused(self):
+        """Callers that cannot tell who the user is never reach a personal share."""
+        with pytest.raises(PathError) as e:
+            resolve_path("fs01/home$/Utenti/mario", self.CFG)
+        assert e.value.code == "share_not_allowed"
+
+    def test_plain_share_unaffected(self):
+        assert resolve_path("fs01/Documenti/x", self.CFG, self._as("mario")).rel == "x"

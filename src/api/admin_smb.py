@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field
 from src.api.auth_login import ChatAuthIdentity, require_admin_role
 from src.data.audit import record_admin_action
 from src.tools.smb_files import probe
-from src.tools.smb_files.paths import _INVALID_CHARS
+from src.tools.smb_files.paths import _INVALID_CHARS, folder_segments, is_system_share
 from src.tools.smb_files.settings_store import (
     AUTH_PROTOCOLS,
     DEFAULT_CREDENTIAL_SET,
@@ -65,6 +65,9 @@ class SmbShareBody(BaseModel):
     name: str = Field(..., max_length=80)
     read_only: bool = False
     label: Optional[str] = Field(None, max_length=128)
+    # Optional personal sub-folder, e.g. "{user}" or "Utenti/{user}": each user
+    # is confined to their own folder on this share (see paths.personal_root).
+    folder: Optional[str] = Field(None, max_length=200)
 
 
 class SmbGlobalBody(BaseModel):
@@ -115,9 +118,11 @@ def _clear_integrations_cache() -> None:
 def _validate_shares(items: List[SmbShareBody]) -> List[Dict[str, Any]]:
     """Normalise the share allowlist or raise 400.
 
-    Rejects administrative shares (``C$``, ``ADMIN$``, any ``*$``) so the agent
-    can never be pointed at a whole disk, and sub-paths (``Share\\sub``)
-    because the allowlist is per share, not per folder.
+    Rejects system shares (``C$``, ``ADMIN$``, ``IPC$``...) so the agent can
+    never be pointed at a whole disk, and sub-paths (``Share\\sub``) because
+    the allowlist is per share; a per-user sub-folder goes in ``folder``.
+    Other hidden shares (``home$``) are allowed: they are a common way to
+    publish personal folders.
     """
     if len(items) > MAX_SHARES:
         raise _bad("too_many_shares")
@@ -128,7 +133,7 @@ def _validate_shares(items: List[SmbShareBody]) -> List[Dict[str, Any]]:
         if (
             not name
             or name in (".", "..")
-            or name.endswith("$")
+            or is_system_share(name)
             or "\\" in name
             or "/" in name
             or _INVALID_CHARS.search(name)
@@ -138,11 +143,17 @@ def _validate_shares(items: List[SmbShareBody]) -> List[Dict[str, Any]]:
         if name.lower() in seen:
             raise _bad("duplicate_share")
         seen.add(name.lower())
+        # Normalised to "a/{user}" form; ".." or bad characters are refused.
+        try:
+            folder = "/".join(folder_segments(item.folder or ""))
+        except ValueError:
+            raise _bad("invalid_share_folder") from None
         out.append(
             {
                 "name": name,
                 "read_only": bool(item.read_only),
                 "label": (item.label or "").strip(),
+                "folder": folder,
             }
         )
     return out

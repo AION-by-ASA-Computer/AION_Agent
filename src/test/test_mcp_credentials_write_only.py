@@ -154,20 +154,28 @@ async def test_public_dict_exposes_flag_and_masks_hint(monkeypatch, tmp_path):
 
     async with get_async_session_maker()() as session:
         row = (
-            await session.execute(
-                select(McpServerConfig).where(
-                    McpServerConfig.server_slug == "smb_files"
+            (
+                await session.execute(
+                    select(McpServerConfig).where(
+                        McpServerConfig.server_slug == "smb_files"
+                    )
                 )
             )
-        ).scalars().one()
+            .scalars()
+            .one()
+        )
         # Simulate a legacy row saved with an unmasked hint.
         cred = (
-            await session.execute(
-                select(UserMcpCredential).where(
-                    UserMcpCredential.credential_key == "SMB_PASSWORD"
+            (
+                await session.execute(
+                    select(UserMcpCredential).where(
+                        UserMcpCredential.credential_key == "SMB_PASSWORD"
+                    )
                 )
             )
-        ).scalars().one()
+            .scalars()
+            .one()
+        )
         cred.display_hint = PASSWORD
         await session.commit()
 

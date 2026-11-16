@@ -69,15 +69,24 @@ async def _run(fn: Callable[..., Dict[str, Any]], *args: Any, **kwargs: Any) -> 
 
 
 @mcp.tool()
-async def smb_list_shares() -> str:
+async def smb_list_shares(check_access: bool = True) -> str:
     """
-    List the Windows file servers and shares the administrator made available.
+    List the Windows file servers and shares this user can open.
 
     Call this first: every other tool takes paths of the form
     "server/Share/sub/file.ext", using the `path` prefix returned here.
-    Returns JSON with ok, servers[{server, label, host, shares[{name, path, label, read_only}]}].
+    Shares the user's Windows account cannot open are left out (`omitted`
+    counts them). For a share with `personal_folder: true`, `path` already
+    points at the user's own folder and only paths inside it are allowed.
+
+    Args:
+        check_access: Open each share with the user's credentials to keep only
+            the accessible ones (default). False = the admin list, no network.
+
+    Returns JSON with ok, servers[{server, label, host, error?, omitted?,
+    shares[{name, path, label, read_only, personal_folder?, error?}]}].
     """
-    return await _run(ops.list_shares)
+    return await _run(ops.list_shares, check_access=check_access)
 
 
 @mcp.tool()

@@ -8,7 +8,7 @@ The marker lives in the per-user MCP HOME (``data/users/<uid>/mcp_home``), so
 it is shared by every MCP process of that user (several open chats).  There is
 one marker per *credential set*: AD locks the account, and one set is one
 account, so a bad password for the servers of set ``A`` must not block the
-servers of set ``B`` (another domain).  It stores only an HMAC fingerprint of
+servers of set ``B`` (another domain).  It stores only a salted scrypt fingerprint of
 user+password with a random per-file salt, never the password.  When the user saves new credentials the fingerprint changes and
 the block lifts by itself.  ``account_locked`` blocks expire after a window
 because the lockout itself eventually expires on the server.
@@ -49,9 +49,21 @@ def _marker_path(cred_set: str) -> Optional[Path]:
 
 
 def _fingerprint(salt: str, username: str, password: str) -> str:
-    return hmac.new(
-        salt.encode(), f"{username}\0{password}".encode(), hashlib.sha256
-    ).hexdigest()
+    """Salted, memory-hard fingerprint of user+password (never the password).
+
+    scrypt (rather than a bare SHA-256/HMAC) because the input is a password:
+    a fast hash would let anyone reading the marker file brute-force it
+    offline.  Cost is kept small (n=2**12, ~few ms) since ``check`` runs on
+    every tool call.
+    """
+    return hashlib.scrypt(
+        f"{username}\0{password}".encode(),
+        salt=salt.encode(),
+        n=2**12,
+        r=8,
+        p=1,
+        dklen=32,
+    ).hex()
 
 
 def record_failure(code: str, username: str, password: str, cred_set: str) -> None:

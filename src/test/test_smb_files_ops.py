@@ -106,7 +106,9 @@ def smb(monkeypatch, tmp_path):
     monkeypatch.setenv("SMB_PASSWORD", "pw")
     monkeypatch.setenv(
         EXTRA_ENV,
-        json.dumps({"SMB_USERNAME__ESTERO": "ESTERO\\m.rossi", "SMB_PASSWORD__ESTERO": "pw2"}),
+        json.dumps(
+            {"SMB_USERNAME__ESTERO": "ESTERO\\m.rossi", "SMB_PASSWORD__ESTERO": "pw2"}
+        ),
     )
     return fake
 
@@ -164,14 +166,81 @@ class TestOps:
         assert ("fs01", "ACME\\mario") in smb.sessions
 
     def test_list_shares_groups_by_server(self, smb):
-        r = ops.list_shares(CFG)
+        """Without the access check the admin list is returned as-is, no network."""
+        r = ops.list_shares(CFG, check_access=False)
         assert [s["server"] for s in r["servers"]] == ["fs01", "fs02"]
         fs01 = r["servers"][0]
         assert fs01["label"] == "Sede"
-        assert [s["path"] for s in fs01["shares"]] == ["fs01/Documenti", "fs01/Archivio"]
+        assert [s["path"] for s in fs01["shares"]] == [
+            "fs01/Documenti",
+            "fs01/Archivio",
+        ]
         assert fs01["shares"][1]["read_only"]
         assert smb.registered == 0  # served from the config, no network
         assert ops.list_shares(None)["error"] == "not_configured"
+
+    def test_list_shares_hides_shares_the_user_cannot_open(self, smb):
+        """Shares Windows denies are left out (and counted), the others are kept."""
+        from smbprotocol.exceptions import SMBOSError
+
+        real = smb.scandir
+
+        def scandir(unc):
+            if unc.endswith("\\Archivio"):
+                raise SMBOSError(0xC0000022, unc)  # STATUS_ACCESS_DENIED
+            return real(unc)
+
+        smb.scandir = scandir
+        r = ops.list_shares(CFG)
+        fs01 = r["servers"][0]
+        assert [s["name"] for s in fs01["shares"]] == ["Documenti"]
+        assert fs01["omitted"] == 1
+        assert [s["name"] for s in r["servers"][1]["shares"]] == ["Documenti"]
+
+    def test_list_shares_keeps_missing_share_with_error(self, smb):
+        """A share missing on the server is a setup error: kept in the list and explained."""
+        from smbprotocol.exceptions import SMBOSError
+
+        real = smb.scandir
+
+        def scandir(unc):
+            if unc.endswith("\\Archivio"):
+                raise SMBOSError(0xC00000CC, unc)  # STATUS_BAD_NETWORK_NAME
+            return real(unc)
+
+        smb.scandir = scandir
+        fs01 = ops.list_shares(CFG)["servers"][0]
+        archivio = fs01["shares"][1]
+        assert archivio["name"] == "Archivio" and archivio["error"] == "not_found"
+        assert "omitted" not in fs01
+
+    def test_list_shares_reports_server_without_credentials(self, smb, monkeypatch):
+        """A server whose credential set is missing keeps its shares and says why."""
+        monkeypatch.delenv(EXTRA_ENV)
+        fs02 = ops.list_shares(CFG)["servers"][1]
+        assert fs02["error"] == "credentials_missing"
+        assert [s["name"] for s in fs02["shares"]] == ["Documenti"]
+
+    def test_personal_folder_share(self, smb):
+        """``folder={user}``: the listed path is the user's folder and others are refused."""
+        cfg = SmbConfig(
+            servers=(
+                SmbServer(
+                    alias="fs01",
+                    host="fs01",
+                    shares=(SmbShare("home$", folder="{user}"),),
+                ),
+            )
+        )
+        smb.fs["\\\\fs01\\home$"] = None
+        smb.fs["\\\\fs01\\home$\\mario"] = None
+        share = ops.list_shares(cfg)["servers"][0]["shares"][0]
+        assert share["path"] == "fs01/home$/mario" and share["personal_folder"]
+        assert ops.write_text(cfg, "fs01/home$/mario/a.txt", "x")["ok"]
+        assert (
+            ops.read_file(cfg, "fs01/home$/luca/a.txt")["error"]
+            == "outside_personal_folder"
+        )
 
     def test_unknown_server(self, smb):
         assert ops.list_dir(CFG, "fs09/Documenti")["error"] == "server_not_allowed"
@@ -256,6 +325,16 @@ class TestCredentialsAndGuard:
         assert client.map_exception(TimeoutError())[0] == "timeout"
         assert client.map_exception(ConnectionRefusedError())[0] == "unreachable"
         assert "auth_failed" in auth_guard.LOGON_CODES
+
+    def test_smboserror_ntstatus_mapping(self):
+        """SMBOSError (raised by smbclient.listdir/open) carries ``ntstatus``, not
+        ``status``: ACL denials must be access_denied, not "unreachable"."""
+        from smbprotocol.exceptions import SMBOSError
+
+        denied = SMBOSError(0xC0000022, r"\\host\Share")
+        assert client.map_exception(denied)[0] == "access_denied"
+        missing = SMBOSError(0xC00000CC, r"\\host\NoShare")
+        assert client.map_exception(missing)[0] == "not_found"
 
 
 class TestExtract:

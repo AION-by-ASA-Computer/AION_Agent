@@ -6,7 +6,8 @@ Each public function is what one MCP tool calls.  They never raise: success is
 gets an actionable message.  Safety rules enforced here:
 
 * every path goes through :func:`paths.resolve_path` (server + share
-  allowlist, no ``..``), and the target's server picks the credential set;
+  allowlist, personal folder, no ``..``), and the target's server picks the
+  credential set;
 * writes are refused on read-only shares and never overwrite unless asked;
 * there is intentionally NO delete operation (SMB has no recycle bin);
 * sizes are capped by the admin limits; logs carry user/op/path only, never
@@ -27,7 +28,12 @@ from src.tools.smb_files import client
 from src.tools.smb_files.client import SmbError
 from src.tools.smb_files.credentials import CredentialsMissing, load_credentials
 from src.tools.smb_files.extract import extract_text
-from src.tools.smb_files.paths import PathError, SmbTarget, resolve_path
+from src.tools.smb_files.paths import (
+    PathError,
+    SmbTarget,
+    personal_root,
+    resolve_path,
+)
 from src.tools.smb_files.settings_store import SmbConfig, SmbServer
 
 logger = logging.getLogger("aion.smb_files.ops")
@@ -78,6 +84,16 @@ def _connect(cfg: SmbConfig, server: SmbServer):
     return _smb()
 
 
+def _user_for(server: SmbServer) -> str:
+    """Windows username of the current user for ``server`` (fills ``{user}``)."""
+    return load_credentials(server).username
+
+
+def _resolve(path: str, cfg: SmbConfig) -> SmbTarget:
+    """``resolve_path`` with the user's identity, for personal-folder shares."""
+    return resolve_path(path, cfg, _user_for)
+
+
 def _check_writable(target: SmbTarget) -> None:
     if target.read_only:
         raise SmbError("share_read_only", f"Share '{target.share}' is read-only.")
@@ -93,42 +109,108 @@ def _entry(name: str, st) -> Dict[str, Any]:
     }
 
 
-def list_shares(cfg: Optional[SmbConfig]) -> Dict[str, Any]:
-    """Servers and shares the admin made available (no network access needed).
+# Error codes meaning "this user cannot open this share": the share is left
+# out of the user's list instead of being shown as a dead end.  ``not_found``
+# is NOT here: a missing share (wrong name in the admin config) or a missing
+# personal folder is a setup problem the user must hear about, not hide.
+_NO_ACCESS = frozenset({"access_denied"})
 
-    ``path`` of each share is the prefix the agent must use in the other tools.
+
+def _share_path(srv: SmbServer, share, user: Optional[str]) -> str:
+    """Starting path of ``share`` for this user (their folder, if configured)."""
+    root = personal_root(share, user) if (share.folder and user) else []
+    return "/".join([srv.alias, share.name, *root])
+
+
+def _probe_share(smb, srv: SmbServer, share, user: str) -> Optional[tuple]:
+    """Open the user's starting folder on ``share``; ``None`` if it works, else ``(code, message)``.
+
+    Reads at most one directory entry: enough to prove the user's ACLs allow
+    listing, cheap even on huge shares.
+    """
+    root = personal_root(share, user) if share.folder else []
+    unc = "\\".join([f"\\\\{srv.host}", share.name, *root])
+    try:
+        it = iter(smb.scandir(unc))
+        next(it, None)
+        close = getattr(it, "close", None)
+        if close:
+            close()  # releases the SMB directory handle of the generator
+        return None
+    except Exception as exc:  # noqa: BLE001 - mapped to a stable code
+        return client.map_exception(exc)
+
+
+def list_shares(cfg: Optional[SmbConfig], check_access: bool = True) -> Dict[str, Any]:
+    """Servers and shares available to *this* user.
+
+    ``path`` of each share is the prefix the agent must use in the other tools
+    (for personal-folder shares it already points at the user's own folder).
+
+    With ``check_access`` (default) each share is opened with the user's
+    credentials and the ones Windows denies are left out (``omitted`` counts
+    them): the admin lists every share of the company, Windows ACLs decide
+    who sees which.  A server where the login itself fails keeps its shares
+    unchecked and reports ``error`` so the agent can tell the user why.
     """
     if cfg is None:
         return _error(
             "not_configured", "The file server is not configured by the administrator."
         )
-    return {
-        "ok": True,
-        "servers": [
-            {
-                "server": srv.alias,
-                "label": srv.label,
-                "host": srv.host,
-                "shares": [
-                    {
-                        "name": s.name,
-                        "path": f"{srv.alias}/{s.name}",
-                        "label": s.label,
-                        "read_only": s.read_only,
-                    }
-                    for s in srv.shares
-                ],
+    servers: List[Dict[str, Any]] = []
+    for srv in cfg.servers:
+        entry: Dict[str, Any] = {
+            "server": srv.alias,
+            "label": srv.label,
+            "host": srv.host,
+        }
+        user: Optional[str] = None
+        smb = None
+        try:
+            user = _user_for(srv)
+            if check_access:
+                smb = _connect(cfg, srv)
+        except CredentialsMissing as exc:
+            entry.update(error="credentials_missing", message=str(exc))
+        except Exception as exc:  # noqa: BLE001 - login failure of this server only
+            code, msg = client.map_exception(exc)
+            entry.update(error=code, message=msg)
+        shares: List[Dict[str, Any]] = []
+        omitted = 0
+        for s in srv.shares:
+            item: Dict[str, Any] = {
+                "name": s.name,
+                "path": _share_path(srv, s, user),
+                "label": s.label,
+                "read_only": s.read_only,
             }
-            for srv in cfg.servers
-        ],
-    }
+            if s.folder:
+                item["personal_folder"] = True
+            if smb is not None:
+                failure = _probe_share(smb, srv, s, user or "")
+                if failure and failure[0] in _NO_ACCESS:
+                    omitted += 1
+                    continue
+                if failure:
+                    # e.g. missing share/folder or timeout: shown so the agent can explain it
+                    item["error"], item["message"] = failure
+            shares.append(item)
+        entry["shares"] = shares
+        if omitted:
+            entry["omitted"] = omitted
+        servers.append(entry)
+    logger.info(
+        "smb_op user=%s op=list_shares ok=True",
+        os.environ.get("AION_CURRENT_USER_ID", "?"),
+    )
+    return {"ok": True, "servers": servers}
 
 
 def list_dir(cfg: Optional[SmbConfig], path: str, limit: int = 200) -> Dict[str, Any]:
     """List one directory (non recursive), directories first."""
 
     def run() -> Dict:
-        t = resolve_path(path, cfg)
+        t = _resolve(path, cfg)
         smb = _connect(cfg, t.server)
         entries = []
         for e in smb.scandir(t.unc):
@@ -150,7 +232,7 @@ def stat(cfg: Optional[SmbConfig], path: str) -> Dict[str, Any]:
     """Metadata of a file or directory."""
 
     def run() -> Dict:
-        t = resolve_path(path, cfg)
+        t = _resolve(path, cfg)
         st = _connect(cfg, t.server).stat(t.unc)
         return {
             "ok": True,
@@ -177,7 +259,7 @@ def search(
     """
 
     def run() -> Dict:
-        t = resolve_path(path, cfg)
+        t = _resolve(path, cfg)
         smb = _connect(cfg, t.server)
         pat = pattern if any(c in pattern for c in "*?[") else f"*{pattern}*"
         deadline = time.monotonic() + time_budget_s
@@ -227,7 +309,7 @@ def read_file(
     """Read a file as text (PDF/DOCX/XLSX/CSV/txt), paginated by characters."""
 
     def run() -> Dict:
-        t = resolve_path(path, cfg)
+        t = _resolve(path, cfg)
         data = _read_bytes(_connect(cfg, t.server), t, cfg.max_read_mb)
         out = extract_text(data, os.path.basename(t.rel), max_chars, offset_chars)
         return {"ok": True, "path": t.display, **out}
@@ -250,7 +332,7 @@ def copy_to_session(
     def run() -> Dict:
         from src.session_workspace import safe_resolve
 
-        t = resolve_path(path, cfg)
+        t = _resolve(path, cfg)
         data = _read_bytes(_connect(cfg, t.server), t, cfg.max_read_mb)
         name = _UNSAFE_NAME.sub("_", dest_name or os.path.basename(t.rel) or "file")
         dest = safe_resolve(_session_id(), f"workspace/smb/{name}")
@@ -302,7 +384,7 @@ def write_text(
     """Create (or, with ``overwrite``, replace) a UTF-8 text file."""
 
     def run() -> Dict:
-        t = resolve_path(path, cfg)
+        t = _resolve(path, cfg)
         return _write(
             _connect(cfg, t.server),
             t,
@@ -322,7 +404,7 @@ def upload_from_session(
     def run() -> Dict:
         from src.session_workspace import safe_resolve
 
-        t = resolve_path(path, cfg)
+        t = _resolve(path, cfg)
         try:
             src = safe_resolve(_session_id(), session_path, must_exist=True)
         except (ValueError, FileNotFoundError) as exc:
@@ -342,7 +424,7 @@ def mkdir(cfg: Optional[SmbConfig], path: str, parents: bool = True) -> Dict[str
     """Create a directory (idempotent when ``parents`` is true)."""
 
     def run() -> Dict:
-        t = resolve_path(path, cfg)
+        t = _resolve(path, cfg)
         _check_writable(t)
         if not t.rel:
             raise PathError("invalid_path", "Specify a folder path inside the share.")
@@ -365,7 +447,7 @@ def move(
     """
 
     def run() -> Dict:
-        s, d = resolve_path(src, cfg), resolve_path(dst, cfg)
+        s, d = _resolve(src, cfg), _resolve(dst, cfg)
         if s.server.alias != d.server.alias or s.share.lower() != d.share.lower():
             raise SmbError(
                 "cross_share_move",

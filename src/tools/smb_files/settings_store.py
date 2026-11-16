@@ -40,11 +40,16 @@ _CACHE: Dict[str, Tuple[float, Optional["SmbConfig"]]] = {}
 
 @dataclass(frozen=True)
 class SmbShare:
-    """A share the admin allowed; ``read_only`` blocks every write on it."""
+    """A share the admin allowed; ``read_only`` blocks every write on it.
+
+    ``folder`` (optional, e.g. ``{user}`` or ``Utenti/{user}``) confines each
+    user to their own sub-folder of the share (see ``paths.personal_root``).
+    """
 
     name: str
     read_only: bool = False
     label: str = ""
+    folder: str = ""
 
 
 @dataclass(frozen=True)
@@ -146,6 +151,7 @@ def _parse_shares(raw: Any) -> Tuple[SmbShare, ...]:
                     name=name,
                     read_only=bool(item.get("read_only")),
                     label=str(item.get("label") or ""),
+                    folder=str(item.get("folder") or "").strip().strip("\\/"),
                 )
             )
     return tuple(out)
@@ -245,7 +251,12 @@ def _server_public(row: Any) -> Dict[str, Any]:
         "default_domain": row.default_domain or "",
         "credential_set": row.credential_set or DEFAULT_CREDENTIAL_SET,
         "shares": [
-            {"name": s.name, "read_only": s.read_only, "label": s.label}
+            {
+                "name": s.name,
+                "read_only": s.read_only,
+                "label": s.label,
+                "folder": s.folder,
+            }
             for s in _parse_shares(row.shares_json)
         ],
         "auth_protocol": row.auth_protocol or "ntlm",

@@ -487,9 +487,7 @@ async def integration_row_to_public_dict(
             apply_dynamic_credential_fields,
         )
 
-        schema = await apply_dynamic_credential_fields(
-            schema, r.server_slug, tenant_id
-        )
+        schema = await apply_dynamic_credential_fields(schema, r.server_slug, tenant_id)
 
     # Include saved credential keys not in admin schema so users can still edit them.
     if show_form and hints:

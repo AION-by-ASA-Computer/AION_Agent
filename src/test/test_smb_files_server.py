@@ -160,7 +160,12 @@ def test_list_shares_returns_admin_allowlist(monkeypatch):
     assert out["ok"] is True
     assert [s["server"] for s in out["servers"]] == ["fs01", "fs02"]
     assert out["servers"][0]["shares"] == [
-        {"name": "Documenti", "path": "fs01/Documenti", "label": "Docs", "read_only": False},
+        {
+            "name": "Documenti",
+            "path": "fs01/Documenti",
+            "label": "Docs",
+            "read_only": False,
+        },
         {"name": "Archivio", "path": "fs01/Archivio", "label": "", "read_only": True},
     ]
     assert out["servers"][1]["shares"][0]["path"] == "fs02/Documenti"
@@ -182,7 +187,11 @@ def test_registry_entry_is_per_user_and_session_scoped():
     entry = registry["smb_files"]
     assert entry["args"] == ["-u", "smb_files/server.py"]
     assert entry["aion_connector_id"] == "smb_files"
-    assert set(entry["env"]) == {"SMB_USERNAME", "SMB_PASSWORD", "SMB_EXTRA_CREDENTIALS"}
+    assert set(entry["env"]) == {
+        "SMB_USERNAME",
+        "SMB_PASSWORD",
+        "SMB_EXTRA_CREDENTIALS",
+    }
     # Extra credential sets travel as one JSON blob through the wildcard placeholder.
     assert entry["env"]["SMB_EXTRA_CREDENTIALS"] == "${AION_USER_SMB_FILES__*}"
     assert _server_needs_user_credentials(entry)

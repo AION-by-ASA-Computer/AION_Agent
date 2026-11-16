@@ -42,18 +42,37 @@ _STATUS_CODES = {
     0xC000007F: "too_large",  # disk full
 }
 
+# Human messages for statuses whose generic "SMB status 0x..." text misleads the
+# agent: a missing *share* was read as a missing folder and the agent offered
+# to create it, while only the admin (share name) or Windows (sharing) can fix it.
+_STATUS_MESSAGES = {
+    0xC00000CC: (
+        "The share does not exist on the file server: the share name configured "
+        "by the administrator does not match any shared folder on that server."
+    ),
+    0xC0000034: "Path not found.",
+    0xC000003A: "Path not found.",
+}
+
 
 def map_exception(exc: BaseException) -> Tuple[str, str]:
     """Translate any exception to ``(code, message)`` without leaking secrets."""
     if isinstance(exc, SmbError):
         return exc.code, exc.message
+    # smbprotocol exposes the NTSTATUS as ``status`` on SMBResponseException but
+    # as ``ntstatus`` on SMBOSError (what smbclient.listdir/open raise). Missing
+    # the latter made e.g. STATUS_ACCESS_DENIED fall through to the generic
+    # OSError branch and be reported as "unreachable".
     status = getattr(exc, "status", None)
+    if not isinstance(status, int):
+        status = getattr(exc, "ntstatus", None)
     if isinstance(status, int):
         status &= 0xFFFFFFFF
         if status in auth_guard.LOGON_STATUSES:
             return auth_guard.LOGON_STATUSES[status], "Windows login failed."
         if status in _STATUS_CODES:
-            return _STATUS_CODES[status], f"SMB status 0x{status:08x}."
+            msg = _STATUS_MESSAGES.get(status, f"SMB status 0x{status:08x}.")
+            return _STATUS_CODES[status], msg
     if isinstance(exc, FileNotFoundError):
         return "not_found", "Path not found."
     if isinstance(exc, FileExistsError):
@@ -64,10 +83,16 @@ def map_exception(exc: BaseException) -> Tuple[str, str]:
         return "timeout", "The file server did not answer in time."
     if isinstance(exc, OSError):
         return "unreachable", "The file server is not reachable."
+    # smbprotocol wraps TCP failures (refused, no route) in a ValueError
+    # "Failed to connect to 'host:port': ..." instead of an OSError.
+    if isinstance(exc, ValueError) and str(exc).startswith("Failed to connect"):
+        return "unreachable", "The file server is not reachable."
     return "error", f"Unexpected error: {type(exc).__name__}"
 
 
-def open_session(server: SmbServer, creds: SmbCredentials, lockout_minutes: int) -> None:
+def open_session(
+    server: SmbServer, creds: SmbCredentials, lockout_minutes: int
+) -> None:
     """Register the SMB session for this user on ``server`` (idempotent).
 
     smbclient caches the session per host, so each configured server gets its

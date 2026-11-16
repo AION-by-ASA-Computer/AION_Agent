@@ -104,6 +104,7 @@ def _wildcard_env_keys(env: Dict[str, Any]) -> Set[str]:
         if isinstance(v, str) and _AION_USER_WILDCARD_RE.match(v.strip())
     }
 
+
 _CONFIG_FILE_HINTS = re.compile(
     r"config\.toml|\.config/|xdg|XDG_CONFIG|credentials?\s+file|file\s+di\s+configurazione",
     re.I,
