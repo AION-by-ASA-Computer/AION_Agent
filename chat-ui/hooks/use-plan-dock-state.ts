@@ -7,11 +7,12 @@
  *   - planChunk / planMountKey state + ref
  *   - planStreamRevisionRef
  *   - openPlanDockFromChunk / openPlanDockFromMarkdown / updatePlanDockStreaming helpers
+ *     (streaming updates are throttled to one per animation frame, see below)
  *
  * The DB is the source of truth; localStorage snapshot is no longer used.
  */
 
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   normalizePlanPendingChunk,
   planFromOrchestrationEvent,
@@ -76,8 +77,33 @@ export function usePlanDockState({
 
   const planChunkRef = useRef<PlanPendingChunk | null>(null);
   const planStreamRevisionRef = useRef(0);
+  // Streaming updates are coalesced to one per animation frame: the stream can
+  // emit a plan update per token, and pushing each one through React (plus the
+  // dock re-render it triggers via the shell layout effect) exceeded React's
+  // nested-update limit ("Maximum update depth exceeded", React error #185).
+  const streamFrameRef = useRef<number | null>(null);
+  const pendingStreamRef = useRef<{
+    planId: string;
+    markdown: string;
+    artifact?: Record<string, unknown>;
+  } | null>(null);
+  // Last streamed (planId, markdown) actually applied, to skip no-op updates.
+  const lastStreamedRef = useRef<{ planId: string; markdown: string } | null>(null);
 
-  const openPlanDockFromChunk = useCallback(
+  /** Drop any streaming update still waiting for the next animation frame. */
+  const cancelPendingStream = useCallback(() => {
+    if (streamFrameRef.current !== null) {
+      cancelAnimationFrame(streamFrameRef.current);
+      streamFrameRef.current = null;
+    }
+    pendingStreamRef.current = null;
+  }, []);
+
+  // Never let a queued frame fire after the workspace unmounts.
+  useEffect(() => cancelPendingStream, [cancelPendingStream]);
+
+  /** Apply a plan chunk to the dock state (no throttling, no cancellation). */
+  const applyPlanChunk = useCallback(
     (chunk: PlanPendingChunk) => {
       const normalized =
         planFromOrchestrationEvent(
@@ -114,6 +140,20 @@ export function usePlanDockState({
     [onOpenPlanTab],
   );
 
+  /**
+   * Open/refresh the plan dock with a definitive chunk (server `orchestration_plan_pending`,
+   * history restore, final artifact). Cancels any queued streaming frame first, so a
+   * stale "streaming-plan" preview can never overwrite the real plan afterwards.
+   */
+  const openPlanDockFromChunk = useCallback(
+    (chunk: PlanPendingChunk) => {
+      cancelPendingStream();
+      lastStreamedRef.current = null;
+      applyPlanChunk(chunk);
+    },
+    [applyPlanChunk, cancelPendingStream],
+  );
+
   const openPlanDockFromMarkdown = useCallback(
     (planId: string, markdown: string, artifact?: Record<string, unknown>) => {
       const pid = planId.trim();
@@ -124,24 +164,42 @@ export function usePlanDockState({
     [openPlanDockFromChunk],
   );
 
+  /**
+   * Live preview of a plan being generated. Called by ChatWorkspace for every
+   * plan-related stream chunk (tokens included); only the latest value is kept
+   * and applied once per animation frame, and identical markdown is skipped.
+   */
   const updatePlanDockStreaming = useCallback(
     (planId: string, markdown: string, artifact?: Record<string, unknown>) => {
       const pid = planId.trim();
       if (!pid) return;
-      planStreamRevisionRef.current += 1;
-      openPlanDockFromChunk({
-        type: "orchestration_plan_pending",
-        plan_id: pid,
-        plan: {},
-        plan_markdown: markdown,
-        todos: [],
-        annotations: {},
-        revision: planStreamRevisionRef.current,
-        goal: String(artifact?.title || "Execution plan"),
-        force_sidebar_refresh: true,
+      pendingStreamRef.current = { planId: pid, markdown, artifact };
+      if (streamFrameRef.current !== null) return;
+      streamFrameRef.current = requestAnimationFrame(() => {
+        streamFrameRef.current = null;
+        const pending = pendingStreamRef.current;
+        pendingStreamRef.current = null;
+        if (!pending) return;
+        const last = lastStreamedRef.current;
+        if (last && last.planId === pending.planId && last.markdown === pending.markdown) {
+          return;
+        }
+        lastStreamedRef.current = { planId: pending.planId, markdown: pending.markdown };
+        planStreamRevisionRef.current += 1;
+        applyPlanChunk({
+          type: "orchestration_plan_pending",
+          plan_id: pending.planId,
+          plan: {},
+          plan_markdown: pending.markdown,
+          todos: [],
+          annotations: {},
+          revision: planStreamRevisionRef.current,
+          goal: String(pending.artifact?.title || "Execution plan"),
+          force_sidebar_refresh: true,
+        });
       });
     },
-    [openPlanDockFromChunk],
+    [applyPlanChunk],
   );
 
   return {

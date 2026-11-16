@@ -594,7 +594,7 @@ _AGENT_MODE_ENV_DEFAULTS = {
         "sandbox_write_workspace_file,sandbox_edit_workspace_file,"
         "sandbox_exec_allowlisted,sandbox_run_python_file,sandbox_run_node_file,"
         "sandbox_install_python_packages,sandbox_install_npm_packages,"
-        "mark_task_completed,delegate_to_subagent,skill_view"
+        "mark_task_completed,complete_execution_plan,delegate_to_subagent,skill_view"
     ),
     "AION_PLAN_MODE_MAX_RESEARCH_TOOLS": "2",
     "AION_PLAN_MODE_RESEARCH_TOOLS": (

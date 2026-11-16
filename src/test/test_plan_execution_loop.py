@@ -132,6 +132,21 @@ async def test_handler_emits_task_activities(monkeypatch):
         staticmethod(lambda **k: fake_synth(**k)),
     )
 
+    # The final summary must also land in the last task's assistant message.
+    appended: List[dict] = []
+
+    async def fake_append(self, **kw):
+        appended.append(kw)
+        return True
+
+    async def fake_persist(self, **_kw):
+        return "summary-msg"
+
+    monkeypatch.setattr(
+        PlanExecutionHandler, "_append_summary_to_last_task", fake_append
+    )
+    monkeypatch.setattr(PlanExecutionHandler, "_persist_final_summary", fake_persist)
+
     handler = PlanExecutionHandler()
     entry: Dict[str, Any] = {
         "chat_session_id": "sess-loop",
@@ -180,6 +195,13 @@ async def test_handler_emits_task_activities(monkeypatch):
     assert isinstance(t1.get("turns"), list)
     assert len(t1.get("turns") or []) >= 1
     assert (t1.get("turns") or [])[-1].get("user_message_id") == "u-task_01"
+    assert appended == [
+        {
+            "session_id": "sess-loop",
+            "message_id": "a-task_02",
+            "summary": "Riepilogo finale di test.",
+        }
+    ]
 
 
 @pytest.mark.anyio
@@ -420,3 +442,172 @@ def test_list_runs_for_owner_filters_session(tmp_path, monkeypatch):
     assert len(runs) == 1
     assert runs[0]["run_id"] == "pe-run1"
     assert handler.list_runs_for_owner("u1", chat_session_id="other") == []
+
+
+async def _run_failing_task_capturing_efforts(monkeypatch, first_outcome_code):
+    """Run a plan whose task never completes; return the reasoning_effort of each attempt.
+
+    The first attempt yields a ``turn_outcome`` with ``first_outcome_code`` (or
+    nothing when None); every attempt ends without plan_task_completed.
+    """
+    efforts: List[Any] = []
+
+    async def fake_fetch(_plan_id: str):
+        return {"approved_markdown": _PLAN_MD_T0, "revision": 1}
+
+    async def fake_session(_plan_id: str):
+        return "sess-stall"
+
+    async def fake_get_agent(*_a, **_k):
+        return object(), "test_profile"
+
+    class FakePipe:
+        async def run_stream(
+            self, user_input: str, *args, reasoning_effort=None, **kwargs
+        ):
+            efforts.append(reasoning_effort)
+            if first_outcome_code and len(efforts) == 1:
+                yield {"type": "turn_outcome", "code": first_outcome_code}
+            yield {"type": "token", "content": "no mark"}
+
+    monkeypatch.setattr("src.runtime.orchestration_db.fetch_plan_record", fake_fetch)
+    monkeypatch.setattr("src.runtime.orchestration_db.fetch_plan_session", fake_session)
+    monkeypatch.setattr(
+        "src.plan_execution.handler._get_agent_for_execution", fake_get_agent
+    )
+    monkeypatch.setattr(
+        "src.plan_execution.handler._make_plan_execution_pipeline",
+        lambda *a, **k: FakePipe(),
+    )
+    entry = {
+        "chat_session_id": "sess-stall",
+        "owner": "u1",
+        "profile_name": "test",
+        "tasks": [],
+        "status": "running",
+    }
+    await PlanExecutionHandler()._run_plan_loop(
+        "pe-stall", "execution_plan_stall", entry, on_progress=lambda _e: None
+    )
+    assert entry.get("status") == "paused"
+    return efforts
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize(
+    "code", ["reasoning_only_no_answer", "reasoning_budget_no_answer"]
+)
+async def test_retry_disables_thinking_after_reasoning_only_turn(monkeypatch, code):
+    """A reasoning-only first attempt makes the retry run with thinking off."""
+    efforts = await _run_failing_task_capturing_efforts(monkeypatch, code)
+    assert efforts == [None, "off"]
+
+
+@pytest.mark.anyio
+async def test_retry_keeps_default_thinking_for_other_failures(monkeypatch):
+    """Without a reasoning stall the retry keeps the default reasoning settings."""
+    efforts = await _run_failing_task_capturing_efforts(monkeypatch, None)
+    assert efforts == [None, None]
+
+
+def test_summary_publisher_streams_partial_text_throttled():
+    """Partial summary goes into progress.summary_partial and wakes the stream, throttled."""
+    handler = PlanExecutionHandler()
+    entry: Dict[str, Any] = {"progress": {"phase": "writing"}}
+    publish = handler._summary_publisher("pe-pub", entry)
+
+    publish("x" * 50)
+    assert entry["progress"]["summary_partial"] == "x" * 50
+    assert entry["progress"]["phase"] == "writing"
+    seq = handler._stream_seq.get("pe-pub", 0)
+    assert seq == 1
+
+    publish("x" * 55)  # < 40 new chars within 300 ms: skipped
+    assert entry["progress"]["summary_partial"] == "x" * 50
+    publish("x" * 120)  # enough new text: published
+    assert entry["progress"]["summary_partial"] == "x" * 120
+    assert handler._stream_seq["pe-pub"] == 2
+
+
+@pytest.mark.anyio
+async def test_persist_final_summary_attaches_deliverable(tmp_path, monkeypatch):
+    """The final summary is saved as an assistant message with the deliverable attached."""
+    import src.api.history as hist
+    import src.session_workspace as sw
+
+    root = tmp_path / "sess"
+    (root / "workspace").mkdir(parents=True)
+    (root / "workspace" / "articolo_AI.docx").write_bytes(b"docx-bytes")
+    monkeypatch.setattr(sw, "normalize_session_id", lambda s: s)
+    monkeypatch.setattr(sw, "session_root", lambda _s: root)
+
+    calls: Dict[str, Any] = {}
+
+    class FakeHistory:
+        async def add_message(self, session_id, role, content, **kw):
+            calls["message"] = (session_id, role, content, kw.get("message_id"))
+
+        async def add_attachment(self, session_id, **kw):
+            calls["attachment"] = (session_id, kw)
+
+    monkeypatch.setattr(hist, "history_manager", FakeHistory())
+
+    mid = await PlanExecutionHandler()._persist_final_summary(
+        session_id="sess-1",
+        summary="## Plan completed",
+        deliverable_path="workspace/articolo_AI.docx",
+        profile_name="p",
+        owner="u1",
+    )
+    assert mid and calls["message"] == ("sess-1", "assistant", "## Plan completed", mid)
+    _sid, att = calls["attachment"]
+    assert att["storage_key"] == "workspace/articolo_AI.docx"
+    assert att["message_id"] == mid
+    assert att["original_name"] == "articolo_AI.docx"
+    assert att["size_bytes"] == len(b"docx-bytes")
+
+
+def test_last_task_assistant_id_fallback():
+    """Without a task run in this loop, the last task with a message id is used."""
+    from src.plan_execution.handler import _last_task_assistant_id
+
+    entry = {
+        "tasks": [
+            {"task_id": "task_01", "assistant_message_id": "a1"},
+            {"task_id": "task_02", "assistant_message_id": "a2"},
+            {"task_id": "task_03"},
+        ]
+    }
+    assert _last_task_assistant_id(entry) == "a2"
+    assert _last_task_assistant_id({"tasks": []}) is None
+
+
+@pytest.mark.anyio
+async def test_append_summary_to_last_task_uses_placeholders(monkeypatch):
+    """The summary is appended with the placeholder texts marked replaceable."""
+    import src.api.history as hist
+    from src.runtime.turn_diagnostics import (
+        PLAN_CREATED_TEXT,
+        PLAN_TASK_COMPLETED_TEXT,
+    )
+
+    calls: List[tuple] = []
+
+    class FakeHistory:
+        async def append_message_text(self, sid, mid, text, *, replaceable_texts):
+            calls.append((sid, mid, text, replaceable_texts))
+            return True
+
+    monkeypatch.setattr(hist, "history_manager", FakeHistory())
+    handler = PlanExecutionHandler()
+    ok = await handler._append_summary_to_last_task(
+        session_id="s1", message_id="a4", summary="## Plan completed"
+    )
+    assert ok is True
+    sid, mid, text, repl = calls[0]
+    assert (sid, mid, text) == ("s1", "a4", "## Plan completed")
+    assert PLAN_TASK_COMPLETED_TEXT in repl and PLAN_CREATED_TEXT in repl
+    # No message id: nothing to do.
+    assert not await handler._append_summary_to_last_task(
+        session_id="s1", message_id=None, summary="x"
+    )

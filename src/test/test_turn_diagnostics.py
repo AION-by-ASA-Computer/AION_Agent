@@ -160,3 +160,42 @@ def test_pii_review_created_without_final_text():
     )
     assert out["code"] == "pii_review_created"
     assert out.get("user_visible_warning") is None
+
+
+def test_plan_task_completed_is_not_plan_created():
+    """A plan task turn cut on mark_task_completed re-emits
+    orchestration_plan_pending (plan_intercepts > 0): it must get the task
+    placeholder, not the "I created the execution plan" text, and no warning."""
+    from src.runtime.turn_diagnostics import PLAN_TASK_COMPLETED_TEXT
+
+    out = classify_turn_outcome(
+        session_id="sess",
+        profile="aion_std",
+        stop_reason="plan_task_completed",
+        final_text="",
+        full_reasoning="",
+        tool_calls_count=3,
+        tool_events_count=6,
+        new_messages=[],
+        plan_intercepts=1,
+    )
+    assert out["code"] == "plan_task_completed"
+    assert out["suggested_final_text"] == PLAN_TASK_COMPLETED_TEXT
+    assert out["user_visible_warning"] is None
+
+
+def test_plan_task_completed_with_text_is_ok():
+    """A task turn that wrote its outcome before marking is a normal turn."""
+    out = classify_turn_outcome(
+        session_id="sess",
+        profile="aion_std",
+        stop_reason="plan_task_completed",
+        final_text="Article written to workspace/article.docx.",
+        full_reasoning="",
+        tool_calls_count=3,
+        tool_events_count=6,
+        new_messages=[],
+        plan_intercepts=1,
+    )
+    assert out["code"] == "ok"
+    assert out["user_visible_warning"] is None

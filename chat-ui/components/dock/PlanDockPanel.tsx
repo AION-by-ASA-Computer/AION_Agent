@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import dynamic from "next/dynamic";
 import type { PlanExecutionProgressState } from "@/hooks/use-plan-execution-progress";
 import { normalizePlanPendingChunk } from "@/lib/sse/planDisplay";
@@ -59,11 +60,23 @@ export function PlanDockPanel({
   selectedTaskId?: string | null;
   onPlanApproved?: (runId: string, planId: string) => void;
   onPlanRejected?: (planId?: string) => void;
-  onFinalSummary?: (summary: string, planId: string, runId?: string) => void;
+  /** `serverMessageId`: id of the summary message already saved by the backend, if any. */
+  onFinalSummary?: (
+    summary: string,
+    planId: string,
+    runId?: string,
+    serverMessageId?: string | null,
+  ) => void;
   onExecutionAdoptHandled?: () => void;
   onTaskSelect?: (taskId: string | null) => void;
 }) {
-  const props = planChunkToProps(chunk, apiBaseUrl, sessionId);
+  // Memoized so TaskPlanManagerV4 receives the same `initialPlan` object across
+  // re-renders that do not change the chunk: its effects depend on it and would
+  // otherwise reset state on every dock re-render (contributed to React #185).
+  const props = useMemo(
+    () => planChunkToProps(chunk, apiBaseUrl, sessionId),
+    [chunk, apiBaseUrl, sessionId],
+  );
 
   return (
     <TaskPlanManagerV4

@@ -131,3 +131,44 @@ async def test_oauth_callback_redirect_success(oauth_db: str) -> None:
     assert "oauth_status=success" in result.headers["location"]
     token = await cs.get_credential("alice", "clickup", "OAUTH_TOKEN")
     assert token == "access-xyz"
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_redirect_provider_error_without_code(
+    oauth_db: str,
+) -> None:
+    """Entra torna con ?error=... e senza code (es. AADSTS65004): niente 422, redirect a chat-ui."""
+    from unittest.mock import MagicMock
+
+    from fastapi.responses import RedirectResponse
+
+    state = "err-state"
+    mod._oauth_pending[state] = {
+        "server_slug": "ms365",
+        "code_verifier": "verifier",
+        "user_id": "alice",
+        "redirect_uri": "http://localhost:8001/v1/integrations/oauth/callback",
+        "expires_at": datetime.now(timezone.utc) + timedelta(minutes=5),
+    }
+
+    result = await mod.oauth_callback_redirect(
+        request=MagicMock(),
+        state=state,
+        error="access_denied",
+        error_description="AADSTS65004: User declined to consent.\r\nTrace ID: x",
+    )
+
+    assert isinstance(result, RedirectResponse)
+    location = result.headers["location"]
+    assert "oauth_status=error" in location
+    assert "AADSTS65004" in location
+    assert "Trace" not in location
+    assert state not in mod._oauth_pending
+
+
+@pytest.mark.asyncio
+async def test_oauth_callback_redirect_missing_code(oauth_db: str) -> None:
+    from unittest.mock import MagicMock
+
+    result = await mod.oauth_callback_redirect(request=MagicMock(), state="whatever")
+    assert "oauth_status=error" in result.headers["location"]

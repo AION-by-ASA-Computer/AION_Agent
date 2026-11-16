@@ -461,12 +461,33 @@ async def build_turn_context(
                     _ntid = _explicit_tid or (
                         next_pending_task_id(_amd) if _amd else None
                     )
-                    _artifact_exec_reminder = build_plan_execution_reminder(
-                        plan_id=_active_pid,
-                        plan_markdown=_amd,
-                        next_task_id=_ntid,
-                        phase="start",
-                    )
+                    if _ntid:
+                        _artifact_exec_reminder = build_plan_execution_reminder(
+                            plan_id=_active_pid,
+                            plan_markdown=_amd,
+                            next_task_id=_ntid,
+                            phase="start",
+                        )
+                    elif _amd:
+                        # No task left: this is the plan-closing turn scheduled
+                        # by the plan execution handler after the last task.
+                        from src.runtime.orchestration_tools import (
+                            collect_plan_deliverables,
+                        )
+                        from src.runtime.plan_execution import (
+                            build_plan_completion_reminder,
+                        )
+
+                        _artifact_exec_reminder = build_plan_completion_reminder(
+                            plan_id=_active_pid,
+                            plan_markdown=_amd,
+                            deliverables=[
+                                f["path"]
+                                for f in collect_plan_deliverables(
+                                    pipeline.session_id, plan_markdown=_amd
+                                )
+                            ],
+                        )
             except Exception:
                 pass
             if not _artifact_exec_reminder:

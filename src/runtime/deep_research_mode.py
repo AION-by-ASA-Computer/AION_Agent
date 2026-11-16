@@ -21,6 +21,7 @@ DEFAULT_DEEP_RESEARCH_BLOCKED_TOOLS: FrozenSet[str] = frozenset(
         "get_execution_plan",
         "update_execution_plan",
         "mark_task_completed",
+        "complete_execution_plan",
         "delegate_to_subagent",
         "skill_view",
         "skill_search",

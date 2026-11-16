@@ -295,7 +295,7 @@ connectors:
         - https://graph.microsoft.com/Files.Read
         - https://graph.microsoft.com/Tasks.Read
       authorize_params:
-        prompt: consent
+        prompt: select_account
         response_mode: query
     runtime_env_aliases:
       MS365_MCP_OAUTH_TOKEN:

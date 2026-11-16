@@ -13,6 +13,24 @@ logger = logging.getLogger("aion.turn.diagnostics")
 
 _REPO_ROOT = Path(__file__).resolve().parents[2]
 
+# Fallback answer for a plan-execution task turn that ended on
+# ``mark_task_completed`` without any visible text. The plan execution handler
+# recognises it (see ``PLAN_TASK_PLACEHOLDER_TEXTS``) and replaces it with the
+# final plan summary when the task is the last one of the plan.
+PLAN_TASK_COMPLETED_TEXT = "✅ Task completed."
+
+# Text proposed for a plan-mode turn that registered a new plan.
+PLAN_CREATED_TEXT = (
+    "I created the execution plan in the **Plan** sidebar. "
+    "Review the tasks, edit if needed, and approve to start execution."
+)
+
+# Fallback bodies that carry no task output: safe to overwrite in a task's
+# assistant message. PLAN_CREATED_TEXT is listed because task turns used to be
+# misclassified as "plan_created" (mark_task_completed refreshes the sidebar
+# with an orchestration_plan_pending event).
+PLAN_TASK_PLACEHOLDER_TEXTS = frozenset({PLAN_TASK_COMPLETED_TEXT, PLAN_CREATED_TEXT})
+
 
 def diagnostics_enabled() -> bool:
     return os.getenv("AION_TURN_DIAGNOSTICS", "0").strip().lower() in (
@@ -274,12 +292,16 @@ def classify_turn_outcome(
             code = "reasoning_budget_no_answer"
         else:
             code = "reasoning_only_no_answer"
+    elif final_len == 0 and stop_reason == "plan_task_completed":
+        # Plan-execution task turn interrupted right after mark_task_completed.
+        # Checked before "plan_created": marking a task re-emits
+        # orchestration_plan_pending (sidebar refresh), which bumps
+        # plan_intercepts and would otherwise yield the "plan created" text.
+        code = "plan_task_completed"
+        suggested_final_text = PLAN_TASK_COMPLETED_TEXT
     elif final_len == 0 and plan_intercepts > 0 and tool_calls_count > 0:
         code = "plan_created"
-        suggested_final_text = (
-            "I created the execution plan in the **Plan** sidebar. "
-            "Review the tasks, edit if needed, and approve to start execution."
-        )
+        suggested_final_text = PLAN_CREATED_TEXT
     elif final_len == 0 and pii_review_intercepts > 0:
         code = "pii_review_created"
     elif final_len == 0 and pii_replacements_intercepts > 0:
@@ -296,7 +318,11 @@ def classify_turn_outcome(
         code = "persisted_no_visible_text"
     elif final_len == 0:
         code = "empty_final"
-    elif stop_reason not in ("completed", ""):
+    # "plan_task_completed" is the normal end of a plan task turn that wrote
+    # some text before marking the task: not an anomalous stop.
+    # "plan_completed" is the normal end of the plan-closing turn
+    # (complete_execution_plan).
+    elif stop_reason not in ("completed", "", "plan_task_completed", "plan_completed"):
         code = f"stopped_{stop_reason}"
 
     ctx_total = (context_stats or {}).get("total")
@@ -317,6 +343,8 @@ def classify_turn_outcome(
     if (
         code != "ok"
         and code != "plan_created"
+        # Expected end of a plan task turn: not a failure to warn about.
+        and code != "plan_task_completed"
         and code != "pii_review_created"
         and code != "pii_replacements_applied"
     ):

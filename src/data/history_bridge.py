@@ -12,6 +12,7 @@ Transcript contract (write → store → read):
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from datetime import datetime, timezone
@@ -394,6 +395,75 @@ class UnifiedHistoryBridge:
                 {"tj": timeline_json, "mid": message_id},
             )
             await session.commit()
+
+    async def append_message_text(
+        self,
+        session_id: str,
+        message_id: str,
+        text_to_append: str,
+        *,
+        replaceable_texts: frozenset[str] = frozenset(),
+    ) -> bool:
+        """Append a markdown answer to an existing message (content + timeline).
+
+        Used by the plan execution handler to write the final plan summary into
+        the last task's assistant message, whose turn ends on
+        ``mark_task_completed`` and often has no real text. Bodies listed in
+        ``replaceable_texts`` (fallback placeholders) are dropped instead of
+        kept, both from ``content`` and from the timeline text segments, so the
+        chat does not show the placeholder above the summary.
+
+        The timeline gets a trailing ``text`` segment because the chat-ui renders
+        the timeline, not ``content``, when one is present.
+        Returns False when the message does not exist in ``session_id``.
+        """
+        addition = (text_to_append or "").strip()
+        if not addition:
+            return False
+        placeholders = {t.strip() for t in replaceable_texts if t.strip()}
+        async with get_async_session_maker()() as session:
+            await self._ensure()
+            row = await fetch_message_by_id_for_conversation(
+                session, message_id, session_id
+            )
+            if row is None:
+                return False
+
+            # Content: keep the real task output, drop a bare placeholder.
+            existing = (row.content or "").strip()
+            if existing in placeholders:
+                existing = ""
+            row.content = f"{existing}\n\n{addition}" if existing else addition
+
+            # Timeline: remove placeholder text segments, then append the answer.
+            segments: List[Dict[str, Any]] = []
+            raw_tl = (row.timeline_json or "").strip()
+            if raw_tl:
+                try:
+                    parsed = json.loads(raw_tl)
+                    if isinstance(parsed, list):
+                        segments = [s for s in parsed if isinstance(s, dict)]
+                except (TypeError, ValueError):
+                    segments = []
+            segments = [
+                s
+                for s in segments
+                if not (
+                    s.get("kind") == "text"
+                    and str(s.get("content") or "").strip() in placeholders
+                )
+            ]
+            segments.append(
+                {
+                    "kind": "text",
+                    "id": f"text_{len(segments)}",
+                    "content": addition,
+                }
+            )
+            row.timeline_json = json.dumps(segments, ensure_ascii=False)
+            session.add(row)
+            await session.commit()
+            return True
 
     async def upsert_message_content(
         self,
