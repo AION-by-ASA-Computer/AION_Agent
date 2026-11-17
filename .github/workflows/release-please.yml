@@ -65,3 +65,38 @@ jobs:
           uv pip install -r requirements.txt
           uv run python scripts/export_openapi.py --full openapi.json
           gh release upload "$TAG" openapi.json --clobber
+
+  # Signed-Releases (OpenSSF Scorecard): attach a keyless cosign signature to the release.
+  # Scorecard looks for release assets ending in .sig/.asc/.sigstore/.sigstore.json; the
+  # bundle holds the signature + Fulcio certificate + Rekor entry, tied to this workflow's
+  # OIDC identity, so consumers can verify with `cosign verify-blob` (no long-lived keys).
+  sign-release:
+    name: Sign release source archive
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # upload the signed assets to the release
+      id-token: write   # OIDC token for Sigstore keyless signing
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+        with:
+          ref: ${{ needs.release-please.outputs.tag_name }}
+          submodules: false
+          persist-credentials: false
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+
+      - name: Build source archive, sign it and upload both
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.release-please.outputs.tag_name }}
+        run: |
+          # Deterministic archive of the tagged tree (git archive output is reproducible).
+          ARCHIVE="aion-agent-${TAG}.tar.gz"
+          git archive --format=tar.gz --prefix="aion-agent-${TAG}/" -o "$ARCHIVE" "$TAG"
+          # Keyless signing; --bundle writes signature + certificate + transparency proof.
+          cosign sign-blob --yes --bundle "${ARCHIVE}.sigstore.json" "$ARCHIVE"
+          gh release upload "$TAG" "$ARCHIVE" "${ARCHIVE}.sigstore.json" --clobber
