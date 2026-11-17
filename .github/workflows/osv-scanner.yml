@@ -24,7 +24,7 @@ jobs:
       contents: read
       actions: read
       security-events: write
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@8ac9e5ce44cc7178e0e04229a91bdcc003166e57 # main (export-results=false)
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@d3c1414ded37de590f207572e37a7d180f1d0ef7 # main (export-results=false)
     with:
       export-results: false
       # Do not resolve transitive dependencies: requirements*.txt use open-ended
@@ -45,7 +45,7 @@ jobs:
       contents: read
       actions: read
       security-events: write
-    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@8ac9e5ce44cc7178e0e04229a91bdcc003166e57 # main (export-results=false)
+    uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@d3c1414ded37de590f207572e37a7d180f1d0ef7 # main (export-results=false)
     with:
       upload-sarif: false
       export-results: false
