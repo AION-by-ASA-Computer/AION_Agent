@@ -5,6 +5,23 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.1](https://github.com/AION-by-ASA-Computer/AION_Agents/compare/v1.7.0...v1.7.1) (2026-11-17)
+
+
+### Bug Fixes
+
+* **deps,ci:** clear Scorecard false positives and sign releases ([c43e039](https://github.com/AION-by-ASA-Computer/AION_Agents/commit/c43e0398d6ce29b075343b11e857ee688c0df918))
+* **deps:** bump pypdf and opentelemetry to clear OSV findings ([f9285eb](https://github.com/AION-by-ASA-Computer/AION_Agents/commit/f9285ebc264d599cf77ce5b54f6507aba11b9307))
+* **deps:** bump pypdf to 6.21.4 and opentelemetry to 1.45.2 (OSV) ([719b644](https://github.com/AION-by-ASA-Computer/AION_Agents/commit/719b644afb33e0efa5a4a0e7befc78509270fa65))
+* **deps:** raise mcp/fastmcp floors and reorder bounds for Scorecard osv-scanner ([6ef3848](https://github.com/AION-by-ASA-Computer/AION_Agents/commit/6ef3848022401c1cbf7f4999457bd93606024b53))
+
+
+### Documentation
+
+* **readme:** update Chat UI and Admin UI screenshots ([7821ca5](https://github.com/AION-by-ASA-Computer/AION_Agents/commit/7821ca50392c013d3da6be2b1e7fd9a69d4ed191))
+* rename AION Agent to AION Agents in user-facing text ([6583e8f](https://github.com/AION-by-ASA-Computer/AION_Agents/commit/6583e8fe19fded645b90d31845f1bb004f367f76))
+* rename product title from AION Agent to AION Agents ([1041459](https://github.com/AION-by-ASA-Computer/AION_Agents/commit/10414592874d9f7f5532950f82803a0fb6256828))
+
 ## [1.7.0](https://github.com/AION-by-ASA-Computer/AION_Agent/compare/v1.6.2...v1.7.0) (2026-11-17)
 
 
