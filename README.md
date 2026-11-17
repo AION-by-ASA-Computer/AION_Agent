@@ -1,4 +1,4 @@
-# AION Agent
+# AION Agents
 
 Self-hosted AI agent platform with MCP tool integration, multi-level memory (STM/LTM),
 YAML profiles, skills, and Plan Mode for structured multi-step work.
@@ -20,7 +20,7 @@ YAML profiles, skills, and Plan Mode for structured multi-step work.
 
 **Commercial site:** [https://aion-asa.com](https://aion-asa.com) · **Docs:** [docs/](docs/)
 
-AION Agent is a self-hosted, enterprise-grade platform for building and running truly sovereign AI. Design custom agent profiles, extend capabilities through modular skills and native MCP tool integration, and share memory seamlessly across teams — all while keeping fully autonomous agents isolated at the organizational level. Built for security, control, and scale, AION Agent puts your AI infrastructure entirely in your hands.
+AION Agents is a self-hosted, enterprise-grade platform for building and running truly sovereign AI. Design custom agent profiles, extend capabilities through modular skills and native MCP tool integration, and share memory seamlessly across teams — all while keeping fully autonomous agents isolated at the organizational level. Built for security, control, and scale, AION Agents puts your AI infrastructure entirely in your hands.
 
 ## Screenshots
 
@@ -81,7 +81,7 @@ Details: [docs/deployment/docker.md](docs/deployment/docker.md)
 
 ### Pre-built images (GHCR)
 
-You can run AION Agent using a standalone one-liner installer that downloads the pre-built GHCR compose stack without cloning the repository.
+You can run AION Agents using a standalone one-liner installer that downloads the pre-built GHCR compose stack without cloning the repository.
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/AION-by-ASA-Computer/AION_Agent/main/scripts/install.sh | bash
@@ -156,7 +156,7 @@ Assistant onboarding: [AGENTS.md](AGENTS.md), [CLAUDE.md](CLAUDE.md).
 
 ## Setup
 
-After successfully booting the AION Agent codebase (either using Docker or through Local Development), you MUST perform the initial configuration using the interactive [First Setup Wizard](admin-ui/app/first-setup/page.tsx) in the Admin Panel:
+After successfully booting the AION Agents codebase (either using Docker or through Local Development), you MUST perform the initial configuration using the interactive [First Setup Wizard](admin-ui/app/first-setup/page.tsx) in the Admin Panel:
 
 1. **Access the Admin Panel**: Open your browser and navigate to the `/admin` path (e.g., `http://localhost/admin` or `http://localhost:3870` in dev).
 2. **Log In**: Authenticate using the default credentials:
@@ -235,7 +235,7 @@ Report vulnerabilities privately — [SECURITY.md](SECURITY.md).
 
 ## Disclaimer
 
-**AION Agent is under active development.** APIs, configuration, and behavior may change between releases without prior notice. The exception is the routes listed under [API contract and deprecation](docs/api-and-runtime/rest-api.md#api-contract-and-deprecation): changes to them are additive, and removals follow the deprecation rule documented there.
+**AION Agents is under active development.** APIs, configuration, and behavior may change between releases without prior notice. The exception is the routes listed under [API contract and deprecation](docs/api-and-runtime/rest-api.md#api-contract-and-deprecation): changes to them are additive, and removals follow the deprecation rule documented there.
 
 The software is provided **“as is”**, without warranty of any kind. AION / ASA Computer **assumes no liability** for damages, data loss, security incidents, or operational issues arising from the use of this project in any environment (including production).
 

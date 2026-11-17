@@ -21,7 +21,7 @@ We aim to acknowledge reports within a few business days.
 
 ## Scope notes
 
-AION Agent ships with **password auth** for chat and admin surfaces, **JWT** session tokens, and optional **multi-tenant** Docker deployment. Default development credentials (`admin` / `admin`) must be changed before any production exposure.
+AION Agents ships with **password auth** for chat and admin surfaces, **JWT** session tokens, and optional **multi-tenant** Docker deployment. Default development credentials (`admin` / `admin`) must be changed before any production exposure.
 
 Before publishing or deploying:
 

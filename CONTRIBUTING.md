@@ -1,4 +1,4 @@
-# Contributing to AION Agent
+# Contributing to AION Agents
 
 Thank you for contributing. This is the active repository:
 
