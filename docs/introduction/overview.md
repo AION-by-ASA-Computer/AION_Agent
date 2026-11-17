@@ -8,7 +8,7 @@ description: Purpose of the documentation and connection with the AION site.
 
 **AION · ASA:** [https://aion-asa.com](https://aion-asa.com)
 
-This documentation describes the **AION Agent** repository: FastAPI API, Haystack pipeline, **MCP** integration, memory (STM/LTM), **Chat UI** client (Next.js), **admin-ui** dashboard (Next.js) and optional learning features (“Hermes”).
+This documentation describes the **AION Agents** repository: FastAPI API, Haystack pipeline, **MCP** integration, memory (STM/LTM), **Chat UI** client (Next.js), **admin-ui** dashboard (Next.js) and optional learning features (“Hermes”).
 
 ## How to read the doc
 

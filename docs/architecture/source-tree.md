@@ -12,7 +12,7 @@ This section explains **why** the code is organized into these folders, describi
 
 ### Standard vs Local Structure (`_std` sync)
 
-To ensure maximum configuration flexibility and process isolation without polluting the Git repository, AION Agent uses a pattern of splitting sensitive folders for local environment and runtime:
+To ensure maximum configuration flexibility and process isolation without polluting the Git repository, AION Agents uses a pattern of splitting sensitive folders for local environment and runtime:
 
 - **`config_std/`** and **`mcp_servers_std/`**: They are the official reference folders, tracked by Git. They contain default templates for configurations, agent profiles, skills, and built-in MCP servers.
 - **`config/`** and **`mcp_servers/`**: They are the active directories at runtime, completely ignored by Git (`.gitignore`). They are synchronized starting from their respective standard templates using the scripts:

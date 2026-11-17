@@ -1,4 +1,4 @@
-# AION Agent — Chat UI
+# AION Agents — Chat UI
 
 Next.js frontend client for the AION AI Agent.
 
