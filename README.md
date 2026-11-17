@@ -1,4 +1,4 @@
-# AION Agent
+# AION Agents
 
 Self-hosted AI agent platform with MCP tool integration, multi-level memory (STM/LTM),
 YAML profiles, skills, and Plan Mode for structured multi-step work.
