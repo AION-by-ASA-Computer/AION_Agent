@@ -30,7 +30,11 @@ jobs:
           persist-credentials: false
 
       - name: Run OpenSSF Scorecard
-        uses: ossf/scorecard-action@2d1146689b8cda280b9bc96326124645441f03bc # v2.4.4
+        # Pinned to v2.4.3: v2.4.4 (Scorecard v5.5.0) hangs in the Vulnerabilities check,
+        # which runs OSV-Scanner with PyPI transitive resolution on every requirements
+        # file without hashes (same cause as our slow OSV job). See ossf/scorecard#5234.
+        # Revisit when a newer release is confirmed fixed.
+        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
         with:
           results_file: results.sarif
           results_format: sarif
