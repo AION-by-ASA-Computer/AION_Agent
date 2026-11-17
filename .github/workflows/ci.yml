@@ -152,10 +152,29 @@ jobs:
           exit-code: "1"
           severity: CRITICAL,HIGH
 
-  docker-build-checks:
-    name: Test Docker Builds
+  # One job per image, run in parallel: wall time is the slowest image instead
+  # of the sum of all six. Each image has its own GHA cache scope; with the
+  # default shared scope the builds overwrote each other's cache (mode=max).
+  docker-build:
+    name: Docker Build (${{ matrix.image }})
     runs-on: ubuntu-latest
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - image: backend
+            dockerfile: docker/Dockerfile.backend
+          - image: chat-ui
+            dockerfile: docker/Dockerfile.chat-ui
+          - image: admin-ui
+            dockerfile: docker/Dockerfile.admin-ui
+          - image: website
+            dockerfile: docker/Dockerfile.website
+          - image: sandbox
+            dockerfile: docker/Dockerfile.sandbox
+          - image: updater
+            dockerfile: docker/Dockerfile.updater
     steps:
       - name: Checkout Repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -170,6 +189,8 @@ jobs:
         with:
           enable-cache: true
 
+      # Kept for every image (takes <20s): the Dockerfiles build from the
+      # repository files this step generates.
       - name: Sync config before image build
         run: |
           uv venv .venv-ci
@@ -177,62 +198,29 @@ jobs:
           uv pip install -r requirements.txt
           uv run python scripts/setup_core.py --non-interactive --skip-promo-playwright
 
-      - name: Build Backend Image
+      - name: Build ${{ matrix.image }} image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
           context: .
-          file: docker/Dockerfile.backend
+          file: ${{ matrix.dockerfile }}
           push: false
-          tags: aion-backend:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          tags: aion-${{ matrix.image }}:ci
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
-      - name: Build Chat UI Image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        with:
-          context: .
-          file: docker/Dockerfile.chat-ui
-          push: false
-          tags: aion-chat-ui:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build Admin UI Image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        with:
-          context: .
-          file: docker/Dockerfile.admin-ui
-          push: false
-          tags: aion-admin-ui:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build Website Image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        with:
-          context: .
-          file: docker/Dockerfile.website
-          push: false
-          tags: aion-website:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build Sandbox Image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        with:
-          context: .
-          file: docker/Dockerfile.sandbox
-          push: false
-          tags: aion-sandbox:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Build Updater Image
-        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
-        with:
-          context: .
-          file: docker/Dockerfile.updater
-          push: false
-          tags: aion-updater:ci
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+  # Aggregator keeping the required status check name "Test Docker Builds"
+  # (see .github/BRANCH_PROTECTION.md): branch protection cannot reference the
+  # per-image matrix jobs, and a skipped/failed matrix must fail this check.
+  docker-build-checks:
+    name: Test Docker Builds
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    needs: docker-build
+    if: ${{ always() }}
+    steps:
+      - name: Require all image builds to succeed
+        env:
+          BUILD_RESULT: ${{ needs.docker-build.result }}
+        run: |
+          echo "docker-build matrix result: ${BUILD_RESULT}"
+          [ "${BUILD_RESULT}" = "success" ]
