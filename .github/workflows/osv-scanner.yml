@@ -27,6 +27,14 @@ jobs:
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable-pr.yml@8ac9e5ce44cc7178e0e04229a91bdcc003166e57 # main (export-results=false)
     with:
       export-results: false
+      # Do not resolve transitive dependencies: requirements*.txt use open-ended
+      # ">=" ranges, and the pip-style resolution runs for ~50 minutes and then
+      # aborts ("too many iterations"), failing the job. Only the packages
+      # listed in the files are scanned.
+      scan-args: |-
+        --no-resolve
+        -r
+        ./
 
   # Full scan on main / weekly — logs + fail-on-vuln; no SARIF upload (avoids a
   # second Code Scanning config that PRs cannot satisfy).
@@ -41,3 +49,11 @@ jobs:
     with:
       upload-sarif: false
       export-results: false
+      # Do not resolve transitive dependencies: requirements*.txt use open-ended
+      # ">=" ranges, and the pip-style resolution runs for ~50 minutes and then
+      # aborts ("too many iterations"), failing the job. Only the packages
+      # listed in the files are scanned.
+      scan-args: |-
+        --no-resolve
+        -r
+        ./
