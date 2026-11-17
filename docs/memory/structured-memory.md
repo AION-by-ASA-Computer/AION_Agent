@@ -6,7 +6,7 @@ description: Long-term semantic memory architecture based on Projects, Mnemos no
 
 # Long-Term Memory (LTM) and Projects
 
-This document describes how the structured **Long-Term Memory (LTM)** works in AION Agent, how it integrates with the concept of **Project**, and how data is stored and extracted using **Mnemos**.
+This document describes how the structured **Long-Term Memory (LTM)** works in AION Agents, how it integrates with the concept of **Project**, and how data is stored and extracted using **Mnemos**.
 
 ---
 

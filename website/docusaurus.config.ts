@@ -16,7 +16,7 @@ const _buRaw = (process.env.DOCUSAURUS_BASE_URL ?? '').trim();
 const baseUrl = _buRaw === '' ? '/' : (_buRaw.endsWith('/') ? _buRaw : `${_buRaw}/`);
 
 const config: Config = {
-  title: 'AION Agent',
+  title: 'AION Agents',
   tagline: 'Technical documentation: architecture, MCP, memory, and client integration.',
   favicon: 'img/favicon.png',
 
@@ -83,7 +83,7 @@ const config: Config = {
     navbar: {
       title: 'Documentation',
       logo: {
-        alt: 'AION Agent',
+        alt: 'AION Agents',
         src: 'img/aion-logo-light.png',
         srcDark: 'img/aion-logo-dark.svg',
         height: 32,

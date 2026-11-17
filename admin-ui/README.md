@@ -1,6 +1,6 @@
 # AION Admin UI (Next.js)
 
-Interfaccia amministrativa **ufficiale** per AION Agent. La vecchia pagina statica in `static/admin/` è deprecata (su `/admin/dashboard` c’è solo un avviso).
+Interfaccia amministrativa **ufficiale** per AION Agents. La vecchia pagina statica in `static/admin/` è deprecata (su `/admin/dashboard` c’è solo un avviso).
 
 ## Requisiti
 

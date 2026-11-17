@@ -1,12 +1,12 @@
 ---
 sidebar_position: 1
 title: Architectural overview
-description: End-to-end flow and main modules of AION Agent.
+description: End-to-end flow and main modules of AION Agents.
 ---
 
 # Architectural overview
 
-AION Agent exposes an HTTP API (FastAPI) that for each user message executes the following end-to-end flow:
+AION Agents exposes an HTTP API (FastAPI) that for each user message executes the following end-to-end flow:
 
 1. **Profile and System Prompt Resolution**: Resolves the **agent profile** loading the corresponding YAML file. Standard profiles reside in `config/profiles/*.yaml` (synchronized at startup starting from `config_std/profiles/`), while custom overwritable profiles can optionally reside in `AION_PROFILES_WRITE_DIR`. Constructs the **system prompt** including the instructions of the profile, the MCP servers and references to the enabled skills (in `full` or `index` mode depending on `AION_SKILL_SYSTEM_PROMPT_MODE`). If `AION_SOUL_MEMORY_USER_SPLIT=1` is enabled, it also dynamically integrates the soul (*soul*), the operational memory (*memory*) and the preferences of the user (*user*).
 2. **MCP Server Initialization**: Starts or reuses the **MCP servers** based on the stdio protocol configured for the profile. If `AION_MCP_POOL=1` is active (enabled by default), the connections remain persistent and are kept in a dedicated pool per chat session to avoid the overhead of starting new subprocesses at each turn.

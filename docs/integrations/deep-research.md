@@ -6,7 +6,7 @@ description: IterResearch-style deep web research with HTML reports and Deep Res
 
 # Deep Research Integration
 
-AION Agent includes a native **Deep Research** module, ported from the [Odysseus](https://github.com/) IterResearch loop under Apache 2.0 license (see [DeepResearch-Apache-2.0.txt](licenses/DeepResearch-Apache-2.0.txt)). 
+AION Agents includes a native **Deep Research** module, ported from the [Odysseus](https://github.com/) IterResearch loop under Apache 2.0 license (see [DeepResearch-Apache-2.0.txt](licenses/DeepResearch-Apache-2.0.txt)). 
 
 Instead of generating quick, single-turn chat answers, this module executes an autonomous, multi-step research loop: **Plan $\rightarrow$ Search $\rightarrow$ Extract $\rightarrow$ Synthesize $\rightarrow$ Stop**. It streams progress in real time via Server-Sent Events (SSE) and persists results as self-contained HTML reports with advanced layout options.
 

@@ -6,7 +6,7 @@ description: Three-pillar observability stack (Traces, Metrics, Logs) with OTLP 
 
 # Observability & Telemetry
 
-AION Agent V3 integrates a complete native observability stack, compatible with OpenTelemetry standards, designed for advanced monitoring of LLM agents in production environments.
+AION Agents V3 integrates a complete native observability stack, compatible with OpenTelemetry standards, designed for advanced monitoring of LLM agents in production environments.
 
 ## Architecture Overview
 
@@ -14,7 +14,7 @@ AION's observability is structured around **three pillars** — Traces, Metrics,
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    AION Agent Runtime                        │
+│                    AION Agents Runtime                        │
 │                                                             │
 │  ┌──────────┐   ┌──────────┐   ┌──────────┐               │
 │  │  Traces  │   │ Metrics  │   │   Logs   │               │
@@ -182,7 +182,7 @@ Metrics are emitted at runtime via hooks registered in `src/observability/hooks_
 
 ### Evaluation & Metrics Architecture (`/admin/metrics`)
 
-AION Agent includes a dedicated telemetry dashboard (`/admin/metrics`) and backend aggregator (`/admin/metrics/overview`) designed to operate seamlessly **both with a remote Prometheus server and in standalone/local environments without Prometheus**.
+AION Agents includes a dedicated telemetry dashboard (`/admin/metrics`) and backend aggregator (`/admin/metrics/overview`) designed to operate seamlessly **both with a remote Prometheus server and in standalone/local environments without Prometheus**.
 
 ```
                            ┌───────────────────────────────────────────────┐

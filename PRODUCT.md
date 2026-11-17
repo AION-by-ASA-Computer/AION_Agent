@@ -10,10 +10,10 @@ web
 Enterprise teams, technical leads, developers, and system administrators needing a self-hosted, sovereign AI agent platform. End users interact via the Chat UI for daily workflow execution and multi-step tasks; administrators manage profiles, skills, MCP servers, user permissions, and persistent memory via the Admin Panel.
 
 ## Product Purpose
-AION Agent is a self-hosted, enterprise-grade platform for building and running sovereign AI agents. It gives organizations total control over their AI infrastructure, data, and models, eliminating third-party lock-in while providing advanced agentic capabilities (MCP tools, multi-level STM/LTM memory, dynamic skills, and Plan Mode).
+AION Agents is a self-hosted, enterprise-grade platform for building and running sovereign AI agents. It gives organizations total control over their AI infrastructure, data, and models, eliminating third-party lock-in while providing advanced agentic capabilities (MCP tools, multi-level STM/LTM memory, dynamic skills, and Plan Mode).
 
 ## Positioning
-Unlike SaaS AI assistants and hosted APIs, AION Agent is fully self-hosted, sovereign, and privacy-first, running on private infrastructure (on-prem or private cloud) with native Model Context Protocol (MCP) support, isolated multi-tenant execution, YAML profile customizability, and multi-tier memory (STM/LTM with SQLite FTS5 search).
+Unlike SaaS AI assistants and hosted APIs, AION Agents is fully self-hosted, sovereign, and privacy-first, running on private infrastructure (on-prem or private cloud) with native Model Context Protocol (MCP) support, isolated multi-tenant execution, YAML profile customizability, and multi-tier memory (STM/LTM with SQLite FTS5 search).
 
 ## Operating Context
 - **Chat UI (`chat-ui/`)**: Next.js 16 web interface for streaming chat, plan docks, file attachments, and interactive agent collaboration.
@@ -33,7 +33,7 @@ Unlike SaaS AI assistants and hosted APIs, AION Agent is fully self-hosted, sove
 - **Localization (hard constraint)**: Both UIs ship in English, Italian, German, French, and Spanish (`*/lib/i18n/locales/*.json`). All five are required; every surface must tolerate longer strings (DE/FR) and never hardcode user-facing copy.
 
 ## Brand Commitments
-- **Name**: AION Agent (by ASA Computer)
+- **Name**: AION Agents (by ASA Computer)
 - **Design Philosophy**: High-density, professional, sovereign enterprise aesthetic with sleek dark/light theme support, low cognitive load, and clear status visibility for agent actions and tool calls.
 - **Website & Documentation**: [https://aion-asa.com](https://aion-asa.com) and local docs site.
 

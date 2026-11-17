@@ -1,12 +1,12 @@
 ---
 sidebar_position: 1
 title: REST API v1
-description: Official documentation of AION Agent v1 APIs for external clients.
+description: Official documentation of AION Agents v1 APIs for external clients.
 ---
 
 # REST API v1
 
-AION Agent exposes a suite of RESTful APIs under the `/v1` namespace designed to allow the integration of the agent into any application (web, mobile, backend-to-backend).
+AION Agents exposes a suite of RESTful APIs under the `/v1` namespace designed to allow the integration of the agent into any application (web, mobile, backend-to-backend).
 
 ---
 
