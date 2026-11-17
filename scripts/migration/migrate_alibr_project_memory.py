@@ -43,8 +43,8 @@ from src.runtime.mempalace_tool_scope import _LEGACY_WING_NAMES
 
 _ALIBR_MARKERS = re.compile(
     r"(?i)\b("
-    r"alibr|alibr_prod|pallet_monge|pallet_secchi|pallet_creati_automa|"
-    r"testate_ordini|dettagli_ordini|ordini_clienti|sscc|monge|"
+    r"alibr|alibr_prod|pallet_secchi|pallet_creati_automa|"
+    r"testate_ordini|dettagli_ordini|ordini_clienti|sscc|"
     r"local_postgresql\.alibr"
     r")\b"
 )
