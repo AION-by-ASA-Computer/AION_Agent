@@ -1,110 +1,116 @@
 ---
-title: Piano di solidificazione — Backend AION nativo
+title: Hardening plan — native AION backend
 sidebar_position: 21
-description: Piano operativo step-by-step per chiudere i gap di robustezza del backend AION nativo identificati in aion-vs-longrun-assessment.md.
+description: Step-by-step operational plan to close the robustness gaps of the native AION backend identified in aion-vs-longrun-assessment.md.
 ---
 
-# Piano di solidificazione — Backend AION nativo
+# Hardening plan — native AION backend
 
-> Documento di pianificazione. Nessuna modifica è stata applicata al codice.
-> Deriva da `[aion-vs-longrun-assessment.md](./aion-vs-longrun-assessment.md)`
-> §3.4 e §8.1. Ogni fase è pensata per essere implementata e testata in
-> isolamento, dietro feature flag dove ha senso, senza bloccare le altre.
+:::info Design note
+Phased implementation plan for hardening the native AION backend (non-destructive compaction, shared circuit breaker, offload cleanup, registry locking, observability). Status: largely implemented — `Message.archived_at`, `src/runtime/tool_circuit.py`, `cleanup_session_offloads()` and the per-session turn locks in `src/runtime/turn_compaction.py` are in the code, and Phase 8 is marked as implemented below; the "no changes applied" remark in the original note predates this.
+:::
 
-## Principi guida
+:::note
+Planning document. No changes have been applied to the code.
+It derives from [`aion-vs-longrun-assessment.md`](./aion-vs-longrun-assessment.md)
+§3.4 and §8.1. Each phase is designed to be implemented and tested in
+isolation, behind a feature flag where it makes sense, without blocking the others.
+:::
 
-1. **Ogni fase è indipendente e reversibile.** Nessuna fase richiede che le
-  altre siano già in produzione.
-2. **Feature flag first**: ogni comportamento nuovo nasce dietro una env var
-  con default che preserva il comportamento attuale, poi si attiva in
-   staging prima che in produzione.
-3. **Segui i pattern già presenti nel repo** invece di introdurne di nuovi:
-  il soft-delete che serve per la compattazione (Fase 1) replica
-   esattamente il pattern `archived_at` già usato per `Conversation`
-   (`src/api/v1/conversations.py:157-175`) — non è un pattern nuovo da
-   inventare.
-4. **Ordine consigliato**: Fase 0 → Fase 1 → Fase 2 → Fase 3 → Fase 4 →
-  Fase 5 → Fase 6 → Fase 7. Le Fasi 3 e 4 possono essere invertite tra loro
-   senza problemi; tutte le altre hanno dipendenze logiche indicate sotto.
+## Guiding principles
+
+1. **Each phase is independent and reversible.** No phase requires the
+   others to already be in production.
+2. **Feature flag first**: every new behaviour starts behind an env var
+   whose default preserves the current behaviour, and is then enabled in
+   staging before production.
+3. **Follow the patterns already in the repo** instead of introducing new ones:
+   the soft-delete needed for compaction (Phase 1) replicates
+   exactly the `archived_at` pattern already used for `Conversation`
+   (`src/api/v1/conversations.py:157-175`) — it is not a new pattern to
+   invent.
+4. **Recommended order**: Phase 0 → Phase 1 → Phase 2 → Phase 3 → Phase 4 →
+   Phase 5 → Phase 6 → Phase 7. Phases 3 and 4 can be swapped with each other
+   without problems; all the others have the logical dependencies indicated below.
 
 ---
 
 
 
-## Fase 0 — Fix rapidi (nessuna migrazione, rischio minimo)
+## Phase 0 — Quick fixes (no migration, minimal risk)
 
-**Obiettivo**: eliminare i due bug già confermati dai test prima di costruire
-altro sopra codice non affidabile.
+**Goal**: remove the two bugs already confirmed by the tests before building
+anything else on top of unreliable code.
 
-### 0.1 Fix del fingerprint di config Pi
+### 0.1 Fix the Pi config fingerprint
 
-- **File**: `[src/runtime/llm_limits.py](../../src/runtime/llm_limits.py)`
-- **Problema**: `pi_runtime_config_fingerprint()` (linee 65-72) non
-cambia quando si modifica `AION_CHAT_MAX_TOKENS` senza settare
-esplicitamente `AION_LONG_RUN_MAX_TOKENS`, perché `resolve_chat_max_tokens(long_run=True)`
-(linee 11-31) legge solo `settings.long_run_max_tokens` cache via
+- **File**: [`src/runtime/llm_limits.py`](../../src/runtime/llm_limits.py)
+- **Problem**: `pi_runtime_config_fingerprint()` (lines 65-72) does not
+change when `AION_CHAT_MAX_TOKENS` is modified without explicitly setting
+`AION_LONG_RUN_MAX_TOKENS`, because `resolve_chat_max_tokens(long_run=True)`
+(lines 11-31) only reads `settings.long_run_max_tokens`, cached via
 `get_settings()`.
-- **Passi**:
-  1. In `resolve_chat_max_tokens`, quando `long_run=True` e
-    `settings.long_run_max_tokens is None`, includere comunque il valore
-     effettivo di `settings.chat_max_tokens` usato come fallback nella parte
-     restituita al chiamante (non solo internamente).
-  2. In `pi_runtime_config_fingerprint()` (linee 65-72), calcolare l'hash a
-    partire dal **valore risolto finale** (quello che verrebbe realmente
-     usato per il turno), non dal solo campo `long_run_max_tokens` grezzo —
-     così qualunque input che cambia il risultato finale invalida il fingerprint.
-  3. Rilancia `src/test/test_llm_limits.py::test_pi_fingerprint_changes_with_max_tokens`
-    e verifica che passi.
-- **Verifica**: `python -m pytest src/test/test_llm_limits.py -v`
+- **Steps**:
+  1. In `resolve_chat_max_tokens`, when `long_run=True` and
+     `settings.long_run_max_tokens is None`, still include the effective
+     value of `settings.chat_max_tokens` used as fallback in the part
+     returned to the caller (not only internally).
+  2. In `pi_runtime_config_fingerprint()` (lines 65-72), compute the hash
+     from the **final resolved value** (the one that would actually be
+     used for the turn), not from the raw `long_run_max_tokens` field alone —
+     so that any input that changes the final result invalidates the fingerprint.
+  3. Re-run `src/test/test_llm_limits.py::test_pi_fingerprint_changes_with_max_tokens`
+     and check that it passes.
+- **Verification**: `python -m pytest src/test/test_llm_limits.py -v`
 
 
 
-### 0.2 Migrare le env var offload/ledger in `AionSettings`
+### 0.2 Move the offload/ledger env vars into `AionSettings`
 
-- **File**: `[src/settings.py](../../src/settings.py)`
-- **Problema**: `AION_TOOL_OFFLOAD_`* e `AION_TOOL_LEDGER_*` sono lette via
-`os.getenv` diretto in `tool_offload.py`/`tool_ledger.py`, mentre il resto
-della config passa da `AionSettings` (pydantic, `env_prefix="AION_"`,
-vedi `settings.py:23-28`).
-- **Passi**:
-  1. Aggiungere in `AionSettings` (accanto ai campi `tool_calls_max_per_turn`
-    etc., `settings.py:71-79`) i nuovi campi tipizzati:
-  2. In `tool_offload.py` e `tool_ledger.py`, sostituire le letture dirette
-    `os.getenv("AION_TOOL_OFFLOAD_ENABLED", ...)` con
-     `get_settings().tool_offload_enabled` (stesso pattern già usato altrove
-     nel modulo per altri parametri, se presente — altrimenti importare
-     `from src.settings import get_settings` come fanno gli altri moduli
-     `runtime/*`).
-  3. **Non rimuovere il fallback** `os.getenv` nei test se già usato per
-    override rapidi nei test — verificare che i test esistenti
-     (`test_tool_offload.py`, `test_tool_ledger.py`) continuino a passare
-     mockando `get_settings()` invece delle env var, oppure mantenere
-     compatibilità doppia (pydantic legge comunque le stesse env var per
-     via del prefix, quindi in pratica il comportamento nei test non
-     cambia se già usano `monkeypatch.setenv`).
-- **Verifica**: `python -m pytest src/test/test_tool_offload.py src/test/test_tool_ledger.py -v`
+- **File**: [`src/settings.py`](../../src/settings.py)
+- **Problem**: `AION_TOOL_OFFLOAD_*` and `AION_TOOL_LEDGER_*` are read via
+direct `os.getenv` in `tool_offload.py`/`tool_ledger.py`, while the rest
+of the config goes through `AionSettings` (pydantic, `env_prefix="AION_"`,
+see `settings.py:23-28`).
+- **Steps**:
+  1. Add to `AionSettings` (next to the `tool_calls_max_per_turn` fields
+     etc., `settings.py:71-79`) the new typed fields:
+  2. In `tool_offload.py` and `tool_ledger.py`, replace the direct reads
+     `os.getenv("AION_TOOL_OFFLOAD_ENABLED", ...)` with
+     `get_settings().tool_offload_enabled` (the same pattern already used
+     elsewhere in the module for other parameters, if present — otherwise import
+     `from src.settings import get_settings` as the other
+     `runtime/*` modules do).
+  3. **Do not remove the `os.getenv` fallback** in the tests if it is already used
+     for quick overrides in the tests — check that the existing tests
+     (`test_tool_offload.py`, `test_tool_ledger.py`) keep passing
+     by mocking `get_settings()` instead of the env vars, or keep
+     dual compatibility (pydantic reads the same env vars anyway because
+     of the prefix, so in practice the behaviour in the tests does not
+     change if they already use `monkeypatch.setenv`).
+- **Verification**: `python -m pytest src/test/test_tool_offload.py src/test/test_tool_ledger.py -v`
 
 ---
 
 
 
-## Fase 1 — Compattazione non distruttiva (priorità più alta)
+## Phase 1 — Non-destructive compaction (highest priority)
 
-**Obiettivo**: eliminare la causa radice del problema segnalato — la
-compattazione oggi esegue un `DELETE` SQL reale e irreversibile sui
-messaggi. Si sostituisce con soft-delete, seguendo esattamente il pattern
-già in uso per `Conversation.archived_at`.
+**Goal**: remove the root cause of the reported problem — compaction
+today performs a real, irreversible SQL `DELETE` on the
+messages. It is replaced with a soft-delete, following exactly the pattern
+already in use for `Conversation.archived_at`.
 
-### 1.1 Migrazione schema
+### 1.1 Schema migration
 
-- **Nuovo file**: `migrations/versions/<hash>_message_archived_at.py`
-(usa `alembic revision -m "message archived at"` per generare l'header
-corretto e il `down_revision` puntato all'ultima revision — verifica con
-`alembic heads` prima di crearlo, oggi sembra `m5n6o7p015_message_rating_feedback.py`
-ma va confermato al momento dell'implementazione).
-- **Passi** (modellati esattamente su `migrations/versions/f7a8b9c0d001_mcp_credential_mode.py`,
-che già usa il pattern "controlla colonne esistenti prima di aggiungere",
-utile per compatibilità SQLite/Postgres):
+- **New file**: `migrations/versions/<hash>_message_archived_at.py`
+(use `alembic revision -m "message archived at"` to generate the correct
+header and the `down_revision` pointing to the latest revision — check with
+`alembic heads` before creating it; today it seems to be `m5n6o7p015_message_rating_feedback.py`
+but this must be confirmed at implementation time).
+- **Steps** (modelled exactly on `migrations/versions/f7a8b9c0d001_mcp_credential_mode.py`,
+which already uses the "check existing columns before adding" pattern,
+useful for SQLite/Postgres compatibility):
   ```python
   def upgrade() -> None:
       bind = op.get_bind()
@@ -134,20 +140,20 @@ utile per compatibilità SQLite/Postgres):
       if "archived_at" in cols:
           op.drop_column("messages", "archived_at")
   ```
-- **Nota FTS5**: `Message` usa `fts_rowid` come PK autoincrement legata a
-un indice FTS5 esterno (vedi `src/data/models.py:112-114`). Verificare in
-`src/data/history_bridge.py` come viene sincronizzato l'indice FTS
-(probabilmente trigger SQLite o sync manuale) — i messaggi archiviati
-**devono restare** nell'indice FTS per continuare a essere trovabili da
-ricerca full-text storica, quindi questa migrazione non deve toccare la
-logica FTS, solo aggiungere le due colonne.
+- **FTS5 note**: `Message` uses `fts_rowid` as an autoincrement PK tied to
+an external FTS5 index (see `src/data/models.py:112-114`). Check in
+`src/data/history_bridge.py` how the FTS index is synchronized
+(probably SQLite triggers or manual sync) — archived messages
+**must remain** in the FTS index so they can still be found by historical
+full-text search, so this migration must not touch the
+FTS logic, only add the two columns.
 
 
 
-### 1.2 Modello ORM
+### 1.2 ORM model
 
-- **File**: `[src/data/models.py](../../src/data/models.py)` (linee 110-146)
-- **Passi**: aggiungere alla classe `Message`:
+- **File**: [`src/data/models.py`](../../src/data/models.py) (lines 110-146)
+- **Steps**: add to the `Message` class:
   ```python
   archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
   archived_reason: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
@@ -155,185 +161,185 @@ logica FTS, solo aggiungere le due colonne.
 
 
 
-### 1.3 `history_bridge.py` — sostituire il DELETE fisico
+### 1.3 `history_bridge.py` — replace the physical DELETE
 
-- **File**: `[src/data/history_bridge.py](../../src/data/history_bridge.py)`
-- **Passi**:
-  1. Aggiungere una nuova funzione accanto a `_delete_messages_and_children`
-    (linea 64):
-  2. **Non rimuovere** `_delete_messages_and_children` — resta utile per
-    path espliciti di cancellazione definitiva (es. GDPR / retention
-     policy futura), ma **smettere di chiamarla per la compattazione**.
-  3. Nei tre punti che oggi chiamano `_delete_messages_and_children` per
-    compattazione/pruning (linee 729, 861, 889 — dentro
-     `persist_stm_compaction` e la funzione di pruning STM), sostituire la
-     chiamata con `_archive_messages_and_children(session, session_id, pruned_ids, reason="mid_turn_compaction")`
-     (o `"stm_prune"` a seconda del contesto).
-  4. **Rimuovere/adattare** le chiamate a `_cleanup_orphan_steps_and_attachments`
-    nei punti dove ora si archivia invece di cancellare: gli step/attachment
-     dei messaggi archiviati non sono più "orfani" (il messaggio esiste
-     ancora), quindi quella funzione va invocata solo nei path che usano
-     ancora il delete fisico.
-
-
-
-### 1.4 Filtrare i messaggi archiviati da tutte le letture "attive"
-
-Questo è il passo con più superficie — `history_bridge.py` ha ~10 query
-`select(Message)...`. Ogni query che serve a costruire il **contesto attivo
-per l'LLM** o la **history mostrata in chat-ui** deve escludere i messaggi
-archiviati; le query che servono a **ricerca/audit/FTS** devono continuare a
-includerli.
-
-- **Passi**:
-  1. Individuare, per ognuna delle occorrenze elencate sotto, se è "contesto
-    LLM/chat attivo" (→ aggiungere `.where(Message.archived_at.is_(None))`)
-     o "ricerca/audit" (→ lasciare invariata):
-    - `history_bridge.py:54` (query generica — verificare uso a valle)
-    - `history_bridge.py:105` (join su `conversation_id`)
-    - `history_bridge.py:158`
-    - `history_bridge.py:521-523` (già ha un filtro `exclude_message_ids`
-    esplicito — buon posto per capire il pattern di filtro esistente e
-    riusarlo)
-    - `history_bridge.py:614`
-    - `history_bridge.py:676`
-    - `history_bridge.py:734` (`fetch_messages_for_compaction` — **questa
-    NON va filtrata**, deve poter rileggere anche messaggi già archiviati
-    in compattazioni precedenti se serve costruire un riassunto cumulativo)
-  2. In `[src/api/history.py](../../src/api/history.py)` e
-    `[src/api/v1/conversations.py](../../src/api/v1/conversations.py)`
-     (endpoint `get_conversation_messages`, linea 178 e successive),
-     aggiungere un parametro opzionale `include_archived: bool = Query(False)`
-     — di default la UI vede solo i messaggi attivi (comportamento identico
-     a oggi), ma un endpoint/parametro esplicito permette un futuro
-     "espandi cronologia compattata" senza nuove migrazioni.
+- **File**: [`src/data/history_bridge.py`](../../src/data/history_bridge.py)
+- **Steps**:
+  1. Add a new function next to `_delete_messages_and_children`
+     (line 64):
+  2. **Do not remove** `_delete_messages_and_children` — it remains useful for
+     explicit permanent-deletion paths (e.g. GDPR / a future retention
+     policy), but **stop calling it for compaction**.
+  3. In the three places that today call `_delete_messages_and_children` for
+     compaction/pruning (lines 729, 861, 889 — inside
+     `persist_stm_compaction` and the STM pruning function), replace the
+     call with `_archive_messages_and_children(session, session_id, pruned_ids, reason="mid_turn_compaction")`
+     (or `"stm_prune"` depending on the context).
+  4. **Remove/adapt** the calls to `_cleanup_orphan_steps_and_attachments`
+     in the places where messages are now archived instead of deleted: the steps/attachments
+     of archived messages are no longer "orphans" (the message still
+     exists), so that function must only be invoked in the paths that
+     still use physical deletion.
 
 
 
-### 1.5 Nessuna modifica al frontend in questa fase
+### 1.4 Filter archived messages out of all "active" reads
 
-Il comportamento visibile in chat-ui resta identico (il messaggio di
-compattazione con `format_compaction_block()` continua a comparire come
-oggi) — questa fase è puramente backend/dati. L'esposizione UI di
-"espandi cronologia" è discussa come estensione futura in **Fase 8**
-(fuori scope stretto del backend).
+This is the step with the largest surface — `history_bridge.py` has ~10
+`select(Message)...` queries. Every query used to build the **active context
+for the LLM** or the **history shown in chat-ui** must exclude archived
+messages; queries used for **search/audit/FTS** must keep
+including them.
 
-### 1.6 Test
+- **Steps**:
+  1. For each of the occurrences listed below, determine whether it is "LLM/active chat
+     context" (→ add `.where(Message.archived_at.is_(None))`)
+     or "search/audit" (→ leave unchanged):
+     - `history_bridge.py:54` (generic query — check downstream usage)
+     - `history_bridge.py:105` (join on `conversation_id`)
+     - `history_bridge.py:158`
+     - `history_bridge.py:521-523` (already has an explicit `exclude_message_ids`
+       filter — a good place to understand the existing filter pattern and
+       reuse it)
+     - `history_bridge.py:614`
+     - `history_bridge.py:676`
+     - `history_bridge.py:734` (`fetch_messages_for_compaction` — **this one
+       must NOT be filtered**, it must be able to re-read messages already archived
+       by previous compactions if a cumulative summary needs to be built)
+  2. In [`src/api/history.py`](../../src/api/history.py) and
+     [`src/api/v1/conversations.py`](../../src/api/v1/conversations.py)
+     (endpoint `get_conversation_messages`, line 178 onwards),
+     add an optional parameter `include_archived: bool = Query(False)`
+     — by default the UI only sees active messages (behaviour identical
+     to today), but an explicit endpoint/parameter allows a future
+     "expand compacted history" without new migrations.
 
-- Estendere/creare `src/test/test_history_bridge_compaction.py`:
-  - Verifica che dopo `persist_stm_compaction`, i messaggi pruned abbiano
-  `archived_at` valorizzato e **non siano stati eliminati dalla tabella**.
-  - Verifica che `get_conversation_messages(include_archived=False)` non li
-  restituisca, mentre `include_archived=True` sì.
-  - Verifica che `fetch_messages_for_compaction` continui a vederli (per
-  permettere riassunti cumulativi futuri).
-
----
 
 
+### 1.5 No frontend changes in this phase
 
-## Fase 2 — Collegare ledger/offload al ramo mid-turn sync
+The visible behaviour in chat-ui stays identical (the compaction
+message with `format_compaction_block()` keeps appearing as it does
+today) — this phase is purely backend/data. Exposing an
+"expand history" UI is discussed as a future extension in **Phase 8**
+(strictly outside the backend scope).
 
-**Dipende da**: nessuna (indipendente da Fase 1, ma va fatta prima che
-l'offload sia abilitato di default in produzione, altrimenti il gap
-descritto in `aion-vs-longrun-assessment.md` §3.1 resta aperto).
+### 1.6 Tests
 
-- **File**: `[src/runtime/turn_compaction.py](../../src/runtime/turn_compaction.py)`,
-funzione `_sync_compact_head_tail` (linee 701-750).
-- **Riferimento**: replicare cosa fa già `compact_memory_fallback` in
-`[src/runtime/compaction/policy.py](../../src/runtime/compaction/policy.py)`
-(linee 44-73) per il path v2.
-- **Passi**:
-  1. In `_sync_compact_head_tail`, prima di costruire il prompt di sintesi
-    per l'LLM, importare e chiamare (solo se abilitati):
-  2. Se `tool_ledger_enabled()`, appendere `render_ledger_table(session_id)`
-    al transcript passato al summarizer, nello stesso formato/posizione
-     usato in `compaction/policy.py:51-73` (blocco `<tool-trace>`).
-  3. Se ci sono path offloaded per la sessione, appendere un blocco
-    `<offloaded-results>` con `offload_paths_for_session(session_id)`,
-     identico a quanto fatto nel path v2 — così il riassunto generato
-     mid-turn conserva i pointer ai file offloaded invece di perderli.
-  4. Attenzione al **budget di token** del prompt di sintesi: sia
-    `render_ledger_table` che l'elenco path offloaded vanno troncati con lo
-     stesso criterio già usato in `pi_compaction.py:109` (cap caratteri) per
-     non far esplodere il costo della chiamata di sintesi.
-- **Test**: nuovo test in `src/test/test_turn_compaction.py` (se non esiste,
-crearlo) che: offload un risultato tool grande → forza compattazione
-mid-turn sync → verifica che il messaggio di summary risultante contenga
-il riferimento al path offloaded.
+- Extend/create `src/test/test_history_bridge_compaction.py`:
+  - Check that after `persist_stm_compaction` the pruned messages have
+    `archived_at` set and **have not been deleted from the table**.
+  - Check that `get_conversation_messages(include_archived=False)` does not
+    return them, while `include_archived=True` does.
+  - Check that `fetch_messages_for_compaction` still sees them (to
+    allow future cumulative summaries).
 
 ---
 
 
 
-## Fase 3 — Circuit breaker nativo per tool falliti ripetutamente
+## Phase 2 — Wire ledger/offload into the mid-turn sync branch
 
-**Dipende da**: nessuna.
+**Depends on**: none (independent of Phase 1, but must be done before
+offload is enabled by default in production, otherwise the gap
+described in `aion-vs-longrun-assessment.md` §3.1 stays open).
 
-**Obiettivo**: oggi solo il path Pi ha un breaker
-(`src/runtime/pi_runtime/tool_circuit.py`) contro loop di retry su errori
-identici (`missing_arguments`, `tool_args_truncated`, generati da
-`prepare_mcp_tool_arguments` in `src/runtime/mcp_tool_args.py:196` e usati
-da entrambi i path). Il path nativo (`src/main.py:306-310`) non ha alcuna
-protezione equivalente.
+- **File**: [`src/runtime/turn_compaction.py`](../../src/runtime/turn_compaction.py),
+function `_sync_compact_head_tail` (lines 701-750).
+- **Reference**: replicate what `compact_memory_fallback` already does in
+[`src/runtime/compaction/policy.py`](../../src/runtime/compaction/policy.py)
+(lines 44-73) for the v2 path.
+- **Steps**:
+  1. In `_sync_compact_head_tail`, before building the summarization prompt
+     for the LLM, import and call (only if enabled):
+  2. If `tool_ledger_enabled()`, append `render_ledger_table(session_id)`
+     to the transcript passed to the summarizer, in the same format/position
+     used in `compaction/policy.py:51-73` (`<tool-trace>` block).
+  3. If there are offloaded paths for the session, append an
+     `<offloaded-results>` block with `offload_paths_for_session(session_id)`,
+     identical to what is done in the v2 path — so the summary generated
+     mid-turn keeps the pointers to the offloaded files instead of losing them.
+  4. Watch the **token budget** of the summarization prompt: both
+     `render_ledger_table` and the list of offloaded paths must be truncated with the
+     same criterion already used in `pi_compaction.py:109` (character cap) so as
+     not to blow up the cost of the summarization call.
+- **Test**: new test in `src/test/test_turn_compaction.py` (create it if it
+does not exist) that: offloads a large tool result → forces a mid-turn sync
+compaction → checks that the resulting summary message contains
+the reference to the offloaded path.
 
-### 3.1 Scelta di design: modulo condiviso, non duplicato
+---
 
-Invece di scrivere un secondo circuit breaker copiato in
-`src/runtime/`, **spostare** `tool_circuit.py` da
-`src/runtime/pi_runtime/tool_circuit.py` a `src/runtime/tool_circuit.py`
-(livello condiviso, come `tool_offload.py`/`tool_ledger.py`), e farlo
-usare da entrambi i path. Questo evita la duplicazione futura ed è
-coerente con come è già organizzato il resto dell'infrastruttura
-offload/ledger (§3.2 di `aion-vs-longrun-assessment.md` la definisce già
-"genuinamente condivisa" per gli altri due moduli).
 
-- **Passi**:
+
+## Phase 3 — Native circuit breaker for repeatedly failing tools
+
+**Depends on**: none.
+
+**Goal**: today only the Pi path has a breaker
+(`src/runtime/pi_runtime/tool_circuit.py`) against retry loops on identical
+errors (`missing_arguments`, `tool_args_truncated`, generated by
+`prepare_mcp_tool_arguments` in `src/runtime/mcp_tool_args.py:196` and used
+by both paths). The native path (`src/main.py:306-310`) has no
+equivalent protection.
+
+### 3.1 Design choice: shared module, not duplicated
+
+Instead of writing a second circuit breaker copied into
+`src/runtime/`, **move** `tool_circuit.py` from
+`src/runtime/pi_runtime/tool_circuit.py` to `src/runtime/tool_circuit.py`
+(shared level, like `tool_offload.py`/`tool_ledger.py`), and have it
+used by both paths. This avoids future duplication and is
+consistent with how the rest of the offload/ledger infrastructure is already
+organized (§3.2 of `aion-vs-longrun-assessment.md` already calls it
+"genuinely shared" for the other two modules).
+
+- **Steps**:
   1. `git mv src/runtime/pi_runtime/tool_circuit.py src/runtime/tool_circuit.py`
-    (nessuna modifica al contenuto in questo step).
-  2. Aggiornare l'unico import esistente in
-    `src/runtime/pi_runtime/tool_invoke.py:76-82` (o dove il modulo è
-     importato) per puntare al nuovo percorso `src.runtime.tool_circuit`.
-  3. In `src/main.py`, subito dopo la chiamata a `prepare_mcp_tool_arguments`
-    (linee 306-310), aggiungere lo stesso pattern già usato lato Pi in
+     (no change to the content in this step).
+  2. Update the only existing import in
+     `src/runtime/pi_runtime/tool_invoke.py:76-82` (or wherever the module is
+     imported) to point to the new path `src.runtime.tool_circuit`.
+  3. In `src/main.py`, right after the call to `prepare_mcp_tool_arguments`
+     (lines 306-310), add the same pattern already used on the Pi side in
      `tool_invoke.py`:
-  4. Verificare che `session_id` sia già disponibile in quello scope di
-    `src/main.py` (probabile, dato che il tool wrapper opera già per
-     sessione) — se non lo è, propagarlo dal chiamante.
-  5. Agganciare `reset_session_circuit(session_id)` alla fine di un turno
-    nativo completato con successo (dove oggi si fa già cleanup di stato
-     per-turno — cercare il punto analogo a `clear_context()` usato lato Pi,
-     `pi_turn_runner.py:361`, e replicarlo nel path nativo).
-- **Nota**: questo cambiamento risolve *anche* uno dei gap segnalati per Pi
-in `aion-vs-longrun-assessment.md` §4.5.3 (reset non per-sessione) **se**
-fatto bene — assicurarsi che `reset_session_circuit` venga chiamato in
-entrambi i path a fine turno, non solo nel nativo.
-- **Test**: spostare/estendere i test esistenti (verificare se
-`src/test/test_pi_tool_circuit.py` testa solo import da `pi_runtime` —
-aggiornare il path di import) e aggiungere un test nativo che verifichi
-che dopo N fallimenti identici (`AION_TOOL_CIRCUIT_BREAKER_MAX`, rinominare
-l'env var da `AION_PI_TOOL_CIRCUIT_BREAKER_MAX` a un nome neutro visto che
-ora è condivisa — con fallback di compatibilità sul nome vecchio) il tool
-wrapper nativo ritorni l'errore `circuit_breaker` invece di ritentare.
+  4. Check that `session_id` is already available in that scope of
+     `src/main.py` (likely, since the tool wrapper already operates per
+     session) — if it is not, propagate it from the caller.
+  5. Hook `reset_session_circuit(session_id)` to the end of a successfully
+     completed native turn (where per-turn state cleanup already happens today
+     — look for the point analogous to `clear_context()` used on the Pi side,
+     `pi_turn_runner.py:361`, and replicate it in the native path).
+- **Note**: this change *also* solves one of the gaps reported for Pi
+in `aion-vs-longrun-assessment.md` §4.5.3 (reset not per session) **if**
+done properly — make sure `reset_session_circuit` is called in
+both paths at the end of the turn, not only in the native one.
+- **Test**: move/extend the existing tests (check whether
+`src/test/test_pi_tool_circuit.py` only tests imports from `pi_runtime` —
+update the import path) and add a native test that checks
+that after N identical failures (`AION_TOOL_CIRCUIT_BREAKER_MAX`; rename
+the env var from `AION_PI_TOOL_CIRCUIT_BREAKER_MAX` to a neutral name since
+it is now shared — with a compatibility fallback on the old name) the native tool
+wrapper returns the `circuit_breaker` error instead of retrying.
 
 ---
 
 
 
-## Fase 4 — Cleanup file offloaded alla cancellazione sessione
+## Phase 4 — Cleanup of offloaded files on session deletion
 
-**Dipende da**: nessuna.
+**Depends on**: none.
 
-- **File**: `[src/api/v1/conversations.py](../../src/api/v1/conversations.py)`,
-funzione `delete_conversation` (linee 157-175).
-- **Contesto**: oggi questo endpoint fa soft-delete della `Conversation`
-(`archived_at`, linee 166-170) e poi rilascia il pool MCP
-(`mcp_manager.release_session`, linea 174) — ma non tocca i file offloaded
-su disco in `data/sessions/<sid>/derived/tool_results/`, contraddicendo
-quanto promesso in `docs/architecture/context-offloading.md:274`.
-- **Passi**:
-  1. In `src/runtime/tool_offload.py`, aggiungere una funzione pubblica:
-    ```python
+- **File**: [`src/api/v1/conversations.py`](../../src/api/v1/conversations.py),
+function `delete_conversation` (lines 157-175).
+- **Context**: today this endpoint soft-deletes the `Conversation`
+(`archived_at`, lines 166-170) and then releases the MCP pool
+(`mcp_manager.release_session`, line 174) — but it does not touch the offloaded files
+on disk in `data/sessions/<sid>/derived/tool_results/`, contradicting
+what is promised in `docs/architecture/context-offloading.md:274`.
+- **Steps**:
+  1. In `src/runtime/tool_offload.py`, add a public function:
+     ```python
      def cleanup_session_offloads(session_id: str) -> None:
          """Remove the offloaded tool-result directory and ledger for a session."""
          base = safe_resolve(session_id, "derived/tool_results")
@@ -342,38 +348,38 @@ quanto promesso in `docs/architecture/context-offloading.md:274`.
          ledger_path = safe_resolve(session_id, "_ledger.jsonl")
          if ledger_path.exists():
              ledger_path.unlink(missing_ok=True)
-    ```
-  2. In `delete_conversation` (`conversations.py:157-175`), dopo il rilascio
-    MCP, chiamare:
-  3. **Decisione da confermare con l'utente**: la cancellazione conversazione
-    oggi è soft-delete (`archived_at` su `Conversation`) — se in futuro
-     l'utente potrà "ripristinare" una conversazione archiviata, cancellare
-     subito i file offloaded rende quel ripristino incompleto (i pointer nel
-     summary punterebbero a file non più esistenti). Alternativa più
-     prudente: **non cancellare subito**, ma aggiungere un job di pulizia
-     periodico (cron/task schedulato) che rimuove `derived/tool_results/`
-     solo per conversazioni con `archived_at` più vecchio di N giorni. Vedi
-     domanda in fondo al documento.
-- **Test**: `src/test/test_tool_offload.py`, nuovo caso che crea file
-offloaded finti, chiama `cleanup_session_offloads`, verifica che la
-directory sparisca.
+     ```
+  2. In `delete_conversation` (`conversations.py:157-175`), after the MCP
+     release, call:
+  3. **Decision to confirm with the user**: conversation deletion
+     today is a soft-delete (`archived_at` on `Conversation`) — if in the future
+     users can "restore" an archived conversation, deleting
+     the offloaded files immediately makes that restore incomplete (the pointers in the
+     summary would point to files that no longer exist). A more
+     cautious alternative: **do not delete immediately**, but add a periodic
+     cleanup job (cron/scheduled task) that removes `derived/tool_results/`
+     only for conversations with `archived_at` older than N days. See the
+     question at the end of the document.
+- **Test**: `src/test/test_tool_offload.py`, a new case that creates fake
+offloaded files, calls `cleanup_session_offloads` and checks that the
+directory disappears.
 
 ---
 
 
 
-## Fase 5 — Lock sul registry condiviso mid-turn
+## Phase 5 — Lock on the shared mid-turn registry
 
-**Dipende da**: nessuna, ma va fatta con attenzione dopo Fase 2 (stesso file).
+**Depends on**: none, but must be done carefully after Phase 2 (same file).
 
-- **File**: `[src/runtime/turn_compaction.py](../../src/runtime/turn_compaction.py)`,
-`_TURN_RUNTIME_REGISTRY` (linea 28).
-- **Problema riconosciuto nel codice stesso** (commento linee 26-27): il
-dict è condiviso tra il task asyncio dello SSE loop (parent) e il task
-figlio di `agent.run` (child), mutato da entrambi senza lock.
-- **Passi**:
-  1. Introdurre un dict parallelo di lock per-sessione:
-    ```python
+- **File**: [`src/runtime/turn_compaction.py`](../../src/runtime/turn_compaction.py),
+`_TURN_RUNTIME_REGISTRY` (line 28).
+- **Problem acknowledged in the code itself** (comment at lines 26-27): the
+dict is shared between the asyncio task of the SSE loop (parent) and the child
+task of `agent.run` (child), mutated by both without a lock.
+- **Steps**:
+  1. Introduce a parallel dict of per-session locks:
+     ```python
      _TURN_RUNTIME_LOCKS: Dict[str, asyncio.Lock] = {}
 
      def _get_turn_lock(session_id: str) -> asyncio.Lock:
@@ -382,133 +388,132 @@ figlio di `agent.run` (child), mutato da entrambi senza lock.
              lock = asyncio.Lock()
              _TURN_RUNTIME_LOCKS[session_id] = lock
          return lock
-    ```
-  2. Individuare **tutti** i punti che leggono/scrivono `rt["live_messages"]`,
-    `rt["extra_tokens"]` o altre chiavi mutabili di `_TURN_RUNTIME_REGISTRY[session_id]`
-     (grep `_TURN_RUNTIME_REGISTRY\[` e `rt\[` nel file) e avvolgerli con
-     `async with _get_turn_lock(session_id):` — attenzione: se alcuni di
-     questi accessi sono oggi **sincroni** (non in funzioni `async def`),
-     valutare se serve un lock sincrono (`threading.Lock`) invece di
-     `asyncio.Lock`, a seconda di dove gira realmente il codice mid-turn
-     (thread separato per Haystack `agent.run` sync vs task asyncio) — **da
-     verificare con un test di concorrenza mirato prima di scegliere il tipo
-     di lock**, non assumere.
-  3. Aggiungere cleanup del lock quando la sessione termina (evitare leak
-    del dict `_TURN_RUNTIME_LOCKS` su sessioni lunghe/molte sessioni).
-- **Test**: test di stress che lancia N task concorrenti che mutano lo
-stesso `session_id` e verifica assenza di stati inconsistenti (conteggio
-finale di `extra_tokens` corretto rispetto alla somma attesa).
+     ```
+  2. Identify **all** the places that read/write `rt["live_messages"]`,
+     `rt["extra_tokens"]` or other mutable keys of `_TURN_RUNTIME_REGISTRY[session_id]`
+     (grep `_TURN_RUNTIME_REGISTRY\[` and `rt\[` in the file) and wrap them with
+     `async with _get_turn_lock(session_id):` — careful: if some of
+     these accesses are currently **synchronous** (not in `async def` functions),
+     consider whether a synchronous lock (`threading.Lock`) is needed instead of
+     `asyncio.Lock`, depending on where the mid-turn code actually runs
+     (separate thread for the synchronous Haystack `agent.run` vs asyncio task) — **to
+     be verified with a targeted concurrency test before choosing the type
+     of lock**; do not assume.
+  3. Add cleanup of the lock when the session ends (to avoid leaking
+     the `_TURN_RUNTIME_LOCKS` dict with long sessions/many sessions).
+- **Test**: a stress test that launches N concurrent tasks mutating the
+same `session_id` and checks there are no inconsistent states (final
+`extra_tokens` count correct with respect to the expected sum).
 
 ---
 
 
 
-## Fase 6 — Osservabilità
+## Phase 6 — Observability
 
-**Dipende da**: idealmente dopo Fasi 1-4, per avere qualcosa di significativo
-da osservare.
+**Depends on**: ideally after Phases 1-4, so there is something meaningful
+to observe.
 
-- **Obiettivo**: rendere visibili (log strutturati, non necessariamente una
-dashboard) gli eventi chiave che oggi sono silenziosi:
-  1. Ogni volta che avviene una compattazione (mid-turn, emergency, fallback),
-    loggare: `session_id`, ramo usato, numero messaggi archiviati, token
-     prima/dopo, se ledger/offload erano inclusi nel summary.
-  2. Ogni volta che il circuit breaker nativo (Fase 3) blocca un retry,
-    loggare a livello `warning` con `session_id`/`tool`/`error_code`.
-  3. Ogni volta che `cleanup_session_offloads` (Fase 4) rimuove dati,
-    loggare quanti byte/file sono stati liberati.
-- **File**: aggiungere logging strutturato (`logger = logging.getLogger("aion.turn_compaction")`
-già esiste in `turn_compaction.py:22` — riusarlo; crearne uno analogo
-`aion.tool_circuit` e `aion.tool_offload` se non già presenti).
-- **Nota**: questa fase non richiede nuova infrastruttura (no Prometheus
-nuovo) se `docs/architecture/observability.md` descrive già un sistema di
-log strutturati esistente — verificare quel documento prima di introdurre
-pattern nuovi.
-
----
-
-
-
-## Fase 7 — Test di integrazione end-to-end
-
-**Dipende da**: Fasi 1, 2, 3, 4 completate.
-
-- **Nuovo file**: `src/test/test_native_hardening_integration.py`
-- **Scenario da coprire** (un solo test end-to-end che valida l'intera
-catena, oltre ai test unitari già elencati per fase):
-  1. Sessione con `AION_TOOL_OFFLOAD_ENABLED=1`, `AION_TOOL_LEDGER_ENABLED=1`.
-  2. Un tool call produce un risultato grande → viene offloaded.
-  3. Si forza una compattazione mid-turn sync (Fase 2 collegata).
-  4. Si verifica che: (a) il summary generato referenzia il path offloaded;
-    (b) i messaggi originali risultano `archived_at` non-null ma ancora
-     presenti in tabella (Fase 1), non cancellati; (c) una successiva query
-     "attiva" (`include_archived=False`) non li restituisce.
-  5. Si forza un secondo fallimento identico di preflight su un tool di
-    scrittura → verifica che il circuit breaker nativo (Fase 3) blocchi il
-     terzo tentativo.
-  6. Si cancella la conversazione → verifica cleanup offload (Fase 4, o
-    verifica che il job periodico sia schedulato se si è scelta
-     l'alternativa prudente).
+- **Goal**: make visible (structured logs, not necessarily a
+dashboard) the key events that are silent today:
+  1. Every time a compaction happens (mid-turn, emergency, fallback),
+     log: `session_id`, branch used, number of archived messages, tokens
+     before/after, whether ledger/offload were included in the summary.
+  2. Every time the native circuit breaker (Phase 3) blocks a retry,
+     log at `warning` level with `session_id`/`tool`/`error_code`.
+  3. Every time `cleanup_session_offloads` (Phase 4) removes data,
+     log how many bytes/files were freed.
+- **File**: add structured logging (`logger = logging.getLogger("aion.turn_compaction")`
+already exists in `turn_compaction.py:22` — reuse it; create analogous ones,
+`aion.tool_circuit` and `aion.tool_offload`, if not already present).
+- **Note**: this phase does not require new infrastructure (no new
+Prometheus) if `docs/architecture/observability.md` already describes an existing
+structured logging system — check that document before introducing
+new patterns.
 
 ---
 
 
 
-## Sequenza di rollout consigliata
+## Phase 7 — End-to-end integration tests
 
+**Depends on**: Phases 1, 2, 3, 4 completed.
 
-| Step | Fase                            | Rischio                      | Flag di attivazione                                                                        |
-| ---- | ------------------------------- | ---------------------------- | ------------------------------------------------------------------------------------------ |
-| 1    | Fase 0 (fix bug)                | Molto basso                  | Nessuno, fix diretto                                                                       |
-| 2    | Fase 1 (soft-delete)            | Medio (tocca query multiple) | Nessun flag nuovo: il comportamento osservabile resta identico, cambia solo la persistenza |
-| 3    | Fase 2 (ledger in mid-turn)     | Basso                        | Eredita `AION_TOOL_LEDGER_ENABLED`/`AION_TOOL_OFFLOAD_ENABLED` (default on) |
-| 4    | Fase 3 (circuit breaker nativo) | Basso                        | Nuovo flag `AION_TOOL_CIRCUIT_BREAKER_ENABLED` (default off finché non validato)           |
-| 5    | Fase 4 (cleanup offload)        | Basso                        | Nessun flag — ma decidere subito/differito (vedi domanda sotto)                            |
-| 6    | Fase 5 (lock registry)          | Medio (concorrenza)          | Nessun flag, ma deploy su staging con carico concorrente prima di produzione               |
-| 7    | Fase 6 (osservabilità)          | Nullo                        | N/A                                                                                        |
-| 8    | Fase 7 (test integrazione)      | N/A                          | Gate di CI prima di abilitare i flag sopra in produzione                                   |
-
-
-Solo dopo che Fasi 0-4 sono in produzione e stabili, valutare se alzare i
-default di `AION_TOOL_OFFLOAD_ENABLED`/`AION_TOOL_LEDGER_ENABLED` da `0` a `1`
-di default — oggi il piano li lascia opt-in.
-
----
-
-
-
-## Fase 8 — Cronologia completa in chat-ui (implementata)
-
-La chat-ui mostra **tutta** la cronologia (messaggi con `archived_at` inclusi).
-Il contesto LLM resta compattato via `history_manager.get_window()` / STM, che
-esclude i messaggi archiviati.
-
-- **API chat-ui**: `GET /chat-ui/conversations/{id}/messages` — default
-  `include_archived=true`; ogni riga archiviata espone `archived: true` (e
-  opzionale `archived_reason`).
-- **Client**: `fetchConversationHistory()` invia sempre `include_archived=1`.
-- **UI**: etichetta discreta sui messaggi archiviati; modifica messaggio
-  disabilitata su righe archiviate.
-
-L'API REST `/v1/conversations/{id}/messages` mantiene `include_archived=false`
-di default per i client programmatici.
+- **New file**: `src/test/test_native_hardening_integration.py`
+- **Scenario to cover** (a single end-to-end test that validates the whole
+chain, in addition to the unit tests already listed per phase):
+  1. Session with `AION_TOOL_OFFLOAD_ENABLED=1`, `AION_TOOL_LEDGER_ENABLED=1`.
+  2. A tool call produces a large result → it is offloaded.
+  3. A mid-turn sync compaction is forced (Phase 2 wired in).
+  4. Check that: (a) the generated summary references the offloaded path;
+     (b) the original messages have a non-null `archived_at` but are still
+     present in the table (Phase 1), not deleted; (c) a subsequent "active"
+     query (`include_archived=False`) does not return them.
+  5. A second identical preflight failure is forced on a write
+     tool → check that the native circuit breaker (Phase 3) blocks the
+     third attempt.
+  6. The conversation is deleted → check the offload cleanup (Phase 4, or
+     check that the periodic job is scheduled if the cautious
+     alternative was chosen).
 
 ---
 
 
 
-## Domande aperte prima di iniziare l'implementazione
+## Recommended rollout sequence
 
-1. **Fase 4**: preferisci cancellazione immediata dei file offloaded alla
-  cancellazione conversazione, o job periodico differito (più sicuro se in
-   futuro vuoi un "ripristina conversazione")?
-2. **Fase 1**: vuoi che i messaggi archiviati restino **per sempre** in
-  tabella (solo esclusi dalle query attive), o serve comunque una retention
-   policy/hard-delete dopo N giorni per motivi di dimensione DB o compliance?
-3. **Fase 3**: sei d'accordo a spostare `tool_circuit.py` da
-  `pi_runtime/` a `src/runtime/` (modulo condiviso), o preferisci due
-   implementazioni separate per mantenere isolamento tra i due path anche
-   a costo di duplicazione minima?
-4. Vuoi che proceda a implementare **Fase 0** (i due fix a rischio minimo)
-  subito, o preferisci rivedere prima l'intero piano?
 
+| Step | Phase                            | Risk                          | Activation flag                                                                            |
+| ---- | -------------------------------- | ----------------------------- | ------------------------------------------------------------------------------------------ |
+| 1    | Phase 0 (bug fixes)              | Very low                      | None, direct fix                                                                           |
+| 2    | Phase 1 (soft-delete)            | Medium (touches many queries) | No new flag: the observable behaviour stays identical, only persistence changes            |
+| 3    | Phase 2 (ledger in mid-turn)     | Low                           | Inherits `AION_TOOL_LEDGER_ENABLED`/`AION_TOOL_OFFLOAD_ENABLED` (default on)               |
+| 4    | Phase 3 (native circuit breaker) | Low                           | New flag `AION_TOOL_CIRCUIT_BREAKER_ENABLED` (default off until validated)                 |
+| 5    | Phase 4 (offload cleanup)        | Low                           | No flag — but decide immediate/deferred (see question below)                               |
+| 6    | Phase 5 (registry lock)          | Medium (concurrency)          | No flag, but deploy to staging with concurrent load before production                      |
+| 7    | Phase 6 (observability)          | None                          | N/A                                                                                        |
+| 8    | Phase 7 (integration tests)      | N/A                           | CI gate before enabling the flags above in production                                      |
+
+
+Only after Phases 0-4 are in production and stable, evaluate whether to raise the
+defaults of `AION_TOOL_OFFLOAD_ENABLED`/`AION_TOOL_LEDGER_ENABLED` from `0` to `1`
+— today the plan leaves them opt-in.
+
+---
+
+
+
+## Phase 8 — Full history in chat-ui (implemented)
+
+The chat-ui shows the **whole** history (messages with `archived_at` included).
+The LLM context stays compacted via `history_manager.get_window()` / STM, which
+excludes archived messages.
+
+- **chat-ui API**: `GET /chat-ui/conversations/{id}/messages` — default
+  `include_archived=true`; each archived row exposes `archived: true` (and
+  optionally `archived_reason`).
+- **Client**: `fetchConversationHistory()` always sends `include_archived=1`.
+- **UI**: discreet label on archived messages; message editing
+  disabled on archived rows.
+
+The REST API `/v1/conversations/{id}/messages` keeps `include_archived=false`
+by default for programmatic clients.
+
+---
+
+
+
+## Open questions before starting the implementation
+
+1. **Phase 4**: do you prefer immediate deletion of the offloaded files when the
+   conversation is deleted, or a deferred periodic job (safer if in the
+   future you want a "restore conversation")?
+2. **Phase 1**: do you want archived messages to stay in the table **forever**
+   (only excluded from active queries), or is a retention
+   policy/hard-delete after N days needed anyway for DB size or compliance reasons?
+3. **Phase 3**: do you agree with moving `tool_circuit.py` from
+   `pi_runtime/` to `src/runtime/` (shared module), or do you prefer two
+   separate implementations to keep the two paths isolated even
+   at the cost of minimal duplication?
+4. Do you want me to proceed with implementing **Phase 0** (the two minimal-risk fixes)
+   right away, or do you prefer to review the whole plan first?

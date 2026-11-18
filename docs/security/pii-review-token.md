@@ -1,48 +1,62 @@
 ---
 sidebar_position: 3
 title: PII review token
-description: Come il token di conferma PII viene propagato dal browser fino al gateway SmartRoute attraverso tutta la catena AION.
+description: How the PII confirmation token travels from the browser to the SmartRoute gateway through the whole AION chain.
 ---
 
-# PII review token — catena di propagazione completa
+# PII review token: the full propagation chain
 
-Quando l'utente conferma la revisione di contenuti PII nel chat-ui, un **token di conferma** (`aion_pii_review_token`) viene generato e deve raggiungere il gateway SmartRoute per sbloccare la richiesta bloccata dal filtro privacy.
+Some messages contain PII (personally identifiable information, such as names,
+phone numbers or tax codes). When the privacy filter of the SmartRoute gateway
+blocks such a message, the user can review it in chat-ui and confirm. On
+confirmation, chat-ui generates a **confirmation token**
+(`aion_pii_review_token`) that must reach the SmartRoute gateway to unblock the
+request.
 
-Questa pagina documenta i passaggi esatti della catena, i file coinvolti e le trappole in cui è facile cadere.
+This page is for developers. It documents each step of the chain, the files
+involved and the easy-to-miss pitfalls, plus a checklist for adding new
+PII-like flags.
 
 ---
 
-## Schema della catena
+## The chain at a glance
 
 ```
 Browser (chat-ui)
     │  opts.aion_pii_review_token
     ▼
 ChatWorkspace.tsx  →  runChatRequest(message, { aion_pii_review_token })
-    │  campo nel payload JSON
+    │  field in the JSON payload
     ▼
 lib/api/aion.ts  →  postChatStream({ …, aion_pii_review_token })
-    │  HTTP POST /chat-ui/conversations/:id/messages
+    │  HTTP POST /v1/chat/stream
     ▼
 src/api/v1/chat.py  →  ChatStreamBody.aion_pii_review_token
-    │  inserito in metadata{}
+    │  added to metadata{}
     ▼
 src/agent_pipeline.py  →  extra_body["aion_pii_review_token"]
     │  HTTP POST /v1/chat/completions (→ SmartRoute)
     ▼
 SmartRoute: aion/gateway/routers/chat.py  →  ChatCompletionRequest.aion_pii_review_token
-    │  passato a RoutingContext.pii_review_token
+    │  passed to RoutingContext.pii_review_token
     ▼
-Filtro privacy / logica di bypass ✓
+Privacy filter / bypass logic ✓
 ```
+
+:::warning The token is never forwarded automatically
+Every hop must declare and pass the field explicitly. Pydantic models drop
+fields they do not declare, so a missing declaration anywhere silently loses the
+token. The [checklist](#checklist-when-you-add-a-new-pii-like-flag) below lists
+every place to touch.
+:::
 
 ---
 
-## Passaggi dettagliati
+## Step by step
 
 ### 1. Chat-UI — `ChatWorkspace.tsx`
 
-Il componente chiama `runChatRequest` passando il token nelle opzioni:
+The component calls `runChatRequest`, passing the token in the options:
 
 ```tsx
 // components/chat/ChatWorkspace.tsx
@@ -51,15 +65,15 @@ void runChatRequest(finalPrompt, {
 });
 ```
 
-`runChatRequest` accetta `opts.aion_pii_review_token` e lo include nel payload
-della chiamata `postChatStream`:
+`runChatRequest` accepts `opts.aion_pii_review_token` and includes it in the
+payload of the `postChatStream` call:
 
 ```tsx
 const stream = await postChatStream(
   {
-    // …altri campi…
+    // …other fields…
     aion_privacy_filter_review_content: piiReviewEnabled,
-    aion_pii_review_token: opts?.aion_pii_review_token,   // ← obbligatorio
+    aion_pii_review_token: opts?.aion_pii_review_token,   // ← required
   },
   token,
   abortRef.current.signal
@@ -67,46 +81,55 @@ const stream = await postChatStream(
 ```
 
 :::caution
-Se `aion_pii_review_token` non viene passato in `opts` **e** aggiunto esplicitamente
-al payload di `postChatStream`, il campo non arriva al backend
-(Pydantic scarta i campi non dichiarati).
+If `aion_pii_review_token` is not passed in `opts` **and** explicitly added to
+the `postChatStream` payload, the field never reaches the backend (Pydantic
+discards undeclared fields).
 :::
 
-### 1.1 Riscrittura del messaggio originale (In-place replace)
+### 1.1 Rewriting the original message in place
 
-Quando il token viene inviato con l'azione di conferma (`confirm`), il frontend **non crea un nuovo messaggio utente**. Al contrario, sostituisce il testo del messaggio originale con il testo censurato per evitare duplicazioni nella chat.
-Questo avviene tramite due meccanismi:
+When the token is sent with the confirm action (`confirm`), the frontend **does
+not create a new user message**. Instead, it replaces the text of the original
+message with the redacted text, so the chat does not show duplicates.
+Two mechanisms make this work:
 
-1. **Frontend State**: La funzione `handlePiiAction` risale al `user_message_id` originale (cercando il messaggio utente che precede il turno dell'assistente). Questo ID viene passato come `userMessageIdOverride` a `runChatRequest`, che aggiorna la *bubble* utente esistente in-place.
-2. **Backend Storage**: Il backend riceve la nuova richiesta (`postChatStream`) con lo stesso `user_message_id`. L'API (`POST /chat-ui/conversations/{conv_id}/messages` tramite `saveChatMessage` e successivamente durante il processing della pipeline) esegue un **upsert** (aggiornamento) del contenuto nel DB, sovrascrivendo permanentemente il messaggio originale non censurato.
+1. **Frontend state**: `handlePiiAction` finds the original `user_message_id`
+   (the user message that precedes the assistant turn). This ID is passed as
+   `userMessageIdOverride` to `runChatRequest`, which updates the existing user
+   bubble in place.
+2. **Backend storage**: the backend receives the new request (`postChatStream`)
+   with the same `user_message_id`. The API (`POST /chat-ui/conversations/{conv_id}/messages`
+   via `saveChatMessage`, and later during pipeline processing) performs an
+   **upsert** of the content in the DB, permanently overwriting the original,
+   unredacted message.
 
-### 2. Tipo TypeScript — `lib/api/aion.ts`
+### 2. TypeScript type — `lib/api/aion.ts`
 
-Il tipo `ChatStreamRequest` deve dichiarare il campo:
+The `ChatStreamRequest` type must declare the field:
 
 ```ts
 // lib/api/aion.ts
 export type ChatStreamRequest = {
   // …
   aion_privacy_filter_review_content?: boolean;
-  aion_pii_review_token?: string;   // ← deve essere presente
+  aion_pii_review_token?: string;   // ← must be present
 };
 ```
 
-### 3. Backend FastAPI — `src/api/v1/chat.py`
+### 3. FastAPI backend — `src/api/v1/chat.py`
 
-Il modello Pydantic `ChatStreamBody` deve dichiarare il campo; senza
-dichiarazione esplicita il valore viene silenziosamente scartato dal parser:
+The Pydantic model `ChatStreamBody` must declare the field; without an explicit
+declaration the parser silently drops the value:
 
 ```python
 # src/api/v1/chat.py
 class ChatStreamBody(BaseModel):
     # …
     aion_privacy_filter_review_content: Optional[bool] = Field(default=None)
-    aion_pii_review_token: Optional[str] = Field(default=None)   # ← obbligatorio
+    aion_pii_review_token: Optional[str] = Field(default=None)   # ← required
 ```
 
-Il valore viene poi iniettato nel dict `metadata` passato alla pipeline:
+The value is then injected into the `metadata` dict passed to the pipeline:
 
 ```python
 metadata={
@@ -118,14 +141,14 @@ metadata={
 },
 ```
 
-### 4. Pipeline agente — `src/agent_pipeline.py`
+### 4. Agent pipeline — `src/agent_pipeline.py`
 
-Prima di ogni chiamata al modello LLM, la pipeline costruisce `extra_body` da
-allegare alla request verso SmartRoute. **Entrambi** i flag PII devono essere
-copiati da `metadata` in `extra_body`:
+Before every call to the LLM, the pipeline builds the `extra_body` attached to
+the request sent to SmartRoute. **Both** PII flags must be copied from
+`metadata` into `extra_body`:
 
 ```python
-# src/agent_pipeline.py  ~L1774
+# src/agent_pipeline.py  ~L1840
 if metadata and metadata.get("aion_privacy_filter_review_content") is not None:
     eb = dict(gen_kw.get("extra_body") or {})
     eb["aion_privacy_filter_review_content"] = metadata["aion_privacy_filter_review_content"]
@@ -138,25 +161,25 @@ if metadata and metadata.get("aion_pii_review_token") is not None:
 ```
 
 :::warning
-Questi due blocchi sono **separati e indipendenti**: se aggiungi un nuovo campo
-PII in futuro, ricordati di aggiungere anche il relativo blocco qui.
-Il token non viene mai copiato automaticamente — il passaggio va esplicitato.
+These two blocks are **separate and independent**: if you add a new PII field
+in the future, remember to add its block here too. The token is never copied
+automatically — the step must be explicit.
 :::
 
-### 5. Gateway SmartRoute — `aion/gateway/routers/chat.py`
+### 5. SmartRoute gateway — `aion/gateway/routers/chat.py`
 
-`ChatCompletionRequest` (con `model_config = ConfigDict(extra="allow")`) riceve
-il token nell'`extra_body` e lo espone come attributo dichiarato:
+`ChatCompletionRequest` (with `model_config = ConfigDict(extra="allow")`)
+receives the token in `extra_body` and exposes it as a declared attribute:
 
 ```python
 class ChatCompletionRequest(BaseModel):
     model_config = ConfigDict(extra="allow")
     # …
     aion_privacy_filter_review_content: bool | None = None
-    aion_pii_review_token: str | None = None   # ← deve essere dichiarato
+    aion_pii_review_token: str | None = None   # ← must be declared
 ```
 
-Viene poi passato al `RoutingContext`:
+It is then passed to the `RoutingContext`:
 
 ```python
 ctx = RoutingContext(
@@ -168,24 +191,24 @@ ctx = RoutingContext(
 
 ---
 
-## Checklist — quando aggiungi un nuovo flag PII-like
+## Checklist: when you add a new PII-like flag
 
-Segui questi 5 step nell'ordine:
+Follow these 6 steps in order:
 
-1. **`ChatStreamRequest`** in `chat-ui/lib/api/aion.ts` — aggiungi il campo nel tipo TS
-2. **`runChatRequest` opts** in `ChatWorkspace.tsx` — aggiungi il campo nel tipo `opts`
-3. **payload `postChatStream`** in `ChatWorkspace.tsx` — includi il campo nel body
-4. **`ChatStreamBody`** in `src/api/v1/chat.py` — dichiara il campo Pydantic
-5. **`extra_body` merge** in `src/agent_pipeline.py` — copia il campo da `metadata` in `gen_kw["extra_body"]`
-6. **`ChatCompletionRequest`** in SmartRoute — dichiara il campo nel modello gateway
+1. **`ChatStreamRequest`** in `chat-ui/lib/api/aion.ts` — add the field to the TS type
+2. **`runChatRequest` opts** in `ChatWorkspace.tsx` — add the field to the `opts` type
+3. **`postChatStream` payload** in `ChatWorkspace.tsx` — include the field in the body
+4. **`ChatStreamBody`** in `src/api/v1/chat.py` — declare the Pydantic field
+5. **`extra_body` merge** in `src/agent_pipeline.py` — copy the field from `metadata` into `gen_kw["extra_body"]`
+6. **`ChatCompletionRequest`** in SmartRoute — declare the field in the gateway model
 
 ---
 
-## Debug rapido
+## Quick debugging
 
-| Sintomo | Causa più probabile |
-|---------|---------------------|
-| Campo `None` nel log del backend AION | Non dichiarato in `ChatStreamBody` (step 4) |
-| Campo assente dal log del gateway | Non copiato in `extra_body` in `agent_pipeline.py` (step 5) |
-| Campo correttamente nel log del gateway ma non in `RoutingContext` | Non dichiarato in `ChatCompletionRequest` nel gateway (step 6) |
-| Campo TypeScript `undefined` | Manca dalla dichiarazione del tipo `ChatStreamRequest` (step 1) |
+| Symptom | Most likely cause |
+|---------|-------------------|
+| Field is `None` in the AION backend log | Not declared in `ChatStreamBody` (step 4) |
+| Field missing from the gateway log | Not copied into `extra_body` in `agent_pipeline.py` (step 5) |
+| Field present in the gateway log but not in `RoutingContext` | Not declared in `ChatCompletionRequest` in the gateway (step 6) |
+| TypeScript field is `undefined` | Missing from the `ChatStreamRequest` type declaration (step 1) |

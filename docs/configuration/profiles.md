@@ -1,10 +1,12 @@
 ---
 sidebar_position: 2
-title: Agent Profiles - Design and Trade-offs
-description: Why separate profiles, when to create a new one, best practices and YAML design patterns.
+title: Agent profiles
+description: What an agent profile is, when to create one and how to write its YAML file.
 ---
 
 # Agent Profiles (YAML)
+
+An **agent profile** defines a specialised assistant: its name, its instructions (persona and rules), the skills it knows and the tools it may use. In Chat UI, users pick a profile before chatting (for example a generic assistant, a data analyst or a security auditor). Profiles are YAML files in `config/profiles/` and can also be managed from the [Admin UI](../clients/admin-ui.md). This page is for **administrators** who design profiles; it covers when to create a new one, the file structure and best practices.
 
 ## Philosophy: Why separate profiles?
 
@@ -126,13 +128,14 @@ skills:
   - core_protocol
   - infra_audit
   - promql_library
-  - mempalace_protocol
+  - memory_protocol
   - llm_wiki
+native_tool_groups:
+  - mnemos
 mcp_servers:
   - prometheus
   - grafana
-  - mempalace
-  - memory
+  - query_memory
   - ocr
   - session_sandbox
   - skills_hub

@@ -1,12 +1,14 @@
 ---
 sidebar_position: 4
 title: Web search and page fetch
-description: Native tools web_search and web_fetch_page (Tavily, Brave, SearXNG, Scrapling), AION_* variables and profile enablement.
+description: Let the agent search the web and read web pages, and how to configure the search providers.
 ---
 
 # Web search and page fetch
 
-AION can expose two Haystack **in-process** (non-MCP) tools, defined in the registry `config/native_tool_registry.yaml` (and optional overlay `config/native_tool_registry.local.yaml`):
+Web search lets an agent look things up on the internet and read web pages, so its answers can cite current sources instead of relying only on the model's training data. This page is for **administrators** who decide which profiles get web access and which search provider (Tavily, Brave, SearXNG) to use.
+
+AION can expose two Haystack **in-process** (built into the backend, not MCP) tools, defined in the registry `config/native_tool_registry.yaml` (and optional overlay `config/native_tool_registry.local.yaml`):
 
 - **`web_search`**: querying of one or more providers (Tavily, Brave Search API, SearXNG) with deterministic fallback.
 - **`web_fetch_page`**: download of the text content of a single URL (preference [Scrapling](https://github.com/D4Vinci/Scrapling) `Fetcher`, optional stealth, fallback `httpx`).

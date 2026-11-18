@@ -1,10 +1,12 @@
 ---
 sidebar_position: 3
-title: Mnemos Architectural Hardening
-description: Report on the Mnemos hardening programme — auth, retrieval, provenance, dream cycle, and entity index gate.
+title: Mnemos hardening report
+description: What was improved in Mnemos (access control, retrieval quality, provenance, dream cycle) and how it was measured.
 ---
 
 # Mnemos Architectural Hardening
+
+Mnemos is AION's long-term memory (LTM) backend (see [Mnemos](./mnemos.md)). After its first release it went through a "hardening" programme: a series of phases that fixed access-control gaps, improved recall quality and added provenance tracking, each verified against a benchmark. This page is the report of that work, useful to developers who change Mnemos and want to know which guarantees must not regress, and to reviewers who want the measured results.
 
 This document records the architectural improvements delivered in the Mnemos hardening programme. Each phase has measurable exit criteria based on the adversarial benchmark suite (`config_std/benchmarks/mnemos_recall_adversarial.json`). The full regression dataset (`mnemos_recall_full.json`, 81 cases) must remain at **100%**.
 

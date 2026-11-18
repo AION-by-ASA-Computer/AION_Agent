@@ -1,46 +1,48 @@
 ---
 slug: /
 sidebar_position: 1
-title: AION Agents Documentation
-description: Index of the technical documentation of the AION Agents project.
+title: Welcome
+description: Start here. What AION Agents is and where to go next, depending on what you want to do.
 ---
 
-# AION Agents Documentation
+# Welcome to AION Agents
 
-**AION · ASA:** [https://aion-asa.com](https://aion-asa.com)
+**AION Agents** is an AI assistant that your company runs on its own servers. People chat with it from the browser (or from messaging apps such as WhatsApp and Telegram), and it can **use your company's tools**: read and write files, query databases and monitoring systems, search the web, work with Microsoft 365 and more. Administrators decide which tools, models and data each person can use. Developers can call the same assistant **through a REST API**.
 
-The source code remains the source of truth. These pages are organized **by functional area** (architecture, configuration, API, clients, memory, MCP, security, learning). The folder structure in `docs/` coincides with the sidebar of the Docusaurus site (`website/`).
+## Where do you want to start?
 
-## Documentation map
+| I want to… | Go to |
+|---|---|
+| Understand what AION is and how it works, in plain words | [What is AION](./getting-started/what-is-aion.md) and [Key concepts](./getting-started/key-concepts.md) |
+| Try it on my computer in a few minutes | [Quickstart](./getting-started/quickstart.md) |
+| Use the chat in my day-to-day work | [Using the chat](./user-guide/using-the-chat.md) |
+| Call the agent from a script, an app or n8n | [API guide](./api-guide/overview.md) — start with [Get an API key](./api-guide/get-an-api-key.md) |
+| Set up and manage AION for my company | [Administrator checklist](./admin-guide/checklist.md) |
+| Install it on a server, update it, back it up | [Deploy with Docker](./deployment/docker.md) |
+| Understand how it is built inside | [Architecture overview](./architecture/overview.md) |
 
-| Area | Content |
-|------|-----------|
-| [Introduction](./introduction/overview.md) | Context, how to navigate the doc |
-| [Architecture](./architecture/overview.md) | End-to-end flow, [source tree](./architecture/source-tree.md), {/* [Agent DB](./architecture/agent-db.md), */} [observability](./architecture/observability.md), [testing and optimization](./architecture/testing-and-optimization.md) |
-| [Configuration](./configuration/environment.md) | `.env`, YAML, [profiles](./configuration/profiles.md), [skills](./configuration/skills-and-prompts.md), [SOUL/MEMORY/USER](./configuration/soul-memory-user.md) |
-| [Deployment](./deployment/docker.md) | [Docker Compose](./deployment/docker.md): multi-tenant prod stack, customer onboarding. |
-| [API and runtime](./api-and-runtime/rest-api.md) | FastAPI/SSE, [agent pipeline](./api-and-runtime/agent-pipeline.md) |
-| [Clients](./clients/chat-ui.md) | [Chat UI](./clients/chat-ui.md), [Admin UI](./clients/admin-ui.md), [SDK & Widget](./clients/sdk-and-widget.md) |
-| [Memory](./memory/stm-ltm-and-query.md) | STM/LTM, [FTS / session_search](./memory/chat-history-and-fts.md), [Structured Memory](./memory/structured-memory.md) |
-| [MCP](./mcp/registry.md) | Registry and servers |
-| [Security](./security/identity-and-chat-auth.md) | Identity, chat login, enterprise roadmap |
-| [Learning (Hermes)](./learning/hermes-features.md) | Compression, distill, nudge, approval |
-| [Standards](./standard/authoring.md) | Conventions for those updating the doc |
+## AION in one picture
 
-**Admin UI:** Next.js dashboard in **`admin-ui/`** (`pnpm dev` → http://localhost:3870). The `static/admin` folder is deprecated for the UI; a warning appears on `GET /admin/dashboard`.
+```mermaid
+flowchart LR
+    U["People<br/>(browser, WhatsApp, Telegram)"] --> C["Chat app"]
+    S["Scripts and apps<br/>(REST API, n8n)"] --> A
+    C --> A["AION agent"]
+    A --> L["AI model<br/>(of your choice)"]
+    A --> T["Company tools<br/>(files, M365, databases,<br/>monitoring, web search…)"]
+    A --> M[("Memory and<br/>chat history")]
+    ADM["Administrators"] --> AD["Admin panel"] --> A
+```
 
-## Quick references (repository)
+The agent receives a question, decides which tools to use, calls the AI model as many times as needed and answers. Conversations, files and memory are kept in your infrastructure; the AI model is the one your company chooses.
 
-- **Environment variables example:** **`.env.example`** file in the root (template; copy to local `.env`).
-- **Base MCP registry:** **`config_std/mcp_registry.yaml`** (template; synced to `config/`).
-- **Agent profiles:** **`config_std/profiles/`** (template; synced to `config/profiles/`).
-- **Curated skills:** **`config_std/skills/`** (template; synced to `config/skills/`).
-- **Synchronization script:** **`scripts/sync_config.py`** (populates the `config/` folder ignored by Git).
-- **Skill frontmatter migration script:** **`scripts/migrate_skills_frontmatter.py`**
+## How this documentation is organized
 
-## Conventions
+The tabs at the top of the page split the documentation by audience:
 
-- The `AION_*` prefixes indicate variables read from `os.environ` in Python code.
-- Features marked as *roadmap* or *stub* are described in [Hermes](./learning/hermes-features.md).
+- **Get started** — what AION is, key concepts, quickstart and the guide for chat users.
+- **API** — everything needed to integrate AION into other software: API keys, examples in curl, Python, JavaScript and PowerShell, streaming, OpenAI compatibility, the full reference.
+- **Administration** — installation, configuration, users and security, connectors (MCP), messaging channels.
+- **Internals** — architecture, memory, agent pipeline, benchmarks and design notes, for people who develop AION.
 
-The **README** in the root of the repository summarizes the repo, link to the site, and how to open the doc locally without duplicating this map.
+Use the search box (top right) to jump to any page. Can't find something? See the [FAQ](./getting-started/faq.md).

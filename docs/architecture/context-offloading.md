@@ -1,12 +1,18 @@
 ---
-title: Context offloading — implementation plan
+title: Context offloading
 sidebar_position: 14
-description: Three-layer plan (tool result offload, tool ledger, custom compaction) to keep agent context small without losing recoverable detail.
+description: How large tool results are saved to disk and tracked so the agent's context stays small without losing data.
 ---
 
 # Context offloading — implementation plan
 
+When a tool returns a very large result (a fetched web page, a big file), stuffing it all into the model's context wastes tokens, and cutting it loses data for good. Context offloading solves this: full tool results are written to disk, the model only sees a short preview plus a pointer, and a compact "tool ledger" records what was already done so it survives context compaction. This page is the design and implementation plan, aimed at developers working on the agent runtime; the `AION_TOOL_OFFLOAD_*` and `AION_TOOL_LEDGER_*` variables in `.env.example` control it.
+
 Status: **implemented** (feature-flagged; enable via `.env`).
+
+:::note
+This plan was written when AION also had a Pi-based `long_run` runtime. That runtime has since been removed from the repository (`services/pi-long-run/`, `src/api/internal/pi_tools.py`, `src/runtime/long_run_mode.py`, `src/runtime/pi_runtime/`), so the sections about the Pi path are historical; only the Haystack path applies today. The Haystack implementation lives in `src/runtime/tool_offload.py`, `src/runtime/tool_ledger.py` and `src/runtime/offload_cleanup.py`.
+:::
 
 ## Problem statement
 
@@ -182,7 +188,7 @@ If the answer is buried and the preview does not hint at it, the agent misses
 it. `AION_TOOL_OFFLOAD_PREVIEW_CHARS` is the knob to trade context against
 recall; start at 1500 and measure.
 
-### Retrieval — no new tools
+### Retrieval — no new tools {#retrieval-no-new-tools}
 
 The sandbox MCP server already exposes everything required:
 

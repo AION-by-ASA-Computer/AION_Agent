@@ -1,10 +1,12 @@
 ---
 title: LongMemEval-V2 (Mnemos)
 sidebar_position: 3
-description: Integration stress test — Mnemos project-scope retrieval over LME trajectories (dev CLI only).
+description: Large-scale stress test of Mnemos memory recall using the public LongMemEval-V2 dataset.
 ---
 
 # LongMemEval-V2 + Mnemos
+
+This page describes how AION runs the public LongMemEval-V2 (LME) benchmark against Mnemos, its long-term memory (LTM) backend. It is a stress test that loads a large volume of recorded agent sessions into memory and checks whether the right facts can still be recalled; it is for developers who want to see how Mnemos behaves at scale. For everyday regression checks use [Mnemos Bench](./mnemos-bench.md) instead.
 
 [LongMemEval-V2](https://arxiv.org/abs/2605.12493) evaluates whether a memory system can internalize long web-agent trajectories and answer environment-specific questions.
 

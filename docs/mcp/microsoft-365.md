@@ -1,120 +1,189 @@
 ---
 sidebar_position: 5
 title: Microsoft 365 (Softeria)
-description: Connettore Graph per posta, calendario, file e attività, con app Entra e token per utente.
+description: Microsoft Graph connector for mail, calendar, files and tasks, using your own Entra app and a per-user sign-in token.
 ---
 
 # Microsoft 365 (Softeria)
 
-Il connettore `ms365` avvia [`@softeria/ms-365-mcp-server`](https://github.com/softeria/ms-365-mcp-server) come processo stdio (`npx`). Copre Outlook (posta e calendario), OneDrive, contatti e To Do tramite Microsoft Graph.
+The `ms365` connector lets the AION agent read each user's Outlook mail and calendar, OneDrive
+files, contacts and Microsoft To Do tasks. Every user signs in with their own Microsoft account,
+so the agent only sees that person's data. This page is mainly for **administrators** (steps 1-2:
+register an app in Microsoft Entra and install the connector); **end users** only need
+[step 3](#3-connect-your-account-end-user), a single sign-in from chat-ui.
 
-È un prodotto diverso dai connettori **Microsoft SharePoint** e **Microsoft OneDrive** già in catalogo. Quelli sono endpoint remoti Agent 365 (`agent365.svc.cloud.microsoft`) e restano dove sono. `ms365` è il server Softeria, locale al backend AION.
+:::note What it is under the hood
+The connector starts [`@softeria/ms-365-mcp-server`](https://github.com/softeria/ms-365-mcp-server)
+as a stdio process (`npx`) and talks to Microsoft Graph. It is an MCP server (Model Context
+Protocol, the standard AION uses to plug tools and connectors into the agent).
+:::
 
-## Perché serve un'app Entra
+It is a different product from the **Microsoft SharePoint** and **Microsoft OneDrive** connectors
+already in the catalog. Those are remote Agent 365 endpoints (`agent365.svc.cloud.microsoft`) and
+stay as they are. `ms365` is the Softeria server, running locally next to the AION backend.
 
-Il server Softeria, da solo, fa login con **device code** e salva i token nel portachiavi del sistema operativo del processo. In AION quel processo è condiviso da tutti gli utenti del backend: un login da terminale collegherebbe un solo account Microsoft a tutta l'istanza.
+## Setup in short
 
-AION quindi non usa quel login. Ottiene lui un token Graph **per utente** (stesso flusso OAuth della chat) e lo passa al processo nella variabile `MS365_MCP_OAUTH_TOKEN` (metodo BYOT del server). Il refresh lo fa AION, perché il server non rinnova un token ricevuto già pronto.
+| Who | What | Where |
+|-----|------|-------|
+| Admin | Register an Entra app, copy client ID and secret | Microsoft Entra admin center |
+| Admin | Install **Microsoft 365**, paste client ID and secret, add `ms365` to profiles | admin-ui → MCP Hub |
+| User | Click **Sign in** on Microsoft 365, then start a new chat | chat-ui → integrations |
 
-L'app pubblicata da Softeria non ha il redirect di AION. Va registrata un'app Entra propria e vanno incollati client id e client secret nel MCP Hub. Senza quei due valori il pulsante Accedi in chat non può completare il login.
+## Why you need your own Entra app
 
-## Cosa è già predisposto
+On its own, the Softeria server signs in with a **device code** and stores the tokens in the
+operating-system keychain of the process. In AION that process is shared by every user of the
+backend: a sign-in from the terminal would link a single Microsoft account to the whole instance.
 
-L'installazione dal catalogo (`id: ms365`) registra questo avvio:
+So AION does not use that sign-in. AION itself obtains a Graph token **per user** (the same OAuth
+flow used in chat) and passes it to the process in the `MS365_MCP_OAUTH_TOKEN` variable (the
+server's BYOT, "bring your own token", method). AION also handles the refresh, because the server
+does not renew a token it received ready-made.
+
+The app published by Softeria does not have AION's redirect URI. You must register your own Entra
+app and paste its client ID and client secret into the MCP Hub. Without those two values, the
+**Sign in** button in chat cannot complete the login.
+
+## What is already set up
+
+Installing from the catalog (`id: ms365`) registers this launch command:
 
 ```text
 npx -y @softeria/ms-365-mcp-server --org-mode --read-only --preset mail,calendar,files,tasks
 ```
 
-- **Sola lettura.** Inviare mail, creare eventi o modificare file è disattivato finché non togli `--read-only` (vedi sotto).
-- **`--org-mode`.** Senza questo flag il server espone solo gli strumenti degli account personali. Con il flag restano disponibili anche gli strumenti work/school (Teams e SharePoint non sono nel preset di default).
-- **Preset** `mail`, `calendar`, `files`, `tasks`. Il server ha centinaia di tool: il preset tiene il contesto dell'agente su posta, calendario, file e attività.
-- **Token.** L'env del registry è `MS365_MCP_OAUTH_TOKEN=${AION_USER_MS365__OAUTH_TOKEN}`. Lo slug installato deve restare `ms365`, altrimenti il placeholder non trova la credenziale.
-- **Scope Graph** già nel catalogo: `offline_access`, `openid`, `profile`, `User.Read`, `Mail.Read`, `Calendars.Read`, `Contacts.Read`, `Files.Read`, `Tasks.Read`.
-- **Tenant `common`.** Funziona per molti account aziendali. Gli account personali hanno un'eccezione, descritta sotto.
+- **Read-only.** Sending mail, creating events or changing files is disabled until you remove
+  `--read-only` (see below).
+- **`--org-mode`.** Without this flag the server only exposes tools for personal accounts. With it,
+  work/school tools are available too (Teams and SharePoint are not in the default preset).
+- **Presets** `mail`, `calendar`, `files`, `tasks`. The server has hundreds of tools: the preset
+  keeps the agent's context focused on mail, calendar, files and tasks.
+- **Token.** The registry env is `MS365_MCP_OAUTH_TOKEN=${AION_USER_MS365__OAUTH_TOKEN}`. The
+  installed slug must stay `ms365`, otherwise the placeholder cannot find the credential.
+- **Graph scopes** already in the catalog: `offline_access`, `openid`, `profile`, `User.Read`,
+  `Mail.Read`, `Calendars.Read`, `Contacts.Read`, `Files.Read`, `Tasks.Read`.
+- **Tenant `common`.** Works for many work accounts. Personal accounts have an exception, described
+  below.
 
-Il backend Docker include Node.js. In sviluppo locale (`uvicorn` sulla macchina) serve Node.js 20 o superiore, perché il server parte con `npx`.
+The Docker backend includes Node.js. In local development (`uvicorn` on your machine) you need
+Node.js 20 or later, because the server starts with `npx`.
 
-## 1. Registrare l'app in Entra
+## 1. Register the app in Entra (admin)
 
-1. Apri [Microsoft Entra admin center](https://entra.microsoft.com) → **Identity** → **Applications** → **App registrations** → **New registration**.
-2. Nome, ad esempio `AION Microsoft 365`.
-3. **Supported account types**, allineato al tenant che userai negli URL OAuth:
+1. Open the [Microsoft Entra admin center](https://entra.microsoft.com) → **Identity** →
+   **Applications** → **App registrations** → **New registration**.
+2. Name, for example `AION Microsoft 365`.
+3. **Supported account types**, matching the tenant you will use in the OAuth URLs:
    - tenant `common`: *Accounts in any organizational directory and personal Microsoft accounts*;
-   - tenant `consumers`: solo account personali Microsoft;
-   - un GUID di directory: *Accounts in this organizational directory only*.
-4. **Redirect URI**: piattaforma **Web** (non "Mobile and desktop"). L'URI deve coincidere con quello che AION invia al login.
+   - tenant `consumers`: personal Microsoft accounts only;
+   - a directory GUID: *Accounts in this organizational directory only*.
+4. **Redirect URI**: platform **Web** (not "Mobile and desktop"). The URI must match the one AION
+   sends at sign-in:
 
-| Dove gira AION | Redirect URI |
-| --- | --- |
-| API in locale, porta 8001 | `http://localhost:8001/v1/integrations/oauth/callback` |
-| Docker con Caddy (`https://DOMINIO`) | `https://DOMINIO/api/v1/integrations/oauth/callback` |
+   | Where AION runs | Redirect URI |
+   | --- | --- |
+   | Local API, port 8001 | `http://localhost:8001/v1/integrations/oauth/callback` |
+   | Docker with Caddy (`https://DOMAIN`) | `https://DOMAIN/api/v1/integrations/oauth/callback` |
 
-Caddy toglie il prefisso `/api` prima di inoltrare al backend. Il redirect pubblico tiene `/api`; il path interno è `/v1/integrations/oauth/callback`.
+   Caddy strips the `/api` prefix before forwarding to the backend. The public redirect keeps
+   `/api`; the internal path is `/v1/integrations/oauth/callback`.
 
-5. **Certificates & secrets** → **New client secret**. Copia il valore subito: il portale non lo mostra di nuovo.
-6. **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated** (non Application). Aggiungi gli stessi scope del catalogo: `offline_access`, `openid`, `profile`, `User.Read`, `Mail.Read`, `Calendars.Read`, `Contacts.Read`, `Files.Read`, `Tasks.Read`.
-7. Su un tenant aziendale, **Grant admin consent**. Se il tenant vieta il consenso utente, senza questo passo il login fallisce per tutti.
-8. Dalla pagina **Overview** copia **Application (client) ID**. Il **Directory (tenant) ID** serve solo se abbandoni `common`.
+5. **Certificates & secrets** → **New client secret**. Copy the value right away: the portal will
+   not show it again.
+6. **API permissions** → **Add a permission** → **Microsoft Graph** → **Delegated** (not
+   Application). Add the same scopes as the catalog: `offline_access`, `openid`, `profile`,
+   `User.Read`, `Mail.Read`, `Calendars.Read`, `Contacts.Read`, `Files.Read`, `Tasks.Read`.
+7. On a work tenant, click **Grant admin consent**. If the tenant blocks user consent, sign-in fails
+   for everyone without this step.
+8. From the **Overview** page, copy the **Application (client) ID**. The **Directory (tenant) ID**
+   is only needed if you move away from `common`.
 
-Non committare il secret. Vive solo nella configurazione OAuth del server MCP, nel database.
+:::warning
+Do not commit the secret. It lives only in the MCP server's OAuth configuration, in the database.
+:::
 
-## 2. Installare il connettore
+## 2. Install the connector (admin)
 
-In **Admin → MCP Hub**, nella lista dei connettori consigliati, installa **Microsoft 365** (`POST /admin/mcp/install-from-catalog?connector_id=ms365`).
+In **Admin → MCP Hub**, in the list of recommended connectors, install **Microsoft 365**
+(`POST /admin/mcp/install-from-catalog?connector_id=ms365`).
 
-Poi, nella configurazione OAuth di quel server:
+Then, in that server's OAuth configuration:
 
-- **Client ID**: Application (client) ID dell'app Entra.
-- **Client secret**: il secret appena creato.
+- **Client ID**: the Application (client) ID of the Entra app.
+- **Client secret**: the secret you just created.
 
-Gli endpoint sono già impostati su `https://login.microsoftonline.com/common/oauth2/v2.0/authorize` e `.../token`. Cambiali solo se cambi tenant (passo 4).
+The endpoints are already set to `https://login.microsoftonline.com/common/oauth2/v2.0/authorize`
+and `.../token`. Change them only if you change tenant (see
+[Personal accounts](#personal-accounts-and-the-consumers-tenant)).
 
-Aggiungi `ms365` ai profili che devono usarlo (`mcp_servers` nel YAML del profilo, oppure la UI profili).
+Add `ms365` to the profiles that should use it (`mcp_servers` in the profile YAML, or the profiles
+UI).
 
-## 3. Collegare l'utente
+## 3. Connect your account (end user)
 
-Ogni persona apre **chat-ui → integrazioni** e sceglie **Accedi** su Microsoft 365. Il token resta sulla sua riga credenziali, non in un file condiviso.
+Each person opens **chat-ui → integrations** and chooses **Sign in** on Microsoft 365. The token
+stays on that person's own credential row, not in a shared file.
 
-La sessione MCP è in cache: dopo il primo collegamento avvia una chat nuova, così il processo parte con il token.
+The MCP session is cached: after connecting for the first time, **start a new chat** so the process
+starts with the token.
 
-## Account personali e tenant `consumers`
+## Personal accounts and the `consumers` tenant
 
-Da giugno 2026 i refresh token emessi sull'authority `common` per gli account personali (`@outlook.com`, `@hotmail.com`, `@live.com`) vengono rifiutati al primo rinnovo. La sessione muore dopo circa un'ora.
+Since June 2026, refresh tokens issued on the `common` authority for personal accounts
+(`@outlook.com`, `@hotmail.com`, `@live.com`) are rejected at the first renewal. The session dies
+after about an hour.
 
-Per quegli account:
+For those accounts:
 
-1. Nell'app Entra, account supportati = solo personali, se non ti serve anche il lavoro.
-2. Nel Hub, sostituisci `common` con `consumers` in authorization endpoint e token URL.
-3. Nel registry del server (`config/mcp_registry.local.yaml`, voce `ms365`), imposta `MS365_MCP_TENANT_ID: "consumers"`.
+1. In the Entra app, set supported accounts to personal only, if you do not also need work accounts.
+2. In the Hub, replace `common` with `consumers` in the authorization endpoint and token URL.
+3. In the server registry (`config/mcp_registry.local.yaml`, entry `ms365`), set
+   `MS365_MCP_TENANT_ID: "consumers"`.
 
-Per una sola azienda, usa il GUID della directory al posto di `common` negli stessi tre punti, e limita l'app a quel tenant.
+For a single company, use the directory GUID instead of `common` in the same three places, and
+restrict the app to that tenant.
 
-## Scrittura, Teams, altri preset
+## Write access, Teams, other presets
 
-Il default è volutamente stretto. Per allargarlo modifica gli args nel registry e, se aggiungi permessi, anche gli scope OAuth nel Hub. L'utente deve rifare Accedi dopo un cambio di scope.
+The default is deliberately narrow. To widen it, change the args in the registry and, if you add
+permissions, the OAuth scopes in the Hub as well. Users must click **Sign in** again after a scope
+change.
 
-| Obiettivo | Args da aggiungere o togliere | Scope Graph delegati in più |
+| Goal | Args to add or remove | Extra delegated Graph scopes |
 | --- | --- | --- |
-| Inviare e modificare posta, eventi, file, attività | togli `--read-only` | `Mail.ReadWrite`, `Mail.Send`, `Calendars.ReadWrite`, `Files.ReadWrite`, `Tasks.ReadWrite` |
-| Solo Outlook (niente file) | `--preset outlook` al posto della lista | togli `Files.Read` e `Tasks.Read` se non servono |
-| Teams in lettura | tieni `--org-mode`, preset `teams` | `Chat.Read`, `ChannelMessage.Read.All`, `Team.ReadBasic.All`, `Channel.ReadBasic.All` |
-| Meno token nel contesto | aggiungi `--discovery` | nessuno |
+| Send and edit mail, events, files, tasks | remove `--read-only` | `Mail.ReadWrite`, `Mail.Send`, `Calendars.ReadWrite`, `Files.ReadWrite`, `Tasks.ReadWrite` |
+| Outlook only (no files) | `--preset outlook` instead of the list | remove `Files.Read` and `Tasks.Read` if not needed |
+| Teams, read-only | keep `--org-mode`, preset `teams` | `Chat.Read`, `ChannelMessage.Read.All`, `Team.ReadBasic.All`, `Channel.ReadBasic.All` |
+| Fewer tokens in the context | add `--discovery` | none |
 
-I nomi esatti dei preset sono quelli del server: `mail`, `calendar`, `files`, `personal`, `work`, `excel`, `contacts`, `tasks`, `onenote`, `search`, `users`, `outlook`, `onedrive`, `teams`, `teams-write`, `all`. Elenco aggiornato: `npx -y @softeria/ms-365-mcp-server --list-presets`.
+The exact preset names are the server's: `mail`, `calendar`, `files`, `personal`, `work`, `excel`,
+`contacts`, `tasks`, `onenote`, `search`, `users`, `outlook`, `onedrive`, `teams`, `teams-write`,
+`all`. For the current list: `npx -y @softeria/ms-365-mcp-server --list-presets`.
 
-`--read-only` e il preset non sostituiscono i permessi Entra. Un tool di scrittura con un token di sola lettura fallisce su Graph anche se togli il flag.
+`--read-only` and the preset do not replace Entra permissions. A write tool with a read-only token
+fails on Graph even if you remove the flag.
 
-## Cosa non configurare
+## What not to configure
 
-- **`npx @softeria/ms-365-mcp-server --login`** sul server AION. Scrive il token nel portachiavi dell'utente di sistema, visibile a tutte le chat.
-- **Tool `login` / `verify-login`** del server come sostituto del pulsante Accedi. Stesso archivio condiviso.
-- **Modalità `--http`** di Softeria dietro Caddy, salvo un deployment separato. AION parla già con il processo in stdio e non deve esporre la porta 3000 del server.
-- Le variabili `MS365_MCP_CLIENT_ID` e `MS365_MCP_CLIENT_SECRET` nel processo. Con il token passato da AION il processo non fa il proprio login. Client id e secret stanno nella config OAuth del Hub.
+- **`npx @softeria/ms-365-mcp-server --login`** on the AION server. It writes the token into the
+  system user's keychain, visible to every chat.
+- The server's **`login` / `verify-login` tools** as a substitute for the **Sign in** button. Same
+  shared store.
+- Softeria's **`--http` mode** behind Caddy, unless it is a separate deployment. AION already talks
+  to the process over stdio and must not expose the server's port 3000.
+- The `MS365_MCP_CLIENT_ID` and `MS365_MCP_CLIENT_SECRET` variables in the process. With the token
+  passed by AION, the process does not do its own sign-in. Client ID and secret belong in the Hub's
+  OAuth configuration.
 
-## Verifica
+## Verify
 
-1. Nel Hub, **Test** sul server `ms365` con lo stesso utente che ha fatto Accedi in chat. Il probe usa quel token; un admin che non ha collegato Microsoft riceve un errore di autenticazione, non un token finto.
-2. In una chat del profilo che include `ms365`, chiedi la posta recente o gli eventi di oggi. Il primo avvio scarica il pacchetto npm e può richiedere qualche secondo.
-3. Se Graph risponde `Insufficient privileges` o `403`, lo scope non è nel token: aggiungilo all'app, al Hub, e ripeti Accedi.
-4. Se il redirect viene rifiutato (`AADSTS50011`), l'URI nel portale non è identico a quello della tabella sopra, compresi `http`/`https` e il prefisso `/api`.
+1. In the Hub, run **Test** on the `ms365` server as the same user who clicked **Sign in** in chat.
+   The probe uses that token; an admin who has not connected Microsoft gets an authentication
+   error, not a fake token.
+2. In a chat with a profile that includes `ms365`, ask for recent mail or today's events. The first
+   start downloads the npm package and can take a few seconds.
+3. If Graph answers `Insufficient privileges` or `403`, the scope is not in the token: add it to the
+   app and to the Hub, then sign in again.
+4. If the redirect is rejected (`AADSTS50011`), the URI in the portal is not identical to the one in
+   the table above, including `http`/`https` and the `/api` prefix.

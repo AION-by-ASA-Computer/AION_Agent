@@ -37,26 +37,52 @@ description: Principles for writing documentation that explains the why, not jus
 
 ### Organizational principles
 
-**Organize by functional domain, not chronologically:**
+**The navigation is organized by audience; the folders by technical domain.**
+
+The site has four tabs, each with its own sidebar (defined in `website/sidebars.ts`):
+
+| Tab | Reader | Typical pages |
+|---|---|---|
+| **Get started** | Newcomers, chat users | `getting-started/`, `user-guide/` |
+| **API** | Developers integrating AION | `api-guide/` (hands-on), `api-and-runtime/` and `security/api-keys.md` (reference) |
+| **Administration** | Administrators, operators | `admin-guide/`, `deployment/`, `configuration/`, `security/`, `mcp/`, `integrations/` |
+| **Internals** | People who develop AION | `architecture/`, `memory/`, `learning/`, `benchmarks/`, `opensource/`, `standard/` |
 
 ```
 docs/
-├── introduction/      # Context and overview
-├── architecture/      # Architecture and design
-├── configuration/     # Configurations
-├── api-and-runtime/   # API and runtime
-├── clients/           # User interfaces
-├── memory/            # Memory systems
-├── mcp/               # MCP integration
-├── security/          # Security
-├── learning/          # Hermes features
-└── standard/          # Standard documentation
+├── index.md            # Welcome page (site home)
+├── getting-started/    # What is AION, key concepts, quickstart, FAQ
+├── user-guide/         # Using the chat app
+├── api-guide/          # Task-oriented API guides with code examples
+├── admin-guide/        # Administrator checklist
+├── api-and-runtime/    # API reference, SSE events, agent pipeline
+├── architecture/       # Architecture, observability, design notes
+├── clients/            # chat-ui, admin-ui, n8n, SDK
+├── configuration/      # Environment, profiles, skills, policies
+├── deployment/         # Docker, GHCR, self-update, sandbox
+├── integrations/       # MCP overview, WhatsApp, deep research
+├── mcp/                # Connectors and the MCP registry
+├── memory/             # STM/LTM, Mnemos, compaction, history
+├── security/           # Identity, SSO, 2FA, API keys, isolation
+├── telegram/           # Telegram channel
+└── ...                 # learning/, benchmarks/, opensource/, standard/
 ```
 
-**Why by domain:**
-- **Intuitive navigation:** You find everything about a topic in one folder
-- **Consistency:** Related documentation is kept together
-- **Updates:** Changes to a domain in a single place
+**Rules:**
+- **Do not move or rename existing files**: source code, `CLAUDE.md` and other pages link to their paths. To move a page to another section, change `website/sidebars.ts`.
+- **Every page must be in exactly one sidebar.** A page missing from `sidebars.ts` still builds but nobody can find it.
+- **Guides vs reference:** a *guide* answers "how do I…?" with steps and runnable examples; a *reference* lists every field, code and option. Link them both ways instead of mixing them.
+- **One language: English.** UI labels and log strings that only exist in Italian may be quoted, with an English gloss.
+
+**Every page starts the same way:** frontmatter (`title`, `sidebar_position`, `description`), the H1, then a 2–4 sentence plain-language introduction saying what the feature is, why/when you would use it and who the page is for. Define acronyms on first use. Put the most common task first and developer details (env vars, file paths, internals) after it.
+
+**Links:**
+- Between pages: relative `.md` paths (`../security/api-keys.md#scopes`). Broken links fail the build.
+- To source files: relative paths such as `../../src/api/main.py` or `src/api/main.py`; the build turns them into GitHub links (`website/src/remark/repo-links.ts`).
+- When you rename a heading that other pages link to, keep the old anchor: `## New title {#old-anchor}`.
+- Use Docusaurus admonitions (`:::note`, `:::tip`, `:::warning`, `:::danger`), not GitHub `> [!NOTE]`. In prose, wrap `<placeholder>` and `{braces}` in backticks (pages are MDX).
+
+**Build and preview:** `cd website && pnpm start` (live preview) or `pnpm run build` (same build as Vercel and Docker; it fails on broken links).
 
 ### Naming conventions
 
@@ -396,7 +422,7 @@ If there is an error, check logs.
 
 ## See Also
 
-- [Introduction](../introduction/overview.md) - Project context
+- [What is AION](../getting-started/what-is-aion.md) - Product overview
 - [Architecture overview](../architecture/overview.md) - End-to-end flow
 - [Configuration environment](../configuration/environment.md) - Configurations
 - [API documentation](../api-and-runtime/rest-api.md) - API reference

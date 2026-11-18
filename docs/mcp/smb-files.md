@@ -1,376 +1,382 @@
 ---
-title: File server Windows (SMB)
+title: Windows file shares (SMB)
 sidebar_position: 7
-description: Connettore MCP smb_files — l'agente legge e scrive i file delle share SMB di uno o più file server Windows con le credenziali del singolo utente (ACL NTFS rispettate). Architettura, server multipli e set di credenziali, setup admin e utente, rete, blocco account, sicurezza.
+description: The smb_files connector lets the agent read and write files on company Windows file servers using each user's own Windows credentials, so NTFS permissions always apply. Covers admin setup, user setup, multiple servers and credential sets, networking, account-lockout protection and security.
 ---
 
-# File server Windows (SMB)
+# Windows file shares (SMB)
 
-Il connettore **`smb_files`** permette all'agente AION di leggere e scrivere i file dei
-Windows Server aziendali (share SMB sulla LAN, anche **più server** e in **domini diversi**)
-**con le credenziali Windows del singolo utente**. Il file server applica quindi le **ACL NTFS** dell'utente e il suo audit
-mostra la persona reale, non un account di servizio condiviso.
+The **`smb_files`** connector lets the AION agent find, read and save files on your company's
+Windows file servers (SMB shares on the local network), just like you would in File Explorer.
+It always works **with your own Windows username and password**, so it can only see and change
+what you are already allowed to see and change. This page is for **administrators** (who connect
+the file servers once) and **end users** (who enter their Windows credentials); the later sections
+cover networking, security and internals for IT and developers.
 
-| Chi | Cosa fa | Dove | Quante volte |
-|-----|---------|------|--------------|
-| Admin | Aggiunge i file server (alias, host, share consentite, set di credenziali) e i limiti; abilita il connettore | admin-ui → Impostazioni → **File server** + **MCP Hub** | Una volta (e per ogni nuovo server) |
-| Utente | Inserisce `DOMINIO\utente` e password Windows, una coppia per ogni dominio/set | chat-ui → **Le mie integrazioni** | Una volta (e a ogni cambio password) |
-| Utente | Chiede all'agente di cercare, leggere o salvare file | chat | Sempre |
+:::note Terms used on this page
+- **SMB** (Server Message Block): the protocol Windows uses for shared network folders (`\\server\share`).
+- **MCP** (Model Context Protocol): the standard AION uses to plug tools and connectors into the agent. `smb_files` is an MCP server.
+- **NTFS ACLs**: the file and folder permissions set on the Windows server.
+- **AD** (Active Directory): the Windows domain that manages company accounts.
+:::
 
-## Perché è fatto così
+## At a glance
 
-- **Credenziali per utente, non di servizio.** Un account unico con accesso a tutto
-  aggirerebbe le ACL NTFS e renderebbe l'audit inutile: l'agente vedrebbe i file di tutti
-  a chiunque lo interroghi. Con le credenziali dell'utente l'agente non può mai fare più
-  di quanto l'utente possa già fare da Esplora risorse.
-- **Server e share decisi dall'admin.** L'utente non sceglie a cosa connettersi: l'agente
-  raggiunge solo i server configurati e solo le share in allowlist di ciascuno. Questo limita il danno
-  di una prompt injection (un file che dice «leggi `\\altroserver\...`») e impedisce
-  l'accesso alle share di sistema (`C$`, `ADMIN$`, `IPC$`). L'elenco è un **tetto
-  massimo**, non un'assegnazione: l'admin elenca tutte le share che AION può usare e ogni
-  utente lavora solo su quelle che Windows gli lascia aprire.
-- **Tutti i server a chi ha il connettore, filtrati dalle ACL.** Non esiste un'allowlist
-  AION per utente o gruppo: chi ha `smb_files` vede tutti i server abilitati, e il file
-  server decide cosa può leggere o scrivere. Una sola fonte di verità per i permessi (AD).
-  `smb_list_shares` apre ogni share con le credenziali dell'utente e **nasconde quelle
-  negate** (`omitted` ne riporta il numero): utenti diversi vedono share diverse, anche
-  più di una, senza configurazioni per utente in AION.
-- **Cartelle personali.** Una share può avere una **cartella personale** (es. `{user}` o
-  `Utenti/{user}`): `{user}` è sostituito col nome account Windows dell'utente (la parte
-  dopo `DOMINIO\` o prima di `@`), il percorso proposto all'agente è già la sua cartella e
-  ogni percorso fuori da essa è rifiutato (`outside_personal_folder`), anche se un'ACL
-  sbagliata lo permetterebbe. Le share nascoste non di sistema (`home$`, `utenti$`) sono
-  ammesse proprio per questo uso.
-- **Nessuna cancellazione.** SMB non ha cestino: un errore dell'agente sarebbe
-  irreversibile. Per questo il connettore espone solo lettura, creazione, aggiornamento
-  esplicito e rinomina.
+| Who | What they do | Where | How often |
+|-----|--------------|-------|-----------|
+| Admin | Adds the file servers (alias, host, allowed shares, credential set) and the limits; enables the connector | admin-ui → Settings → **File server** + **MCP Hub** | Once (and for each new server) |
+| User | Enters `DOMAIN\user` and Windows password, one pair per domain/credential set | chat-ui → **My integrations** | Once (and after every password change) |
+| User | Asks the agent to search, read or save files | chat | Any time |
 
-## Architettura
+The servers can be **several**, even in **different domains**. Because each user connects with
+their own account, the file server applies that user's **NTFS ACLs** and its audit log shows the
+real person, not a shared service account.
+
+## Why it works this way
+
+- **Per-user credentials, not a service account.** A single account with access to everything
+  would bypass NTFS ACLs and make the audit log useless: the agent would show anyone's files to
+  whoever asked. With the user's own credentials, the agent can never do more than the user can
+  already do in File Explorer.
+- **The admin decides servers and shares.** Users do not choose what to connect to: the agent
+  only reaches configured servers, and only the allowlisted shares on each. This limits the damage
+  of a prompt injection (a file saying "read `\\otherserver\...`") and blocks access to system
+  shares (`C$`, `ADMIN$`, `IPC$`). The list is a **ceiling**, not an assignment: the admin lists
+  every share AION may use, and each user only works on the ones Windows lets them open.
+- **Every server for everyone who has the connector, filtered by ACLs.** There is no per-user or
+  per-group allowlist in AION: whoever has `smb_files` sees all enabled servers, and the file
+  server decides what they can read or write. There is one source of truth for permissions (AD).
+  `smb_list_shares` opens each share with the user's credentials and **hides the denied ones**
+  (`omitted` reports how many): different users see different shares, with no per-user setup in AION.
+- **Personal folders.** A share can have a **personal folder** (e.g. `{user}` or `Users/{user}`).
+  `{user}` is replaced with the user's Windows account name (the part after `DOMAIN\` or before
+  `@`). The path offered to the agent is already the user's own folder, and any path outside it is
+  rejected (`outside_personal_folder`), even if a wrong ACL would allow it. Hidden non-system
+  shares (`home$`, `users$`) are allowed precisely for this use.
+- **No delete.** SMB has no recycle bin, so an agent mistake would be irreversible. The connector
+  therefore only offers read, create, explicit update and rename.
+
+## Admin setup
+
+### 1. Requirements
+
+In the backend `.env`: `AION_MCP_USER_CREDENTIALS=1` and `AION_CREDENTIAL_ENCRYPTION_KEY`
+(see [credential store](user-isolation-and-credentials.md)).
+`smbprotocol` is already in `requirements.txt`; no Docker image changes are needed.
+
+### 2. Configure the file servers (admin-ui)
+
+**Settings → File server** has two parts, each saved separately.
+
+**General** (`PUT /admin/smb`): the connector switch and limits shared by all servers.
+
+| Field | Meaning |
+|-------|---------|
+| Enabled | Connector on/off switch; mirrored on the `smb_files` entry in the MCP Hub |
+| Read / write limits (MB) | Maximum size per file (default 25 MB, max 500) |
+| Local block duration (minutes) | See [Account-lockout protection](#protezione-dal-blocco-account) (default 30, min 5) |
+
+**Servers** (`POST /admin/smb/servers`, `PUT`/`DELETE /admin/smb/servers/{id}`): one card per
+file server, added with **Add server**.
+
+| Field | Meaning |
+|-------|---------|
+| Alias | Path prefix (`fs01/Share/...`), unique within the tenant |
+| Label | Human-readable name shown to the agent (optional) |
+| Host / Port | DNS name or IP of the file server (host only, no `\\` or `/`), unique within the tenant, and SMB port (default 445) |
+| Default domain | Used when the user types only `mario.rossi`; ignored with `user@domain` or `DOMAIN\user` |
+| Credential set | `DEFAULT` or a name (e.g. `ESTERO`) for servers in another domain; same domain → same set |
+| Shares | Allowlist of share names, each with a label, an optional **personal folder** (`{user}`) and a **read-only** switch |
+| Authentication protocol | `ntlm` (default) or `negotiate` (groundwork for Kerberos, see below) |
+| Require SMB3 encryption | Rejects servers that do not encrypt traffic |
+| Enabled | A disabled server stays as a draft (even without shares) and the agent does not see it |
+
+Saving validates the data and rejects:
+
+- system shares (`C$`…`Z$`, `ADMIN$`, `IPC$`, `PRINT$`, `FAX$`; other hidden shares such as `home$` are allowed);
+- share names with sub-paths (a per-user subfolder belongs in the personal folder field);
+- personal folders with `..`, invalid characters or placeholders other than `{user}` (`invalid_share_folder`);
+- duplicate shares (share names are case-insensitive);
+- an alias or host already used by another server (409);
+- an enabled server with no shares.
+
+While the connector is enabled, at least one enabled server must have shares **and** use the
+`DEFAULT` set. Changes that would break this rule (removing, disabling or moving the last
+`DEFAULT` server to another set) return 409 `default_credential_set_required`. Removing a server
+deletes only its configuration, never files. Every operation is recorded in the audit log
+(`smb.update`, `smb.server.create`, `smb.server.update`, `smb.server.delete`, `smb.server.test`).
+
+**Test connection** on each card (`POST /admin/smb/servers/{id}/test`) checks only that card's
+server and saves the result on it:
+
+- without credentials: TCP connection + SMB negotiation, checking host, port and dialect;
+- with a username and password entered for that test: also logon and access to **each** share,
+  with a result per share. Test credentials live only in the request: they are not saved, logged
+  or written to the audit log (only `with_credentials` is).
+
+:::warning
+A failed test logon counts towards AD account lockout. Use a test account.
+:::
+
+The test also works on a disabled server or connector, so you can check a server before turning it
+on; it only needs a host and at least one share.
+
+**Migration from the single-server version**: revision `f3a4b5c034` moves any existing
+configuration into a server whose alias comes from the host name (first DNS label, e.g.
+`fs01.corp.local` → `fs01`) with set `DEFAULT`. Paths used by the agent become `fs01/Share/...`;
+credentials already saved by users stay valid.
+
+### 3. Enable the connector
+
+`smb_files` is **not** in the default profiles. In the **MCP Hub**, enable it for users and add it
+to `mcp_servers:` in the profiles that should use it (e.g. `generic_assistant`).
+
+## User setup
+
+In chat-ui → **My integrations → Windows file server (SMB)**, enter:
+
+- **Windows user**: `DOMAIN\mario.rossi`, `mario.rossi@company.com`, or just `mario.rossi` if the
+  admin has set a default domain. The `@` form (UPN, the company "email" you use to sign in to
+  Windows) is passed as-is to the file server, which resolves it itself: you do not need to know
+  the short domain name. On a PC outside the domain, a Microsoft account email also works, with its
+  password (not the PIN).
+- **Windows password**: a **write-only** field. After saving, only `****` is shown and there is no
+  way to read it back (the "eye" icon is hidden for these fields).
+- If the admin has configured servers in other domains, one **Windows user/password (`<SET>`)** pair
+  for each credential set, listing the servers it is for. These are optional: fill them in only for
+  the domains where you have an account.
+
+:::danger Never type your password in the chat
+Chat text ends up in history, memory and logs. If you ask for a file before setting up
+credentials, the agent replies with `credentials_missing` and points you to this page.
+:::
+
+When you change your password in Windows, update it here too. Saving restarts your MCP workers
+(`restart_workers_for_user`), so the new password takes effect immediately.
+
+## Tools available to the agent
+
+| Tool | Type | What it does |
+|------|------|--------------|
+| `smb_list_shares` | read | Configured servers with their allowed shares, the prefix to use in paths and which are read-only |
+| `smb_list_dir` | read | Contents of a folder |
+| `smb_stat` | read | Type, size, modification date |
+| `smb_search` | read | Search by name (glob or substring), limited by depth, number of results and time (20 s) |
+| `smb_read_file` | read | Text of PDF, DOCX, XLSX, CSV, TXT, MD, JSON, paginated by characters |
+| `smb_copy_to_session` | read | Copies the file into the session's `workspace/smb/` (for OCR or the sandbox, e.g. scanned PDFs) |
+| `smb_write_text` | write | Creates a UTF-8 text file |
+| `smb_upload_from_session` | write | Uploads a file from the session workspace |
+| `smb_mkdir` | write | Creates a folder (including intermediate ones) |
+| `smb_move` | write | Renames/moves **within the same server and the same share** |
+
+Common rules:
+
+- Paths are written `server/Share/sub/folder/file.ext`, where `server` is the alias (e.g.
+  `fs01/Documenti/report.docx`), or in UNC form `\\host\Share\...` (the host must be a configured
+  server). Shares with the same name on different servers are told apart by the alias. The tool
+  descriptions tell the agent to call `smb_list_shares` first.
+- Writes never overwrite: if the file exists the error is `already_exists`. `overwrite=True`
+  requires the user's explicit confirmation, as stated in the tool description. Writes fail on
+  read-only shares.
+- Moving across different shares or servers is not supported (it would require a delete):
+  `cross_share_move`.
+- Errors are always JSON `{"ok": false, "error": "<code>", "message": "..."}`, never exceptions.
+  Main codes: `credentials_missing`, `auth_failed`, `account_locked`, `password_expired`,
+  `account_disabled`, `access_denied`, `not_found`, `already_exists`, `share_read_only`,
+  `share_not_allowed`, `server_not_allowed`, `cross_share_move`, `invalid_path`, `too_large`,
+  `timeout`, `unreachable`, `not_configured`.
+- The MCP server's audit logs record user, operation and path, **never** file contents or passwords.
+
+## Multiple servers and credential sets {#server-multipli-e-set-di-credenziali}
+
+A tenant can configure up to **20 file servers**. Each one has:
+
+- a short **alias** (`fs01`, `sede-milano`: lowercase letters, digits and `-`), unique within the
+  tenant: it is the first segment of every path the agent uses;
+- a **host** (unique within the tenant, because `smbclient` keeps one session per host), port,
+  default domain, allowed shares, and its own protocol and encryption settings;
+- a **credential set** (`DEFAULT`, `ESTERO`…: uppercase letters and digits).
+
+The set says **which Windows account** to use. Servers in the same AD domain share the same
+account, and therefore the same set: the user enters one username/password pair **per set**, not
+per server.
+
+| Set | Keys in the credential store | How it reaches the MCP process |
+|-----|------------------------------|--------------------------------|
+| `DEFAULT` | `SMB_USERNAME` / `SMB_PASSWORD` | Individual placeholders, as before |
+| others (e.g. `ESTERO`) | `SMB_USERNAME__ESTERO` / `SMB_PASSWORD__ESTERO` | JSON in `SMB_EXTRA_CREDENTIALS` |
+
+- The names of the extra keys depend on the admin configuration, so they cannot sit in the static
+  `env:` of the registry. The wildcard placeholder `${AION_USER_<SLUG>__*}` resolves to a JSON of
+  **all** the user's credentials for that slug (see
+  [credential store](user-isolation-and-credentials.md#placeholder-nel-registry-env)).
+  In the Hub probe it receives a non-JSON mock value, treated as "not configured".
+- The `DEFAULT` pair remains the connector's **required** one: it decides whether the connector is
+  configured and whether the worker can start. That is why, while the connector is enabled, at
+  least one enabled server must use the `DEFAULT` set (`default_credential_set_required`).
+- Pairs for other sets are **optional**: with ACL-only visibility, a user may have an account in
+  just one domain. If they are missing, only that set's servers answer `credentials_missing` (the
+  message names the server and set); the others keep working.
+- chat-ui shows the extra fields with no changes needed: `GET /v1/integrations` adds to the form
+  one pair for each set other than `DEFAULT` used by an enabled server, with the list of servers in
+  that set. Extra passwords are `write_only`, like `SMB_PASSWORD`.
+- For `smb_files`, `POST /v1/integrations/credentials` only accepts `SMB_USERNAME`/`SMB_PASSWORD`
+  keys with an optional `__<SET>` suffix, otherwise 400 `credential_key_not_allowed`: the wildcard
+  JSON cannot be padded with arbitrary keys.
+
+## Architecture
 
 ```
-chat-ui (Le mie integrazioni)              admin-ui (Impostazioni → File server)
-  SMB_USERNAME / SMB_PASSWORD                Generale: interruttore, limiti, blocco
-  SMB_USERNAME__<SET> / SMB_PASSWORD__<SET>  Server: alias, host, dominio, set, share [+ sola lettura]
+chat-ui (My integrations)                  admin-ui (Settings → File server)
+  SMB_USERNAME / SMB_PASSWORD                General: switch, limits, block duration
+  SMB_USERNAME__<SET> / SMB_PASSWORD__<SET>  Servers: alias, host, domain, set, shares [+ read-only]
         │ POST /v1/integrations/credentials          │ /admin/smb, /admin/smb/servers[/{id}[/test]]
         ▼                                            ▼
- user_mcp_credentials (AES-256-GCM)          smb_settings (globali) + smb_servers (N per tenant)
-        │ env allo spawn                             │ letta dal server MCP (cache TTL 30 s)
-        └──────────────► mcp_servers_std/smb_files/server.py (FastMCP, sottile)
-                               └─► src/tools/smb_files/* (logica testabile) ─► smbprotocol ─► \\server\share (TCP 445)
+ user_mcp_credentials (AES-256-GCM)          smb_settings (global) + smb_servers (N per tenant)
+        │ env at spawn                               │ read by the MCP server (cache TTL 30 s)
+        └──────────────► mcp_servers_std/smb_files/server.py (FastMCP, thin)
+                               └─► src/tools/smb_files/* (testable logic) ─► smbprotocol ─► \\server\share (TCP 445)
 ```
 
-- **Credenziali utente**: riusano il [credential store per-utente](user-isolation-and-credentials.md).
-  Il registry (`config_std/mcp_registry.yaml`) dichiara
-  `SMB_USERNAME: ${AION_USER_SMB_FILES__SMB_USERNAME}` e analogo per la password; i
-  valori sono risolti dal DB solo allo spawn del processo MCP dell'utente. Per questo
-  `credential_mode` del connettore risulta `per_user`. Le coppie degli altri set
-  arrivano con `SMB_EXTRA_CREDENTIALS: ${AION_USER_SMB_FILES__*}` (vedi
-  [Set di credenziali](#server-multipli-e-set-di-credenziali)).
-- **Configurazione admin**: `smb_settings` (una riga per tenant: interruttore, limiti,
-  durata del blocco) e `smb_servers` (un record per file server). Il server MCP le legge
-  per `AION_CURRENT_TENANT_ID` con una cache di 30 secondi: un salvataggio admin vale
-  entro quel tempo, senza riavviare i worker.
-- **Un worker per chat**: `smb_files` è in `_DEFAULT_SESSION_SCOPED_SERVERS`
-  (`src/mcp_manager.py`) perché `smb_copy_to_session` e `smb_upload_from_session`
-  usano la workspace della sessione di chat.
-- **Connessione lazy**: il processo MCP viene avviato anche con credenziali vuote o
-  mock (probe dell'Hub, utente che non ha ancora configurato nulla). Avvio e
-  `list_tools` non fanno quindi I/O di rete; la connessione SMB si apre dentro il
-  singolo tool, e lo schema dei tool non dipende dalle credenziali.
+- **User credentials** reuse the [per-user credential store](user-isolation-and-credentials.md).
+  The registry (`config_std/mcp_registry.yaml`) declares
+  `SMB_USERNAME: ${AION_USER_SMB_FILES__SMB_USERNAME}` and the same for the password; values are
+  resolved from the DB only when the user's MCP process is spawned. That is why the connector's
+  `credential_mode` is `per_user`. Pairs for the other sets arrive via
+  `SMB_EXTRA_CREDENTIALS: ${AION_USER_SMB_FILES__*}` (see
+  [Multiple servers and credential sets](#server-multipli-e-set-di-credenziali)).
+- **Admin configuration**: `smb_settings` (one row per tenant: switch, limits, block duration) and
+  `smb_servers` (one record per file server). The MCP server reads them for
+  `AION_CURRENT_TENANT_ID` with a 30-second cache: an admin save takes effect within that time,
+  without restarting workers.
+- **One worker per chat**: `smb_files` is in `_DEFAULT_SESSION_SCOPED_SERVERS`
+  (`src/mcp_manager.py`) because `smb_copy_to_session` and `smb_upload_from_session` use the chat
+  session's workspace.
+- **Lazy connection**: the MCP process also starts with empty or mock credentials (Hub probe, a
+  user who has not configured anything yet). Startup and `list_tools` therefore do no network I/O;
+  the SMB connection is opened inside each tool, and the tool schema does not depend on credentials.
 
-Codice: logica in `src/tools/smb_files/` (`paths`, `credentials`, `auth_guard`,
-`client`, `extract`, `ops`, `probe`, `settings_store`), wrapper MCP in
-`mcp_servers_std/smb_files/server.py`, API admin in `src/api/admin_smb.py`, UI in
-`admin-ui/components/settings/SmbSection.tsx` e `SmbServerCard.tsx`, campi credenziali
-dinamici in `src/runtime/dynamic_credential_fields.py`.
+Code: logic in `src/tools/smb_files/` (`paths`, `credentials`, `auth_guard`, `client`, `extract`,
+`ops`, `probe`, `settings_store`), MCP wrapper in `mcp_servers_std/smb_files/server.py`, admin API
+in `src/api/admin_smb.py`, UI in `admin-ui/components/settings/SmbSection.tsx` and
+`SmbServerCard.tsx`, dynamic credential fields in `src/runtime/dynamic_credential_fields.py`.
 
-## Server multipli e set di credenziali
+## Network
 
-Un tenant può configurare fino a **20 file server**. Ognuno ha:
+- The backend must reach the file server on **TCP 445** (SMB2/3; SMB1 is not supported). No port
+  needs to be exposed to the browser: the backend is the only SMB client.
+- The configured host must resolve via **internal DNS**. In the backend container, DNS is the
+  Docker host's: if it does not resolve the company domain names, add a `dns:` entry with the
+  company DNS to the `backend` service in `docker-compose.yml`; alternatively an `extra_hosts:`
+  entry with the name → IP pair, or enter the IP directly as the host in admin-ui.
+- With multiple networks (VPN, VLAN), check with **Test connection** from the backend, not from
+  your own PC: the backend is what opens the connection.
+- For encrypted traffic, turn on "Require SMB3 encryption" (requires dialect 3.0+ on the server).
 
-- un **alias** breve (`fs01`, `sede-milano`: minuscole, cifre e `-`), unico nel tenant:
-  è il primo segmento di ogni percorso usato dall'agente;
-- un **host** (unico nel tenant: `smbclient` tiene una sessione per host), porta, dominio
-  predefinito, share consentite, protocollo e cifratura propri;
-- un **set di credenziali** (`DEFAULT`, `ESTERO`…: maiuscole e cifre).
+### Development environment
 
-Il set indica **quale account Windows** usare. Server dello stesso dominio AD condividono
-lo stesso account, quindi lo stesso set: l'utente inserisce una coppia utente/password
-**per set**, non per server.
+`docker-compose.dev.yml` includes two test Samba servers (profile `smb`):
 
-| Set | Chiavi nel credential store | Come arriva al processo MCP |
-|-----|------------------------------|-----------------------------|
-| `DEFAULT` | `SMB_USERNAME` / `SMB_PASSWORD` | Placeholder singoli, come prima |
-| altri (es. `ESTERO`) | `SMB_USERNAME__ESTERO` / `SMB_PASSWORD__ESTERO` | JSON in `SMB_EXTRA_CREDENTIALS` |
-
-- I nomi delle chiavi extra dipendono dalla configurazione admin, quindi non possono
-  stare nell'`env:` statico del registry. Il placeholder jolly `${AION_USER_<SLUG>__*}`
-  si risolve nel JSON di **tutte** le credenziali dell'utente per quello slug (vedi
-  [credential store](user-isolation-and-credentials.md#placeholder-nel-registry-env)).
-  Nel probe dell'Hub riceve un valore mock non-JSON, trattato come «non configurato».
-- La coppia `DEFAULT` resta quella **obbligatoria** del connettore: decide se il connettore
-  è configurato e se il worker può partire. Per questo, a connettore abilitato, almeno un
-  server abilitato deve usare il set `DEFAULT` (`default_credential_set_required`).
-- Le coppie degli altri set sono **facoltative**: con la sola visibilità ACL un utente
-  può avere un account in un dominio solo. Se mancano, solo i server di quel set
-  rispondono `credentials_missing` (il messaggio nomina server e set); gli altri
-  funzionano.
-- La chat-ui mostra i campi extra senza modifiche: `GET /v1/integrations` aggiunge al form
-  una coppia per ogni set diverso da `DEFAULT` usato da un server abilitato, con l'elenco
-  dei server di quel set. Le password extra sono `write_only` come `SMB_PASSWORD`.
-- `POST /v1/integrations/credentials` accetta per `smb_files` solo chiavi
-  `SMB_USERNAME`/`SMB_PASSWORD` con suffisso facoltativo `__<SET>`, altrimenti 400
-  `credential_key_not_allowed`: il JSON jolly non può essere gonfiato con chiavi arbitrarie.
-
-## Tool esposti all'agente
-
-| Tool | Tipo | Cosa fa |
-|------|------|---------|
-| `smb_list_shares` | lettura | Server configurati con le loro share consentite, il prefisso da usare nei percorsi e quali sono in sola lettura |
-| `smb_list_dir` | lettura | Contenuto di una cartella |
-| `smb_stat` | lettura | Tipo, dimensione, data di modifica |
-| `smb_search` | lettura | Ricerca per nome (glob o sottostringa), limitata per profondità, risultati e tempo (20 s) |
-| `smb_read_file` | lettura | Testo di PDF, DOCX, XLSX, CSV, TXT, MD, JSON, paginato a caratteri |
-| `smb_copy_to_session` | lettura | Copia il file in `workspace/smb/` della sessione (per OCR o sandbox, es. PDF scansionati) |
-| `smb_write_text` | scrittura | Crea un file di testo UTF-8 |
-| `smb_upload_from_session` | scrittura | Carica un file dalla workspace di sessione |
-| `smb_mkdir` | scrittura | Crea una cartella (anche intermedie) |
-| `smb_move` | scrittura | Rinomina/sposta **nello stesso server e nella stessa share** |
-
-Regole comuni:
-
-- I percorsi si scrivono `server/Share/sotto/cartella/file.ext`, dove `server` è
-  l'alias (es. `fs01/Documenti/report.docx`), oppure in forma UNC `\\host\Share\...`
-  (l'host deve essere quello di un server configurato). Share omonime su server diversi
-  sono distinte dall'alias. Le descrizioni dei tool invitano l'agente a chiamare prima
-  `smb_list_shares`.
-- Le scritture non sovrascrivono: se il file esiste l'errore è `already_exists`.
-  `overwrite=True` richiede conferma esplicita dell'utente, come dichiarato nella
-  descrizione dei tool. Le scritture falliscono su share «sola lettura».
-- Spostare tra share o server diversi non è supportato (richiederebbe una cancellazione):
-  `cross_share_move`.
-- Gli errori sono sempre JSON `{"ok": false, "error": "<codice>", "message": "..."}`,
-  mai eccezioni. Codici principali: `credentials_missing`, `auth_failed`,
-  `account_locked`, `password_expired`, `account_disabled`, `access_denied`,
-  `not_found`, `already_exists`, `share_read_only`, `share_not_allowed`,
-  `server_not_allowed`, `cross_share_move`, `invalid_path`, `too_large`, `timeout`, `unreachable`,
-  `not_configured`.
-- I log di audit del server MCP riportano utente, operazione e percorso, **mai** i
-  contenuti dei file né le password.
-
-## Setup admin
-
-### 1. Requisiti
-
-Nel `.env` del backend: `AION_MCP_USER_CREDENTIALS=1` e `AION_CREDENTIAL_ENCRYPTION_KEY`
-(vedi [credential store](user-isolation-and-credentials.md)).
-`smbprotocol` è già in `requirements.txt`; non servono modifiche all'immagine Docker.
-
-### 2. Configurare i file server (admin-ui)
-
-**Impostazioni → File server** ha due parti, ciascuna con il proprio salvataggio.
-
-**Generale** (`PUT /admin/smb`): interruttore del connettore e limiti comuni a tutti i server.
-
-| Campo | Significato |
-|-------|-------------|
-| Abilitato | Interruttore del connettore; riflesso sulla voce `smb_files` dell'Hub |
-| Limiti lettura / scrittura (MB) | Dimensione massima per file (default 25 MB, max 500) |
-| Durata blocco locale (minuti) | Vedi [Protezione dal blocco account](#protezione-dal-blocco-account) (default 30, min 5) |
-
-**Server** (`POST /admin/smb/servers`, `PUT`/`DELETE /admin/smb/servers/{id}`): una scheda per
-file server, con **Aggiungi server**.
-
-| Campo | Significato |
-|-------|-------------|
-| Alias | Prefisso dei percorsi (`fs01/Share/...`), unico nel tenant |
-| Etichetta | Nome leggibile mostrato all'agente (facoltativo) |
-| Host / Porta | Nome DNS o IP del file server (solo host, niente `\\` o `/`), unico nel tenant, e porta SMB (default 445) |
-| Dominio predefinito | Usato quando l'utente scrive solo `mario.rossi`; con `utente@dominio` o `DOMINIO\utente` viene ignorato |
-| Set di credenziali | `DEFAULT` oppure un nome (es. `ESTERO`) per server di un altro dominio; stesso dominio → stesso set |
-| Share | Allowlist di nomi share, ciascuna con etichetta, **cartella personale** facoltativa (`{user}`) e interruttore **sola lettura** |
-| Protocollo di autenticazione | `ntlm` (default) o `negotiate` (predisposizione Kerberos, vedi sotto) |
-| Richiedi cifratura SMB3 | Rifiuta server che non cifrano il traffico |
-| Abilitato | Un server disabilitato resta in bozza (anche senza share) e l'agente non lo vede |
-
-Il salvataggio valida i dati: rifiuta share di sistema (`C$`…`Z$`, `ADMIN$`, `IPC$`, `PRINT$`,
-`FAX$`; le altre share nascoste come `home$` sono ammesse), nomi con sotto-percorsi (la
-sottocartella per utente va nel campo cartella personale), cartelle personali con `..`,
-caratteri non validi o segnaposto diversi da `{user}` (`invalid_share_folder`),
-share duplicate (i nomi share non distinguono maiuscole), alias o host già usati da un altro
-server (409) e un server abilitato senza share. Con il connettore abilitato serve almeno un
-server abilitato con share **e** con set `DEFAULT`: le modifiche che violerebbero la regola
-(rimuovere, disabilitare o spostare di set l'ultimo server `DEFAULT`) rispondono 409
-`default_credential_set_required`. Rimuovere un server cancella solo la sua configurazione,
-mai file. Ogni operazione è registrata nell'audit (`smb.update`, `smb.server.create`,
-`smb.server.update`, `smb.server.delete`, `smb.server.test`).
-
-**Testa connessione** di ogni scheda (`POST /admin/smb/servers/{id}/test`), sul solo server
-della scheda, con esito salvato su quel server:
-
-- senza credenziali: connessione TCP + negoziazione SMB, verifica host, porta e dialetto;
-- con utente e password inseriti per quel test: anche logon e accesso a **ogni** share,
-  con esito per share. Le credenziali di test vivono solo nella richiesta: non vengono
-  salvate, loggate né scritte nell'audit (solo `with_credentials`). Un tentativo errato
-  conta ai fini del blocco account AD: usare un account di test.
-
-Il test funziona anche su un server o un connettore disabilitato, così si verifica il server
-prima di accenderlo; richiede solo host e almeno una share.
-
-**Migrazione dalla versione a server singolo**: la revision `f3a4b5c034` sposta l'eventuale
-configurazione esistente in un server con alias ricavato dal nome host (prima etichetta DNS,
-es. `fs01.corp.local` → `fs01`) e set `DEFAULT`. I percorsi usati dall'agente diventano
-`fs01/Share/...`; le credenziali già salvate dagli utenti restano valide.
-
-### 3. Abilitare il connettore
-
-`smb_files` **non** è nei profili di default. In **MCP Hub** abilitarlo per gli utenti
-e aggiungerlo a `mcp_servers:` dei profili che devono usarlo (es. `generic_assistant`).
-
-## Setup utente
-
-In chat-ui → **Le mie integrazioni → File server Windows (SMB)** l'utente inserisce:
-
-- **Utente Windows**: `DOMINIO\mario.rossi`, `mario.rossi@azienda.com` oppure solo
-  `mario.rossi` se l'admin ha impostato il dominio predefinito. La forma con `@` (UPN,
-  l'«email» aziendale con cui si entra in Windows) viene passata così com'è al file
-  server, che la risolve da sé: non serve conoscere il nome breve del dominio. Su un PC
-  fuori dominio vale anche l'email di un account Microsoft, con la sua password (non il PIN);
-- **Password Windows**: campo **write-only**. Dopo il salvataggio compare solo `****` e
-  non esiste modo di rileggerla (nemmeno con l'icona «occhio», che per questi campi è
-  nascosta).
-- se l'admin ha configurato server in altri domini, una coppia **Utente/Password Windows
-  (`<SET>`)** per ciascun set, con l'elenco dei server a cui serve. È facoltativa: va
-  compilata solo per i domini in cui l'utente ha un account.
-
-La password non va **mai** scritta in chat: il testo di una chat finisce in cronologia,
-memoria e log. Alla prima richiesta senza credenziali l'agente risponde con
-`credentials_missing` e rimanda l'utente a questa pagina.
-
-Quando l'utente cambia password in Windows deve aggiornarla qui; il salvataggio riavvia i
-worker MCP dell'utente (`restart_workers_for_user`) così la nuova password è subito attiva.
-
-## Rete
-
-- Il backend deve raggiungere il file server in **TCP 445** (SMB2/3; SMB1 non è
-  supportato). Nessuna porta va esposta verso il browser: l'unico client SMB è il
-  backend.
-- Serve la risoluzione **DNS interna** dell'host configurato. Nel container backend il
-  DNS è quello dell'host Docker: se non risolve i nomi del dominio aziendale, aggiungere
-  al servizio `backend` di `docker-compose.yml` un `dns:` con il DNS aziendale; in
-  alternativa un `extra_hosts:` con la coppia nome → IP, oppure indicare direttamente
-  l'IP come host nell'admin-ui.
-- Con più reti (VPN, VLAN) verificare con **Testa connessione** dal backend, non dal
-  proprio PC: è il backend che apre la connessione.
-- Per traffico cifrato attivare «Richiedi cifratura SMB3» (richiede dialetto 3.0+ lato
-  server).
-
-### Ambiente di sviluppo
-
-`docker-compose.dev.yml` include due server Samba di test (profilo `smb`):
-
-| Servizio | Dal backend | Dall'host | Utenti | Share |
-|----------|-------------|-----------|--------|-------|
-| `samba` | `samba:445` | `localhost:1445` | `alice`, `bob` | `Documenti` (lettura/scrittura), `Archivio` (sola lettura, solo `alice`) |
-| `samba2` | `samba2:445` | `localhost:1446` | `carla` | `Documenti` (lettura/scrittura) |
+| Service | From the backend | From the host | Users | Shares |
+|---------|------------------|---------------|-------|--------|
+| `samba` | `samba:445` | `localhost:1445` | `alice`, `bob` | `Documenti` (read/write), `Archivio` (read-only, `alice` only) |
+| `samba2` | `samba2:445` | `localhost:1446` | `carla` | `Documenti` (read/write) |
 
 ```bash
 docker compose -f docker-compose.dev.yml --profile smb up samba samba2
 ```
 
-`samba2` ha account diversi, come un server di un altro dominio. In admin-ui creare `fs01`
-(host `samba`, set `DEFAULT`) e `fs02` (host `samba2`, set `ESTERO`) e provarli con
-**Testa connessione** (`alice` / `alice-pass-dev`, `carla` / `carla-pass-dev`). In chat-ui
-compare la coppia aggiuntiva `ESTERO`; con una password errata su `fs02` solo `fs02` viene
-bloccato.
+`samba2` has different accounts, like a server in another domain. In admin-ui, create `fs01`
+(host `samba`, set `DEFAULT`) and `fs02` (host `samba2`, set `ESTERO`) and try them with
+**Test connection** (`alice` / `alice-pass-dev`, `carla` / `carla-pass-dev`). In chat-ui the extra
+`ESTERO` pair appears; with a wrong password on `fs02`, only `fs02` gets blocked.
 
-## Protezione dal blocco account
+## Account-lockout protection {#protezione-dal-blocco-account}
 
-Active Directory blocca un account dopo poche password errate (tipicamente 5-10). Un
-agente che ritenta in loop un tool fallito potrebbe bloccare l'account dell'utente
-**anche per tutti gli altri servizi aziendali**. Per questo il connettore applica un
-blocco locale (`auth_guard`):
+Active Directory locks an account after a few wrong passwords (typically 5-10). An agent retrying a
+failed tool in a loop could lock the user's account **for all other company services too**. To
+prevent this, the connector applies a local block (`auth_guard`):
 
-1. al **primo** errore di logon (`auth_failed`, `account_locked`, `password_expired`,
-   `account_disabled`) viene scritto un marker nella HOME isolata dell'utente
-   (`data/users/<uid>/mcp_home/.smb_auth_block.<set>.json`, permessi 0600), quindi
-   condiviso da tutte le chat aperte dello stesso utente. Il marker è **per set di
-   credenziali**: il lockout AD è per account, e un set è un account; un errore sui server
-   di `ESTERO` non blocca quelli di `DEFAULT`;
-2. il marker contiene un fingerprint HMAC di utente+password (salt casuale) e il
-   motivo: **mai la password**;
-3. finché le credenziali correnti hanno quel fingerprint, ogni tool risponde subito con
-   lo stesso errore **senza contattare il server**;
-4. se l'utente aggiorna le credenziali il fingerprint cambia e si riprova da sé;
-5. per `account_locked` il blocco scade dopo la «durata blocco locale» configurata
-   (il lockout server-side scade a sua volta); un logon riuscito rimuove il marker.
+1. On the **first** logon error (`auth_failed`, `account_locked`, `password_expired`,
+   `account_disabled`) a marker is written in the user's isolated HOME
+   (`data/users/<uid>/mcp_home/.smb_auth_block.<set>.json`, permissions 0600), so it is shared by
+   all of that user's open chats. The marker is **per credential set**: AD lockout is per account,
+   and a set is an account; an error on the `ESTERO` servers does not block the `DEFAULT` ones.
+2. The marker contains an HMAC fingerprint of username+password (random salt) and the reason:
+   **never the password**.
+3. As long as the current credentials match that fingerprint, every tool immediately returns the
+   same error **without contacting the server**.
+4. If the user updates the credentials, the fingerprint changes and the connector tries again on
+   its own.
+5. For `account_locked`, the block expires after the configured "local block duration" (the
+   server-side lockout expires too); a successful logon removes the marker.
 
-Inoltre le credenziali vuote o mock (probe dell'Hub, utente non configurato) sono
-riconosciute **prima** di qualsiasi connessione: una password finta non deve mai
-presentarsi al server come tentativo fallito.
+In addition, empty or mock credentials (Hub probe, unconfigured user) are recognised **before** any
+connection: a fake password must never reach the server as a failed attempt.
 
-## NTLM e Kerberos
+## NTLM and Kerberos
 
-- **v1: NTLM** (`auth_protocol=ntlm`, via `smbprotocol`). Zero configurazione: serve solo
-  utente e password. Funziona anche con host indicati per IP.
-- **Kerberos è predisposto ma non attivo**: l'impostazione `negotiate` esiste, ma il suo
-  uso reale richiede librerie `krb5`/`gssapi` nell'immagine del backend, la
-  configurazione del realm (`krb5.conf`), l'host indicato col **nome DNS** (non l'IP, per
-  lo SPN) e orologi sincronizzati. È in roadmap: finché non è completato, il valore consigliato resta `ntlm`
-  e `negotiate` può fallire con `auth_failed` se manca un meccanismo utilizzabile.
-- NTLM può essere disabilitato per policy dai domain controller: in tal caso il test
-  con credenziali lo evidenzia e l'unica strada sarà Kerberos.
+- **v1: NTLM** (`auth_protocol=ntlm`, via `smbprotocol`). Zero configuration: only a username and
+  password are needed. Also works with hosts given as IP addresses.
+- **Kerberos is prepared but not active**: the `negotiate` setting exists, but actually using it
+  requires `krb5`/`gssapi` libraries in the backend image, realm configuration (`krb5.conf`), the
+  host given by **DNS name** (not IP, because of the SPN) and synchronised clocks. It is on the
+  roadmap: until it is done, the recommended value remains `ntlm`, and `negotiate` may fail with
+  `auth_failed` if no usable mechanism is available.
+- Domain controllers can disable NTLM by policy: in that case the test with credentials shows it,
+  and Kerberos will be the only option.
 
-## Sicurezza
+## Security
 
-| Rischio | Contromisura |
-|---------|--------------|
-| Lettura/scrittura oltre i permessi dell'utente | Credenziali per utente: il file server applica le ACL NTFS |
-| Accesso a dischi o share di sistema | Allowlist per share; share di sistema (`C$`, `ADMIN$`, `IPC$`…) rifiutate sia dall'admin-ui sia a runtime |
-| Accesso alla cartella personale di un collega | Con la cartella personale `{user}` ogni percorso fuori dalla propria cartella è rifiutato prima di contattare il server |
-| Path traversal (`..`, segmenti con punto/spazio finale, caratteri non validi) | `paths.resolve_path`: validazione **prima** di ogni chiamata di rete |
-| Server diverso da quelli configurati (UNC arbitrario, alias sconosciuto) | Rifiutato con `server_not_allowed` |
-| Perdita irreversibile di dati | Nessun tool di cancellazione; niente overwrite senza flag esplicito; niente spostamenti tra share o server |
-| Scritture accidentali su archivi | Share marcabili **sola lettura** dall'admin, applicato lato server MCP |
-| File enormi che saturano memoria/contesto | Limiti di lettura e scrittura per file; lettura a pagine |
-| Lettura della password salvata | Campo `write_only`: `GET /v1/integrations/credentials/{slug}/{key}` risponde 403 `secret_write_only` e la chat-ui non mostra mai il valore |
-| Password nei log o nell'audit | Mai loggata; l'audit dell'admin test registra solo `with_credentials` |
-| Chiavi arbitrarie nel bundle jolly `SMB_EXTRA_CREDENTIALS` | Solo `SMB_(USERNAME\|PASSWORD)(__<SET>)?` accettate al salvataggio; il probe riceve un mock |
-| Blocco account AD da retry dell'agente | `auth_guard` (sezione precedente) |
-| **Prompt injection dal contenuto dei file** | Il testo letto è dato non fidato: le descrizioni dei tool lo dichiarano e il server non esegue nulla. La contromisura strutturale è che l'agente non ha comunque più diritti dell'utente, nessuna cancellazione e nessuna share fuori allowlist. Per share con file di terzi è consigliabile marcarle in sola lettura |
+| Risk | Countermeasure |
+|------|----------------|
+| Reading/writing beyond the user's permissions | Per-user credentials: the file server applies NTFS ACLs |
+| Access to system disks or shares | Per-share allowlist; system shares (`C$`, `ADMIN$`, `IPC$`…) rejected both by admin-ui and at runtime |
+| Access to a colleague's personal folder | With the `{user}` personal folder, any path outside your own folder is rejected before contacting the server |
+| Path traversal (`..`, segments ending in dot/space, invalid characters) | `paths.resolve_path`: validation **before** any network call |
+| A server other than the configured ones (arbitrary UNC, unknown alias) | Rejected with `server_not_allowed` |
+| Irreversible data loss | No delete tool; no overwrite without an explicit flag; no moves across shares or servers |
+| Accidental writes to archives | Shares can be marked **read-only** by the admin, enforced in the MCP server |
+| Huge files filling memory/context | Per-file read and write limits; paginated reads |
+| Reading the saved password | `write_only` field: `GET /v1/integrations/credentials/{slug}/{key}` returns 403 `secret_write_only` and chat-ui never shows the value |
+| Password in logs or audit | Never logged; the admin test audit records only `with_credentials` |
+| Arbitrary keys in the `SMB_EXTRA_CREDENTIALS` wildcard bundle | Only `SMB_(USERNAME\|PASSWORD)(__<SET>)?` accepted on save; the probe receives a mock |
+| AD account lockout from agent retries | `auth_guard` (previous section) |
+| **Prompt injection from file contents** | Text read from files is untrusted data: the tool descriptions say so and the server executes nothing. The structural countermeasure is that the agent never has more rights than the user, cannot delete, and cannot reach shares outside the allowlist. Shares containing third-party files are best marked read-only |
 
-### Da sapere
+### Good to know
 
-- Un utente può far scrivere all'agente ovunque **abbia** diritti di scrittura sulle share
-  in allowlist non marcate in sola lettura: se un file letto contiene istruzioni ostili,
-  l'impatto massimo è quello di un utente che sbaglia, ma senza cancellazioni.
-- I contenuti letti entrano nella conversazione e quindi nella memoria dell'agente
-  (STM/LTM) come qualsiasi altro tool: valutare quali share esporre di conseguenza.
+- A user can have the agent write anywhere they **have** write rights on allowlisted shares that
+  are not marked read-only: if a file read contains hostile instructions, the worst case is the
+  same as a user making a mistake, but without deletions.
+- Content that is read enters the conversation, and therefore the agent's memory (STM/LTM, short-
+  and long-term memory), like any other tool output: choose which shares to expose accordingly.
 
-## Risoluzione dei problemi
+## Troubleshooting
 
-| Sintomo / codice | Causa probabile | Azione |
-|------------------|-----------------|--------|
-| `credentials_missing` | L'utente non ha configurato il connettore, o manca la coppia del set del server indicato nel messaggio | Le mie integrazioni → inserire utente e password (del set indicato) |
-| `auth_failed` ripetuto senza nuovi tentativi | Blocco locale attivo dopo un logon errato | L'utente aggiorna le credenziali (il blocco cade da solo) |
-| `account_locked` | Account bloccato da AD | Sblocco da parte dell'IT; il blocco locale scade dopo la finestra configurata |
-| `password_expired` | Password scaduta o da cambiare | Cambiarla in Windows, poi aggiornarla in chat-ui |
-| `access_denied` | ACL NTFS o permessi di share | Verificare i diritti dell'utente sul file server |
-| `share_not_allowed` | Share fuori allowlist di quel server | L'admin la aggiunge nella scheda del server |
-| `outside_personal_folder` | Percorso fuori dalla cartella personale dell'utente su una share con `{user}` | Usare il `path` restituito da `smb_list_shares` |
-| `server_not_allowed` | Alias o host non configurati (o percorso senza alias, es. `Documenti/...`) | Usare `alias/Share/...` (vedi `smb_list_shares`) o aggiungere il server |
-| `unreachable` / `timeout` | Rete, DNS o firewall (TCP 445) | **Testa connessione** dal backend; controllare `dns:` e firewall |
-| `not_configured` | Connettore disabilitato o nessun server abilitato con share | Completare e salvare la configurazione admin |
+| Symptom / code | Likely cause | Action |
+|----------------|--------------|--------|
+| `credentials_missing` | The user has not configured the connector, or the pair for the server's set (named in the message) is missing | My integrations → enter username and password (for the set named) |
+| `auth_failed` repeated with no new attempts | Local block active after a failed logon | The user updates the credentials (the block clears by itself) |
+| `account_locked` | Account locked by AD | IT unlocks it; the local block expires after the configured window |
+| `password_expired` | Password expired or must be changed | Change it in Windows, then update it in chat-ui |
+| `access_denied` | NTFS ACLs or share permissions | Check the user's rights on the file server |
+| `share_not_allowed` | Share not in that server's allowlist | The admin adds it on the server card |
+| `outside_personal_folder` | Path outside the user's personal folder on a share with `{user}` | Use the `path` returned by `smb_list_shares` |
+| `server_not_allowed` | Alias or host not configured (or a path without alias, e.g. `Documenti/...`) | Use `alias/Share/...` (see `smb_list_shares`) or add the server |
+| `unreachable` / `timeout` | Network, DNS or firewall (TCP 445) | **Test connection** from the backend; check `dns:` and firewall |
+| `not_configured` | Connector disabled or no enabled server with shares | Complete and save the admin configuration |
 
-## Fuori scope (roadmap)
+## Out of scope (roadmap)
 
-Autenticazione Kerberos, cancellazione file, allowlist dei server per utente o gruppo
-(oggi decide solo l'ACL NTFS), modalità «tutte le share del server» con enumerazione automatica, badge «credenziali non valide» in chat-ui, namespace DFS.
+Kerberos authentication, file deletion, per-user or per-group server allowlists (today only NTFS
+ACLs decide), an "all shares on the server" mode with automatic enumeration, an "invalid
+credentials" badge in chat-ui, DFS namespaces.
 
-## Test
+## Tests
 
 ```bash
 python -m pytest src/test/ -k "smb" -v
 ```
 
-I test usano `smbclient` mockato; non serve un server SMB.
+The tests use a mocked `smbclient`; no SMB server is needed.

@@ -1,280 +1,286 @@
 ---
-title: Piano di implementazione — Canale WhatsApp
+title: Implementation plan — WhatsApp channel
 sidebar_position: 22
-description: Piano per permettere ai dipendenti di un'azienda di chattare con il proprio AION Agent da WhatsApp tramite la WhatsApp Business Platform (Cloud API) di Meta, aggiornato a ottobre 2026.
+description: Plan to let a company's employees chat with their AION Agent from WhatsApp through Meta's WhatsApp Business Platform (Cloud API), updated October 2026.
 ---
 
-# Piano di implementazione — Canale WhatsApp
+# Implementation plan — WhatsApp channel
 
-> Documento di pianificazione. Stato delle API e delle policy Meta verificato
-> il **28/10/2026**; le fonti sono in fondo. Le date Meta cambiano spesso:
-> ricontrollarle prima di ogni rilascio.
->
-> **Stato:** la Fase 1 (solo testo) è implementata. La guida operativa
-> (setup admin, collegamento dei dipendenti, endpoint, troubleshooting) è in
-> [`docs/integrations/whatsapp.md`](../integrations/whatsapp.md). Dove questo
-> piano e il codice differiscono, vale il codice; le differenze principali
-> sono segnalate nelle sezioni 3, 4, 8 e 9.
+:::info Design note
+Implementation plan for the WhatsApp channel (Meta Cloud API). Status: partially implemented — Phase 1 (text) is live in `src/channels/whatsapp/`, inbound/outbound media from Phase 2 is partly done; for the current behaviour see [WhatsApp integration](../integrations/whatsapp.md).
+:::
 
-## Obiettivo
+:::note
+Planning document. The state of Meta's APIs and policies was verified
+on **28/10/2026**; the sources are at the bottom. Meta's dates change often:
+re-check them before every release.
 
-Un'azienda che usa AION deve poter attivare, dall'admin-ui, un numero
-WhatsApp aziendale. I dipendenti scrivono a quel numero da WhatsApp e parlano
-con lo stesso agente (stessi profili, memoria STM/LTM, tool MCP, permessi)
-che usano dalla chat-ui. Le conversazioni WhatsApp compaiono anche nello
-storico della chat-ui.
+**Status:** Phase 1 (text only) is implemented. The operational guide
+(admin setup, employee linking, endpoints, troubleshooting) is in
+[`docs/integrations/whatsapp.md`](../integrations/whatsapp.md). Where this
+plan and the code differ, the code wins; the main differences
+are flagged in sections 3, 4, 8 and 9.
+:::
 
-Fuori scope nella prima versione: gruppi WhatsApp, chiamate vocali, messaggi
-proattivi (template), più numeri per tenant.
+## Goal
 
-## 1. Quadro Meta al 2026 (cosa usare e cosa evitare)
+A company using AION must be able to activate a company WhatsApp number
+from the admin-ui. Employees write to that number from WhatsApp and talk
+to the same agent (same profiles, STM/LTM memory, MCP tools, permissions)
+they use from the chat-ui. WhatsApp conversations also appear in the
+chat-ui history.
 
-| Tema | Stato ottobre 2026 | Impatto su AION |
-|------|--------------------|-----------------|
-| **API da usare** | **WhatsApp Cloud API** (ospitata da Meta, Graph API). L'On-Premises API è stata dismessa il 23/10/2025. | Unica opzione ufficiale. Niente librerie "WhatsApp Web" non ufficiali (Baileys, WAHA, whapi…): violano i termini e portano al ban del numero. |
-| **Versione Graph API** | Ultima: **v26.0** (29/07/2026). La documentazione WhatsApp usa ancora v25.0 negli esempi. | Versione configurabile, default `v26.0`. |
-| **Policy "AI Providers"** | Dal 15/01/2026 i termini escludono i fornitori di assistenti AI *general-purpose*, salvo dove Meta è obbligata per legge a permetterli. In **Italia** (misura cautelare AGCM, 22/12/2025) e nel resto del **SEE** (misure provvisorie della Commissione UE, 09/06/2026) l'accesso è ripristinato **fino alla decisione finale**. Dal 13/05/2026 Meta non addebita più costi extra agli AI Provider nei mercati UE/SEE. | **Rischio principale del progetto**: vedi §2. |
-| **Prezzi** | Prezzo per singolo messaggio dal 01/07/2025. **Dal 01/10/2026 i messaggi di servizio (risposte entro le 24h) si pagano**: i primi **1.000 al mese per numero** sono gratuiti. Serve un metodo di pagamento nel Billing Hub. I messaggi in arrivo dagli utenti sono gratuiti. Esiste la nuova categoria "Meta Business Agent" (l'agente AI di Meta, a token), che non riguarda noi. | Ogni messaggio inviato conta: niente spezzare le risposte in tanti messaggi senza motivo. |
-| **Finestra di servizio** | Per 24h dall'ultimo messaggio dell'utente si possono inviare messaggi liberi. Fuori finestra solo template approvati. | La v1 risponde soltanto: nessun template necessario. |
-| **Identità utente (BSUID)** | Da aprile 2026 i webhook includono sempre `user_id` (Business-Scoped User ID, es. `IT.1234…`). Con i **nomi utente WhatsApp** (prenotabili dal 29/06/2026) il numero di telefono (`from`, `wa_id`) **può mancare**. Da luglio 2026 si può inviare al BSUID con il campo `recipient`. Se l'utente cambia numero, il BSUID cambia: arriva un messaggio `system` con `previous_user_id`. | Chiave primaria dell'identità WhatsApp = **BSUID**, non il numero. Il collegamento all'utente AION non può contare sul numero. |
-| **Webhook** | Verifica con GET (`hub.mode`, `hub.verify_token`, `hub.challenge`). POST firmati con `X-Hub-Signature-256` (HMAC-SHA256 del body grezzo con l'app secret). Payload fino a 3 MB. Nuovi tentativi fino a **7 giorni**, con **duplicati possibili**. mTLS supportato. Gli IP Meta cambiano: sconsigliata l'allowlist. | Rispondere 200 subito, elaborare in background, deduplicare per `wamid`. |
-| **UX** | Indicatore "sta scrivendo" (dal 2025, si invia insieme alla conferma di lettura). Messaggi interattivi (pulsanti, liste). Testo max 4.096 caratteri. I link ai media scaricati scadono in pochi minuti. | Spunte blu + "sta scrivendo" mentre l'agente lavora; comandi tramite liste interattive. |
-| **Onboarding** | Self-service: app Meta + System User token. Per partner: Tech Provider + **Embedded Signup** (v4 in public preview da maggio 2026). Esiste "Coexistence" per riusare un numero dell'app WhatsApp Business. | v1: ogni cliente porta la propria app Meta. Embedded Signup è nella fase 4. |
+Out of scope for the first version: WhatsApp groups, voice calls, proactive
+(template) messages, multiple numbers per tenant.
 
-## 2. Compliance e policy (prima di scrivere codice)
+## 1. The Meta landscape in 2026 (what to use and what to avoid)
 
-1. **Posizionamento rispetto alla clausola "AI Providers".** Il caso d'uso è
-   un'azienda che offre ai **propri dipendenti** un assistente legato ai
-   propri dati, processi e strumenti. Non è un assistente generico offerto al
-   pubblico. Per restare in questo perimetro:
-   - risponde solo a utenti **collegati** a un account AION (gli altri
-     ricevono soltanto il messaggio di collegamento);
-   - profili usati su WhatsApp configurati sulle funzioni aziendali;
-   - mai presentarlo come "ChatGPT su WhatsApp";
-   - un **kill switch** (`AION_WHATSAPP_ENABLED=0`) per spegnere il canale
-     subito se Meta o un'autorità cambiano le regole.
-2. **Revisione legale** dei *Meta Terms for WhatsApp Business Platform*
-   (versione del 15/01/2026) da parte di AION-ASA e del cliente, perché:
-   - le misure AGCM e UE sono **cautelari**: una decisione finale potrebbe
-     cambiare il quadro;
-   - AION-ASA, se distribuisse il canale come Tech Provider (fase 4),
-     potrebbe ricadere più facilmente nella definizione di "AI Provider".
-3. **GDPR / lavoro.**
-   - I messaggi transitano dai server Meta (Cloud API). Valutare la
-     *local storage* della Cloud API per una regione UE (da verificare sulla
-     documentazione aggiornata).
-   - Aggiornare l'informativa ai dipendenti e la policy BYOD (WhatsApp sul
-     telefono personale).
-   - DPIA se l'agente accede a dati sensibili.
-   - L'uso del canale deve essere **volontario** (opt-in tramite il
-     collegamento dell'account).
-4. **Prerequisiti Meta per ogni cliente:**
-   - Business portfolio verificato;
+| Topic | Status, October 2026 | Impact on AION |
+|-------|----------------------|----------------|
+| **API to use** | **WhatsApp Cloud API** (hosted by Meta, Graph API). The On-Premises API was sunset on 23/10/2025. | The only official option. No unofficial "WhatsApp Web" libraries (Baileys, WAHA, whapi…): they violate the terms and lead to the number being banned. |
+| **Graph API version** | Latest: **v26.0** (29/07/2026). The WhatsApp documentation still uses v25.0 in its examples. | Configurable version, default `v26.0`. |
+| **"AI Providers" policy** | Since 15/01/2026 the terms exclude providers of *general-purpose* AI assistants, except where Meta is required by law to allow them. In **Italy** (AGCM interim measure, 22/12/2025) and in the rest of the **EEA** (interim measures by the EU Commission, 09/06/2026) access is restored **until the final decision**. Since 13/05/2026 Meta no longer charges AI Providers extra fees in EU/EEA markets. | **Main project risk**: see §2. |
+| **Pricing** | Per-message pricing since 01/07/2025. **From 01/10/2026 service messages (replies within 24h) are paid**: the first **1,000 per month per number** are free. A payment method is needed in the Billing Hub. Incoming messages from users are free. There is a new "Meta Business Agent" category (Meta's AI agent, billed per token), which does not concern us. | Every message sent counts: do not split replies into many messages without a reason. |
+| **Service window** | For 24h after the user's last message, free-form messages can be sent. Outside the window, only approved templates. | v1 only replies: no templates needed. |
+| **User identity (BSUID)** | Since April 2026 webhooks always include `user_id` (Business-Scoped User ID, e.g. `IT.1234…`). With **WhatsApp usernames** (bookable since 29/06/2026) the phone number (`from`, `wa_id`) **may be missing**. Since July 2026 messages can be sent to the BSUID with the `recipient` field. If the user changes number, the BSUID changes: a `system` message arrives with `previous_user_id`. | Primary key of the WhatsApp identity = **BSUID**, not the number. Linking to the AION user cannot rely on the number. |
+| **Webhook** | Verification via GET (`hub.mode`, `hub.verify_token`, `hub.challenge`). POSTs signed with `X-Hub-Signature-256` (HMAC-SHA256 of the raw body with the app secret). Payload up to 3 MB. Retries for up to **7 days**, with **possible duplicates**. mTLS supported. Meta IPs change: an allowlist is discouraged. | Reply 200 immediately, process in the background, deduplicate by `wamid`. |
+| **UX** | "Typing" indicator (since 2025, sent together with the read receipt). Interactive messages (buttons, lists). Text max 4,096 characters. Links to downloaded media expire within a few minutes. | Blue ticks + "typing" while the agent works; commands via interactive lists. |
+| **Onboarding** | Self-service: Meta app + System User token. For partners: Tech Provider + **Embedded Signup** (v4 in public preview since May 2026). "Coexistence" exists to reuse a number from the WhatsApp Business app. | v1: each customer brings their own Meta app. Embedded Signup is in phase 4. |
+
+## 2. Compliance and policy (before writing code)
+
+1. **Positioning with respect to the "AI Providers" clause.** The use case is
+   a company that offers **its own employees** an assistant tied to its
+   own data, processes and tools. It is not a generic assistant offered to the
+   public. To stay within this perimeter:
+   - it replies only to users **linked** to an AION account (everyone else
+     only receives the linking message);
+   - profiles used on WhatsApp are configured around business functions;
+   - never present it as "ChatGPT on WhatsApp";
+   - a **kill switch** (`AION_WHATSAPP_ENABLED=0`) to turn the channel off
+     immediately if Meta or an authority changes the rules.
+2. **Legal review** of the *Meta Terms for WhatsApp Business Platform*
+   (version of 15/01/2026) by AION-ASA and the customer, because:
+   - the AGCM and EU measures are **interim**: a final decision could
+     change the picture;
+   - AION-ASA, if it distributed the channel as a Tech Provider (phase 4),
+     could more easily fall under the definition of "AI Provider".
+3. **GDPR / employment.**
+   - Messages transit through Meta's servers (Cloud API). Evaluate Cloud API
+     *local storage* for an EU region (to be verified against the
+     up-to-date documentation).
+   - Update the privacy notice for employees and the BYOD policy (WhatsApp on
+     a personal phone).
+   - DPIA if the agent accesses sensitive data.
+   - Use of the channel must be **voluntary** (opt-in through
+     account linking).
+4. **Meta prerequisites for each customer:**
+   - verified Business portfolio;
    - WABA;
-   - numero dedicato;
-   - nome visualizzato approvato;
-   - app Meta con prodotto WhatsApp;
-   - System User con token permanente (`whatsapp_business_messaging`,
+   - dedicated number;
+   - approved display name;
+   - Meta app with the WhatsApp product;
+   - System User with a permanent token (`whatsapp_business_messaging`,
      `whatsapp_business_management`);
    - app secret;
-   - sottoscrizione al campo webhook `messages`;
-   - metodo di pagamento;
-   - app in modalità **Live**.
+   - subscription to the `messages` webhook field;
+   - payment method;
+   - app in **Live** mode.
 
-## 3. Architettura proposta
+## 3. Proposed architecture
 
 ```mermaid
 sequenceDiagram
-    participant U as Dipendente (WhatsApp)
+    participant U as Employee (WhatsApp)
     participant M as Meta Cloud API
     participant C as Caddy (/api/*)
     participant W as backend /v1/channels/whatsapp/webhook
     participant D as Dispatcher (asyncio)
     participant P as AgentPipeline
-    U->>M: messaggio
-    M->>C: POST webhook (firmato)
+    U->>M: message
+    M->>C: POST webhook (signed)
     C->>W: /v1/channels/whatsapp/webhook
-    W->>W: verifica firma + phone_number_id, dedup wamid, salva inbound
-    W-->>M: 200 OK (subito)
-    W->>D: enqueue(identità BSUID)
-    D->>M: conferma di lettura + "sta scrivendo"
-    D->>D: risolve utente AION / conversazione attiva / media
+    W->>W: verify signature + phone_number_id, dedup wamid, store inbound
+    W-->>M: 200 OK (immediately)
+    W->>D: enqueue(BSUID identity)
+    D->>M: read receipt + "typing"
+    D->>D: resolve AION user / active conversation / media
     D->>P: run_stream(user_input, turn_attachments)
     P-->>D: token, final, charts
-    D->>M: invio risposta (formattata, a blocchi da max 4096 caratteri)
-    M->>U: risposta
-    M->>W: webhook di stato (sent/delivered/read/failed)
+    D->>M: send reply (formatted, in chunks of max 4096 characters)
+    M->>U: reply
+    M->>W: status webhook (sent/delivered/read/failed)
 ```
 
-Vincoli dell'architettura attuale da rispettare:
+Constraints of the current architecture to respect:
 
-- **`--workers 1`**: la coda in-process (`asyncio`) va bene e segue lo
-  schema di `src/runtime/cron_runner.py:129` (`execute_job`) e del task in
-  background di `src/api/v1/chat.py:797`.
-- **Nessuna task queue**. Per non perdere messaggi a un riavvio, l'inbound
-  viene salvato su DB con `status=received` prima del 200. All'avvio (nel
-  lifespan) si riprendono i pendenti con meno di 24h.
-- **Caddy** già inoltra `/api/*` al backend togliendo il prefisso. Il webhook
-  è pubblico (nessuna dipendenza di auth): la sicurezza viene dalla firma
-  HMAC.
+- **`--workers 1`**: the in-process (`asyncio`) queue is fine and follows the
+  pattern of `src/runtime/cron_runner.py:129` (`execute_job`) and of the
+  background task in `src/api/v1/chat.py:797`.
+- **No task queue**. To avoid losing messages on a restart, the inbound
+  message is saved to the DB with `status=received` before the 200. At startup (in the
+  lifespan) pending messages younger than 24h are resumed.
+- **Caddy** already forwards `/api/*` to the backend, stripping the prefix. The webhook
+  is public (no auth dependency): security comes from the HMAC
+  signature.
 
-### 3.1 Nuovi moduli
+### 3.1 New modules
 
-Moduli effettivi della Fase 1:
+Actual Phase 1 modules:
 
 ```
 src/channels/__init__.py
 src/channels/whatsapp/
-├── config_service.py  # config per tenant (DB, segreti cifrati, cache 30s) + kill switch env
-├── signature.py       # verify_signature(raw_body, header, app_secret) — confronto a tempo costante
+├── config_service.py  # per-tenant config (DB, encrypted secrets, 30s cache) + env kill switch
+├── signature.py       # verify_signature(raw_body, header, app_secret) — constant-time comparison
 ├── payload.py         # parse webhook -> InboundMessage / StatusUpdate / SystemChange (dataclass)
 ├── graph_client.py    # Graph API via httpx: get_phone_info, get_subscribed_apps,
 │                      # subscribe_app, send_text, mark_read_typing
-├── formatting.py      # Markdown AION -> sintassi WhatsApp, split a 4096, tabelle, link
-├── linking.py         # codici COLLEGA monouso, BSUID -> User, cambio numero
-├── store.py           # whatsapp_messages: insert con dedup, stati, ripresa
-└── dispatcher.py      # lock per mittente, comandi, run del turno, invio risposta, resume_pending
-src/api/v1/whatsapp.py     # webhook pubblico + /v1/me/whatsapp* (require_chat_auth)
+├── formatting.py      # AION Markdown -> WhatsApp syntax, split at 4096, tables, links
+├── linking.py         # one-time COLLEGA codes, BSUID -> User, number change
+├── store.py           # whatsapp_messages: insert with dedup, statuses, resume
+└── dispatcher.py      # per-sender lock, commands, turn run, reply sending, resume_pending
+src/api/v1/whatsapp.py     # public webhook + /v1/me/whatsapp* (require_chat_auth)
 src/api/admin_whatsapp.py  # /admin/whatsapp/* (require_admin_role)
 ```
 
-I comandi sono gestiti direttamente nel dispatcher (niente `commands.py`) e
-non esiste un `router.py`: il router pubblico è `src/api/v1/whatsapp.py`,
-incluso in `src/api/v1/__init__.py`; quello admin è incluso in
-`src/api/admin.py`. Il client per media e messaggi interattivi arriva con la
-Fase 2.
+Commands are handled directly in the dispatcher (no `commands.py`) and
+there is no `router.py`: the public router is `src/api/v1/whatsapp.py`,
+included in `src/api/v1/__init__.py`; the admin one is included in
+`src/api/admin.py`. The client for media and interactive messages comes with
+Phase 2.
 
-### 3.2 Modello dati (migrazione Alembic)
+### 3.2 Data model (Alembic migration)
 
-Nuova revisione in `migrations/versions/`, dopo l'head attuale `z8a9b0c028`.
-Il nome segue la convenzione, es. `a9b0c1d029w_whatsapp_channel.py`.
+New revision in `migrations/versions/`, after the current head `z8a9b0c028`.
+The name follows the convention, e.g. `a9b0c1d029w_whatsapp_channel.py`.
 
-| Tabella | Colonne principali | Note |
-|---------|--------------------|------|
-Tabelle effettive della Fase 1 (`a9b0c1d029w_whatsapp_channel.py`):
+Actual Phase 1 tables (`a9b0c1d029w_whatsapp_channel.py`):
 
-| Tabella | Colonne principali | Note |
-|---------|--------------------|------|
-| `whatsapp_channels` | `id`, `tenant_id` (unique), `enabled`, `waba_id`, `phone_number_id`, `display_phone_number`, `verified_name`, `access_token_encrypted`, `app_secret_encrypted`, `verify_token_encrypted`, `default_profile_slug`, `validated_at`, `validated_by_user_id`, `webhook_verified_at`, `last_webhook_at`, `last_error`, `created_at`, `updated_at` | Segreti cifrati con `src/runtime/credential_store.py` (`encrypt_value`/`decrypt_value`), come `SsoProvider.client_secret_encrypted`. |
-| `whatsapp_identities` | `id`, `tenant_id`, `bsuid`, `phone_e164` (nullable), `wa_profile_name`, `user_id` FK `users.id` (cascade), `active_conversation_id`, `linked_at`, `last_inbound_at` | Unique `(tenant_id, bsuid)` e `(tenant_id, user_id)`: un WhatsApp per utente. |
-| `whatsapp_link_codes` | `id`, `tenant_id`, `user_id`, `code_hash`, `expires_at` (10 min), `used_at`, `created_at` | Monouso; nel DB si salva solo l'hash. |
-| `whatsapp_messages` | `wamid` (unique), `tenant_id`, `direction` (`in`/`out`), `bsuid`, `conversation_id`, `status` (`received`/`processing`/`done`/`failed`/`sent`/`delivered`/`read`), `error_code`, `payload_json`, `created_at`, `updated_at` | Dedup, ripresa dopo riavvio, stato delle consegne. `payload_json` solo in ingresso, svuotato a fine elaborazione. |
+| Table | Main columns | Notes |
+|-------|--------------|-------|
+| `whatsapp_channels` | `id`, `tenant_id` (unique), `enabled`, `waba_id`, `phone_number_id`, `display_phone_number`, `verified_name`, `access_token_encrypted`, `app_secret_encrypted`, `verify_token_encrypted`, `default_profile_slug`, `validated_at`, `validated_by_user_id`, `webhook_verified_at`, `last_webhook_at`, `last_error`, `created_at`, `updated_at` | Secrets encrypted with `src/runtime/credential_store.py` (`encrypt_value`/`decrypt_value`), like `SsoProvider.client_secret_encrypted`. |
+| `whatsapp_identities` | `id`, `tenant_id`, `bsuid`, `phone_e164` (nullable), `wa_profile_name`, `user_id` FK `users.id` (cascade), `active_conversation_id`, `linked_at`, `last_inbound_at` | Unique `(tenant_id, bsuid)` and `(tenant_id, user_id)`: one WhatsApp per user. |
+| `whatsapp_link_codes` | `id`, `tenant_id`, `user_id`, `code_hash`, `expires_at` (10 min), `used_at`, `created_at` | Single use; only the hash is stored in the DB. |
+| `whatsapp_messages` | `wamid` (unique), `tenant_id`, `direction` (`in`/`out`), `bsuid`, `conversation_id`, `status` (`received`/`processing`/`done`/`failed`/`sent`/`delivered`/`read`), `error_code`, `payload_json`, `created_at`, `updated_at` | Dedup, resume after restart, delivery status. `payload_json` inbound only, cleared at the end of processing. |
 
-Rimandati: override del profilo per identità, `graph_api_version` per
-tenant (oggi è una env), reset per inattività, messaggio di benvenuto
-personalizzabile.
+Deferred: per-identity profile override, per-tenant `graph_api_version`
+(today it is an env var), reset on inactivity, customizable welcome
+message.
 
-## 4. Identità: collegare WhatsApp ↔ utente AION
+## 4. Identity: linking WhatsApp ↔ AION user
 
-> **Implementazione Fase 1:** il collegamento parte dalla chat-ui, non da
-> WhatsApp. Il dipendente genera in Impostazioni → WhatsApp un codice
-> monouso (QR / link `wa.me` con `COLLEGA <codice>` precompilato) e lo invia
-> al numero aziendale. Niente magic link né `link_mode`; il login resta
-> quello della chat-ui, quindi password, 2FA e SSO valgono comunque. A chi
-> non è collegato il bot risponde con il link alla scheda WhatsApp delle
-> impostazioni. Il flusso sotto resta come alternativa valutata.
+:::note Phase 1 implementation
+Linking starts from the chat-ui, not from
+WhatsApp. In Settings → WhatsApp the employee generates a one-time
+code (QR / `wa.me` link with `COLLEGA <code>` pre-filled) and sends it
+to the company number. No magic link and no `link_mode`; login remains
+the chat-ui one, so password, 2FA and SSO apply anyway. To users who are
+not linked, the bot replies with the link to the WhatsApp tab of the
+settings. The flow below remains as an evaluated alternative.
+:::
 
-Il numero non è affidabile come chiave: con i nomi utente può mancare dal
-webhook. Il meccanismo principale è quindi un **collegamento tramite login**.
+The number is not reliable as a key: with usernames it may be missing from the
+webhook. The main mechanism is therefore **linking via login**.
 
-1. Arriva un messaggio da un BSUID sconosciuto. Il bot risponde **una sola
-   volta ogni 10 minuti** per BSUID (ogni risposta costa) con:
-   *"Per usare AION collega il tuo account: https://DOMINIO/whatsapp/link?t=…"*.
-2. Il link apre una pagina della chat-ui (`chat-ui/app/whatsapp/link`). Il
-   login avviene col flusso normale (password + 2FA o SSO, quindi tutte le
-   policy esistenti valgono). Poi l'utente conferma
-   "Collega questo WhatsApp (nome profilo, ultime cifre se presenti)".
-3. `POST /v1/channels/whatsapp/link/confirm` (con `require_chat_auth`):
-   - consuma il token;
-   - crea la riga `whatsapp_identities`;
-   - scrive un audit log;
-   - il bot invia un messaggio di benvenuto con i comandi.
-4. **Opzionale (`link_mode=magic_link+phone`)**: se l'admin ha registrato il
-   numero del dipendente e il webhook contiene `wa_id`, il collegamento è
-   automatico. Il numero è già verificato da WhatsApp, ma il collegamento va
-   comunque confermato con un messaggio interattivo "Sei Mario Rossi? Sì/No".
+1. A message arrives from an unknown BSUID. The bot replies **only once
+   every 10 minutes** per BSUID (every reply costs money) with:
+   *"To use AION, link your account: https://DOMAIN/whatsapp/link?t=…"*.
+2. The link opens a chat-ui page (`chat-ui/app/whatsapp/link`). Login
+   happens through the normal flow (password + 2FA or SSO, so all the
+   existing policies apply). Then the user confirms
+   "Link this WhatsApp (profile name, last digits if present)".
+3. `POST /v1/channels/whatsapp/link/confirm` (with `require_chat_auth`):
+   - consumes the token;
+   - creates the `whatsapp_identities` row;
+   - writes an audit log;
+   - the bot sends a welcome message with the commands.
+4. **Optional (`link_mode=magic_link+phone`)**: if the admin has registered the
+   employee's number and the webhook contains `wa_id`, linking is
+   automatic. The number is already verified by WhatsApp, but the link must
+   still be confirmed with an interactive message "Are you Mario Rossi? Yes/No".
 
-Regole:
+Rules:
 
-- WhatsApp **non crea mai account**: vale anche con la signup policy SSO
+- WhatsApp **never creates accounts**: this holds even with the SSO signup policy
   `open`.
-- A ogni turno si ricontrolla che l'utente esista, non sia disattivato e
-  abbia accesso al profilo (`enforce_profile_access`).
-- Messaggio `system` `user_changed_number` / `user_changed_user_id`: si
-  aggiorna `bsuid` usando `previous_user_id`.
-- Scollegamento possibile:
-  - dall'utente (comando `/scollega` o impostazioni della chat-ui);
-  - dall'admin (pagina utenti).
-- Identità per la pipeline: un nuovo `ChatAuthIdentity(via="whatsapp", …)`.
-  Lo `user_id` della conversazione è `sanitize_user_id(user.identifier)`,
-  come per `chat_token` (`src/api/ownership.py:51`), così le conversazioni
-  appaiono nello storico della chat-ui dell'utente.
+- On every turn the system re-checks that the user exists, is not disabled and
+  has access to the profile (`enforce_profile_access`).
+- `system` message `user_changed_number` / `user_changed_user_id`: the
+  `bsuid` is updated using `previous_user_id`.
+- Unlinking is possible:
+  - by the user (`/scollega` command or chat-ui settings);
+  - by the admin (users page).
+- Identity for the pipeline: a new `ChatAuthIdentity(via="whatsapp", …)`.
+  The conversation's `user_id` is `sanitize_user_id(user.identifier)`,
+  as for `chat_token` (`src/api/ownership.py:51`), so the conversations
+  appear in the user's chat-ui history.
 
-## 5. Esecuzione del turno
+## 5. Turn execution
 
-Il dispatcher replica lo schema di `cron_runner.execute_job`:
+The dispatcher replicates the pattern of `cron_runner.execute_job`:
 
-1. **Lock per identità.** Se arriva un messaggio mentre un turno è in corso,
-   lo si mette in coda e lo si elabora dopo. Si possono raggruppare più
-   messaggi ravvicinati in un solo turno: l'infrastruttura
-   `redis_enqueue_session_event` esiste già.
-2. **Conferma di lettura + "sta scrivendo"** sul `wamid` ricevuto. L'indicatore
-   dura circa 25s: va rinviato periodicamente durante i turni lunghi (da
-   verificare se Meta lo consente sullo stesso `message_id`). Se il turno
-   supera ~60s si invia un solo messaggio "Ci sto lavorando…".
-3. **Conversazione.** Si usa `active_conversation_id`. Se manca, è
-   archiviata, o se l'ultimo messaggio supera `idle_reset_hours`, si crea una
-   nuova `Conversation` con `metadata.source="whatsapp"`, `profile_slug` (=
-   override dell'identità o `default_profile_slug`) e titolo
-   `WhatsApp — <data>`. Il filtro della chat-ui (`chat_ui.py:138`) **non** la
-   nasconde; meglio aggiungere un badge WhatsApp nella lista.
-4. **Media in ingresso.**
-   - `GET /{media-id}` → `url`; poi download con il bearer token.
+1. **Per-identity lock.** If a message arrives while a turn is in progress,
+   it is queued and processed afterwards. Several messages arriving close together can be
+   grouped into a single turn: the
+   `redis_enqueue_session_event` infrastructure already exists.
+2. **Read receipt + "typing"** on the received `wamid`. The indicator
+   lasts about 25s: it must be re-sent periodically during long turns (to be
+   verified whether Meta allows this on the same `message_id`). If the turn
+   exceeds ~60s a single "Working on it…" message is sent.
+3. **Conversation.** `active_conversation_id` is used. If it is missing, is
+   archived, or if the last message is older than `idle_reset_hours`, a
+   new `Conversation` is created with `metadata.source="whatsapp"`, `profile_slug` (=
+   the identity override or `default_profile_slug`) and title
+   `WhatsApp — <date>`. The chat-ui filter (`chat_ui.py:138`) does **not**
+   hide it; it would be better to add a WhatsApp badge in the list.
+4. **Inbound media.**
+   - `GET /{media-id}` → `url`; then download with the bearer token.
    - `save_upload(session_id, …)` (`src/session_workspace.py:289`) +
-     `apply_legacy_word_conversion` + `schedule_auto_ingest`, come in
+     `apply_legacy_word_conversion` + `schedule_auto_ingest`, as in
      `session_uploads.py`.
-   - Il risultato diventa `AttachmentRef` passato come `turn_attachments`.
-   - La didascalia diventa `user_input`.
-   - Nota: `chat_sync` (`/v1/chat`) **non** passa gli allegati, quindi si
-     chiama direttamente `AgentPipeline`.
+   - The result becomes an `AttachmentRef` passed as `turn_attachments`.
+   - The caption becomes `user_input`.
+   - Note: `chat_sync` (`/v1/chat`) does **not** pass attachments, so
+     `AgentPipeline` is called directly.
 5. **Run.**
    - `get_agent(profile, session_id, user_id, …)` + `AgentPipeline(…)`;
    - `run_stream(user_input, turn_attachments=…, message_source="user_input",
      metadata={"channel": "whatsapp", "wamid": …})`;
-   - registrazione in `_background_runs` + `redis_set_stream_active`, così il
-     turno si può seguire live dalla chat-ui;
-   - `agent_mode="normal"`, con plan mode e deep research disattivati in v1.
-6. **Tool che chiedono conferma all'utente (HITL):** in v1 si rifiutano con
-   un messaggio che rimanda alla chat-ui. In fase 3 si gestiscono con
-   pulsanti interattivi (`button_reply`).
-7. **Invio della risposta** (`formatting.py`):
-   - `**x**` → `*x*`; i titoli diventano righe in grassetto; i blocchi di
-     codice restano tra ```` ``` ````; `[t](u)` → `t: u`;
-   - tabelle → elenco puntato o blocco monospazio (oltre 4 colonne si
-     rimanda alla chat-ui);
-   - split a 4.096 caratteri sui confini di paragrafo, con un limite di
-     blocchi per risposta (es. 3). Oltre il limite: riassunto + link
-     "Apri la risposta completa" alla conversazione nella chat-ui;
-   - `charts` → PNG renderizzato e inviato come `image`, oppure link alla
+   - registration in `_background_runs` + `redis_set_stream_active`, so the
+     turn can be followed live from the chat-ui;
+   - `agent_mode="normal"`, with plan mode and deep research disabled in v1.
+6. **Tools that ask the user for confirmation (HITL):** in v1 they are refused with
+   a message that points to the chat-ui. In phase 3 they are handled with
+   interactive buttons (`button_reply`).
+7. **Sending the reply** (`formatting.py`):
+   - `**x**` → `*x*`; headings become bold lines; code
+     blocks stay between ```` ``` ````; `[t](u)` → `t: u`;
+   - tables → bulleted list or monospace block (beyond 4 columns, the reply
+     points to the chat-ui);
+   - split at 4,096 characters on paragraph boundaries, with a limit of
+     chunks per reply (e.g. 3). Beyond the limit: summary + an
+     "Open the full reply" link to the conversation in the chat-ui;
+   - `charts` → PNG rendered and sent as `image`, or a link to the
      chat-ui;
-   - file generati nel workspace → `document` (upload media).
-8. **Persistenza.** I messaggi utente e assistente li salva già la pipeline.
-   Si registrano i `wamid` in uscita in `whatsapp_messages` e si aggiornano
-   gli stati dai webhook di stato. Su `failed` si logga il codice errore Meta
-   (es. 131047 = finestra di 24h scaduta).
+   - files generated in the workspace → `document` (media upload).
+8. **Persistence.** User and assistant messages are already saved by the pipeline.
+   Outbound `wamid`s are recorded in `whatsapp_messages` and statuses are updated
+   from the status webhooks. On `failed` the Meta error code is logged
+   (e.g. 131047 = 24h window expired).
 
-### Comandi (testo o lista interattiva)
+### Commands (text or interactive list)
 
-| Comando | Effetto |
-|---------|---------|
-| `/nuova` | Nuova conversazione |
-| `/profilo` | Lista interattiva dei profili consentiti all'utente → override sull'identità |
-| `/aiuto` | Elenco comandi |
-| `/scollega` | Scollega il numero (con conferma) |
+| Command | Effect |
+|---------|--------|
+| `/nuova` | New conversation |
+| `/profilo` | Interactive list of the profiles allowed for the user → override on the identity |
+| `/aiuto` | List of commands |
+| `/scollega` | Unlink the number (with confirmation) |
 
-## 6. Esempi API (Cloud API, v26.0)
+## 6. API examples (Cloud API, v26.0)
 
-Webhook in ingresso (estratto, con BSUID):
+Inbound webhook (excerpt, with BSUID):
 
 ```json
 {
@@ -289,9 +295,9 @@ Webhook in ingresso (estratto, con BSUID):
 }
 ```
 
-`from`/`wa_id` possono mancare, `user_id`/`from_user_id` sono sempre presenti.
+`from`/`wa_id` may be missing; `user_id`/`from_user_id` are always present.
 
-Invio di una risposta (al BSUID):
+Sending a reply (to the BSUID):
 
 ```http
 POST https://graph.facebook.com/v26.0/<PHONE_NUMBER_ID>/messages
@@ -302,71 +308,73 @@ Authorization: Bearer <SYSTEM_USER_TOKEN>
   "text": { "body": "…", "preview_url": false } }
 ```
 
-Se si passano sia `to` che `recipient`, prevale `to`.
+If both `to` and `recipient` are passed, `to` takes precedence.
 
-Conferma di lettura + "sta scrivendo":
+Read receipt + "typing":
 
 ```json
 { "messaging_product": "whatsapp", "status": "read",
   "message_id": "wamid.HBg…", "typing_indicator": { "type": "text" } }
 ```
 
-Media: `GET /v26.0/<MEDIA_ID>` → `{url, mime_type, sha256, file_size}`, poi
-`GET <url>` con lo stesso bearer token.
+Media: `GET /v26.0/<MEDIA_ID>` → `{url, mime_type, sha256, file_size}`, then
+`GET <url>` with the same bearer token.
 
-Meta non mantiene un SDK Python ufficiale per la Cloud API: si usa `httpx`
-(già nel progetto) con un client sottile e testabile.
+Meta does not maintain an official Python SDK for the Cloud API: `httpx`
+(already in the project) is used with a thin, testable client.
 
-## 7. Sicurezza
+## 7. Security
 
-- **Firma**: HMAC-SHA256 sul **body grezzo** (letto con
-  `await request.body()` prima del parsing), confronto con
-  `hmac.compare_digest`. Firma non valida → 403, niente elaborazione.
-- Si accettano solo payload con `metadata.phone_number_id` uguale a quello
-  configurato. Quando il canale è disabilitato si risponde 200 senza fare
-  nulla, così Meta non continua a ritentare.
-- `verify_token` generato casualmente dall'admin-ui, salvato cifrato.
-- Limite dimensione body (3 MB + margine) e rate limit per BSUID con
-  contatore Redis (oggi non c'è nessun limiter). Throttling separato e più
-  severo per i BSUID non collegati, contro gli abusi di costo.
-- mTLS facoltativo su Caddy per il path del webhook (documentarlo, non
-  obbligatorio in v1).
-- Log senza contenuto dei messaggi. Audit di collegamento/scollegamento e
-  cambi di configurazione.
-- Media: limite `AION_UPLOAD_MAX_BYTES`, MIME consentiti, stessi controlli
-  dell'upload della chat-ui.
+- **Signature**: HMAC-SHA256 over the **raw body** (read with
+  `await request.body()` before parsing), compared with
+  `hmac.compare_digest`. Invalid signature → 403, no processing.
+- Only payloads whose `metadata.phone_number_id` equals the configured one
+  are accepted. When the channel is disabled the webhook replies 200 without doing
+  anything, so Meta does not keep retrying.
+- `verify_token` generated randomly from the admin-ui, stored encrypted.
+- Body size limit (3 MB + margin) and per-BSUID rate limit with a
+  Redis counter (today there is no limiter at all). Separate, stricter throttling
+  for unlinked BSUIDs, against cost abuse.
+- Optional mTLS on Caddy for the webhook path (to be documented, not
+  mandatory in v1).
+- Logs without message content. Audit of linking/unlinking and
+  configuration changes.
+- Media: `AION_UPLOAD_MAX_BYTES` limit, allowed MIME types, same checks
+  as the chat-ui upload.
 
-## 8. Admin UI e chat-ui
+## 8. Admin UI and chat-ui
 
-> **Implementazione Fase 1:** pagina `admin-ui/app/whatsapp` (gruppo
-> Piattaforma) con guida, credenziali, checklist "Verifica" e attivazione
-> solo dopo una verifica riuscita; scheda WhatsApp nelle impostazioni della
-> chat-ui con QR. Endpoint effettivi: `GET/PUT /admin/whatsapp`,
-> `POST /admin/whatsapp/verify-token`, `POST /admin/whatsapp/validate`,
-> `POST /admin/whatsapp/enable`, `GET/DELETE /admin/whatsapp/identities`,
-> `GET/DELETE /v1/me/whatsapp`, `POST /v1/me/whatsapp/link-code`. Elenco
-> completo in [`docs/integrations/whatsapp.md`](../integrations/whatsapp.md#endpoint).
+:::note Phase 1 implementation
+Page `admin-ui/app/whatsapp` (Platform
+group) with a guide, credentials, a "Verify" checklist and activation
+only after a successful verification; WhatsApp tab in the chat-ui
+settings with a QR code. Actual endpoints: `GET/PUT /admin/whatsapp`,
+`POST /admin/whatsapp/verify-token`, `POST /admin/whatsapp/validate`,
+`POST /admin/whatsapp/enable`, `GET/DELETE /admin/whatsapp/identities`,
+`GET/DELETE /v1/me/whatsapp`, `POST /v1/me/whatsapp/link-code`. Full
+list in [`docs/integrations/whatsapp.md`](../integrations/whatsapp.md#endpoint).
+:::
 
-**admin-ui** — nuova pagina `admin-ui/app/integrations/whatsapp/page.tsx`
-(o sezione in `settings`), testi i18n in `admin-ui/lib/i18n/locales/{it,en,de,fr,es}.json`:
+**admin-ui** — new page `admin-ui/app/integrations/whatsapp/page.tsx`
+(or a section in `settings`), i18n strings in `admin-ui/lib/i18n/locales/{it,en,de,fr,es}.json`:
 
-- interruttore attivo/disattivo;
-- campi WABA ID, Phone Number ID, access token, app secret (in sola
-  scrittura, mascherati);
-- verify token con pulsante "genera";
-- **URL del webhook da copiare** (`https://DOMINIO/api/v1/channels/whatsapp/webhook`);
-- **"Verifica connessione"**: `GET /<PHONE_NUMBER_ID>?fields=display_phone_number,verified_name,quality_rating`
-  mostra nome verificato e qualità;
-- profilo predefinito, modalità di collegamento, reset per inattività,
-  messaggio di benvenuto;
-- tabella delle identità collegate (utente, nome profilo WA, ultimo
-  messaggio, scollega);
-- stato del canale: ultimo webhook ricevuto, errori recenti, messaggi
-  inviati nel mese rispetto ai 1.000 gratuiti;
-- guida passo-passo alla configurazione su Meta, con link a
+- on/off switch;
+- WABA ID, Phone Number ID, access token, app secret fields (write-only,
+  masked);
+- verify token with a "generate" button;
+- **webhook URL to copy** (`https://DOMAIN/api/v1/channels/whatsapp/webhook`);
+- **"Verify connection"**: `GET /<PHONE_NUMBER_ID>?fields=display_phone_number,verified_name,quality_rating`
+  shows the verified name and quality;
+- default profile, linking mode, reset on inactivity,
+  welcome message;
+- table of linked identities (user, WA profile name, last
+  message, unlink);
+- channel status: last webhook received, recent errors, messages
+  sent this month against the 1,000 free ones;
+- step-by-step guide to the configuration on Meta, with a link to
   `docs/integrations/whatsapp.md`.
 
-API admin:
+Admin API:
 
 - `GET/PUT /admin/whatsapp/settings`
 - `POST /admin/whatsapp/test`
@@ -375,70 +383,70 @@ API admin:
 
 **chat-ui:**
 
-- pagina `/whatsapp/link`;
-- in impostazioni → "Account collegati": WhatsApp con stato e pulsante
-  scollega;
-- badge WhatsApp nella lista conversazioni.
+- `/whatsapp/link` page;
+- in settings → "Linked accounts": WhatsApp with status and an unlink
+  button;
+- WhatsApp badge in the conversation list.
 
-## 9. Configurazione (env)
+## 9. Configuration (env)
 
-La configurazione funzionale vive nel DB (modificabile dall'admin-ui).
-Le env servono come override e kill switch, da aggiungere a `.env.example`
-e `.env.docker.example`:
+The functional configuration lives in the DB (editable from the admin-ui).
+Env vars serve as overrides and a kill switch, to be added to `.env.example`
+and `.env.docker.example`:
 
-| Variabile | Default | Scopo |
-|-----------|---------|-------|
-| `AION_WHATSAPP_FORCE_DISABLE` | `0` | Kill switch globale (`1` = canale spento, come `AION_SSO_FORCE_PASSWORD`); l'attivazione normale è dall'admin-ui |
-| `AION_WHATSAPP_GRAPH_VERSION` | `v26.0` | Versione Graph API |
-| `AION_WHATSAPP_MAX_CHUNKS` | `3` | Blocchi massimi per risposta |
-| `AION_WHATSAPP_TURN_TIMEOUT_S` | `600` | Timeout del turno |
-| `AION_WHATSAPP_UNLINKED_REPLY_COOLDOWN_S` | `600` | Anti-spam del messaggio di collegamento (Fase 1: fisso a 10 min) |
-| `AION_WHATSAPP_MEDIA` | `1` | Foto/documenti in ingresso e file generati in uscita (Fase 2) |
-| `AION_WHATSAPP_MAX_OUTBOUND_FILES` | `5` | File generati inviati per risposta (Fase 2) |
-| `AION_WHATSAPP_MAX_OUTBOUND_BYTES` | `104857600` | Dimensione massima di un file inviato (Fase 2) |
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `AION_WHATSAPP_FORCE_DISABLE` | `0` | Global kill switch (`1` = channel off, like `AION_SSO_FORCE_PASSWORD`); normal activation is from the admin-ui |
+| `AION_WHATSAPP_GRAPH_VERSION` | `v26.0` | Graph API version |
+| `AION_WHATSAPP_MAX_CHUNKS` | `3` | Maximum chunks per reply |
+| `AION_WHATSAPP_TURN_TIMEOUT_S` | `600` | Turn timeout |
+| `AION_WHATSAPP_UNLINKED_REPLY_COOLDOWN_S` | `600` | Anti-spam for the linking message (Phase 1: fixed at 10 min) |
+| `AION_WHATSAPP_MEDIA` | `1` | Inbound photos/documents and outbound generated files (Phase 2) |
+| `AION_WHATSAPP_MAX_OUTBOUND_FILES` | `5` | Generated files sent per reply (Phase 2) |
+| `AION_WHATSAPP_MAX_OUTBOUND_BYTES` | `104857600` | Maximum size of a sent file (Phase 2) |
 
-## 10. Fasi di rilascio
+## 10. Release phases
 
-| Fase | Contenuto | Stima |
-|------|-----------|-------|
-| **0 — Prerequisiti** | Revisione legale (§2); app Meta di test con numero di test gratuito; tunnel (cloudflared/ngrok) per lo sviluppo locale; raccolta di payload reali come fixture. | 2–3 gg + tempi legali |
-| **1 — Solo testo** ✅ | Migrazione; `config_service`/`signature`/`payload`/`graph_client`; webhook + dedup + ripresa pendenti; collegamento con codice/QR dalla chat-ui; pagina admin con verifica e attivazione; dispatcher con conferma di lettura e "sta scrivendo"; formattazione e split; comandi base; kill switch; doc `docs/integrations/whatsapp.md`. | 8–10 gg |
-| **2 — Admin & media** (media ✅ parziale) | Pagina admin completa con test di connessione e identità; ✅ media in ingresso (immagini, PDF, documenti Office; senza didascalia restano in attesa del messaggio successivo); ✅ file generati in uscita (`workspace/`, `derived/`); grafici `charts` come PNG ancora da fare; webhook di stato e metriche; rate limit. Dettagli in `docs/integrations/whatsapp.md` § File e foto. | 6–8 gg |
-| **3 — UX avanzata** | Messaggi vocali tramite endpoint STT OpenAI-compatible (`AION_STT_API_URL`, es. Whisper su vLLM; oggi in AION non esiste STT); HITL con pulsanti; auto-match tramite numero; raggruppamento di messaggi ravvicinati. | 5–7 gg |
-| **4 — Distribuzione** | Messaggi proattivi tramite template utility (es. risultati dei job cron), fuori dalla finestra di 24h; AION-ASA come **Tech Provider** con **Embedded Signup** (onboarding con un clic dall'admin-ui, `override_callback_uri` per WABA verso il dominio del cliente). Richiede App Review e una nuova valutazione della policy AI Providers. | da stimare |
+| Phase | Content | Estimate |
+|-------|---------|----------|
+| **0 — Prerequisites** | Legal review (§2); test Meta app with a free test number; tunnel (cloudflared/ngrok) for local development; collection of real payloads as fixtures. | 2–3 days + legal lead time |
+| **1 — Text only** ✅ | Migration; `config_service`/`signature`/`payload`/`graph_client`; webhook + dedup + resume of pending messages; linking with code/QR from the chat-ui; admin page with verification and activation; dispatcher with read receipt and "typing"; formatting and split; basic commands; kill switch; doc `docs/integrations/whatsapp.md`. | 8–10 days |
+| **2 — Admin & media** (media ✅ partial) | Full admin page with connection test and identities; ✅ inbound media (images, PDF, Office documents; without a caption they wait for the next message); ✅ outbound generated files (`workspace/`, `derived/`); `charts` as PNG still to do; status webhooks and metrics; rate limit. Details in `docs/integrations/whatsapp.md` § Files and photos. | 6–8 days |
+| **3 — Advanced UX** | Voice messages via an OpenAI-compatible STT endpoint (`AION_STT_API_URL`, e.g. Whisper on vLLM; today AION has no STT); HITL with buttons; auto-match by number; grouping of messages that arrive close together. | 5–7 days |
+| **4 — Distribution** | Proactive messages via utility templates (e.g. cron job results), outside the 24h window; AION-ASA as **Tech Provider** with **Embedded Signup** (one-click onboarding from the admin-ui, `override_callback_uri` per WABA towards the customer's domain). Requires App Review and a new assessment of the AI Providers policy. | to be estimated |
 
-## 11. Test
+## 11. Tests
 
 - **Unit**:
-  - firma (valida, alterata, header mancante);
-  - parsing di fixture reali: testo, immagine, documento, audio,
-    interattivi, reazioni, `system` (cambio numero), stati, payload **senza
-    `wa_id`**, duplicati;
-  - formatter Markdown → WhatsApp e split;
-  - token di collegamento (scadenza, riuso).
-- **Integrazione**:
-  - Graph API simulata con `httpx.MockTransport` (niente dipendenza `respx`);
-  - dispatcher end-to-end con pipeline stub;
-  - ripresa dopo riavvio;
-  - lock per identità con messaggi concorrenti.
-- **Manuale / staging**:
-  - numero di test Meta (fino a 5 destinatari) dietro Caddy di staging;
-  - verifica del costo reale dei messaggi nel Billing Hub;
-  - verifica dell'indicatore "sta scrivendo" sui turni lunghi.
-- I test vanno in `src/test/` (`python -m pytest src/test/ -v`).
+  - signature (valid, tampered, missing header);
+  - parsing of real fixtures: text, image, document, audio,
+    interactive, reactions, `system` (number change), statuses, payloads **without
+    `wa_id`**, duplicates;
+  - Markdown → WhatsApp formatter and split;
+  - linking token (expiry, reuse).
+- **Integration**:
+  - Graph API simulated with `httpx.MockTransport` (no `respx` dependency);
+  - end-to-end dispatcher with a stub pipeline;
+  - resume after restart;
+  - per-identity lock with concurrent messages.
+- **Manual / staging**:
+  - Meta test number (up to 5 recipients) behind a staging Caddy;
+  - check of the real cost of messages in the Billing Hub;
+  - check of the "typing" indicator on long turns.
+- Tests go in `src/test/` (`python -m pytest src/test/ -v`).
 
-## 12. Rischi
+## 12. Risks
 
-| Rischio | Probabilità | Mitigazione |
-|---------|-------------|-------------|
-| Meta o un'autorità cambiano la policy AI Providers (le decisioni cautelari diventano finali) | Media | Posizionamento "assistente aziendale interno", kill switch, revisione legale, canale facoltativo |
-| Numero di telefono assente (nomi utente) | Alta dal 2026 | Identità su BSUID + collegamento tramite login |
-| Costi oltre i 1.000 messaggi/mese | Media | Limite di blocchi, risposte compatte, contatore nell'admin, rate limit |
-| Turni lunghi / riavvio con `--workers 1` | Media | Inbound persistito + ripresa all'avvio, messaggio "ci sto lavorando" |
-| Ban o calo di qualità del numero (segnalazioni degli utenti) | Bassa (utenti interni) | Solo utenti collegati, niente messaggi non richiesti |
-| Cambi di versione o di campi Graph API | Media | Versione configurabile, parser tollerante ai campi sconosciuti, fixture aggiornate |
+| Risk | Likelihood | Mitigation |
+|------|------------|------------|
+| Meta or an authority changes the AI Providers policy (the interim decisions become final) | Medium | "Internal company assistant" positioning, kill switch, legal review, optional channel |
+| Phone number missing (usernames) | High from 2026 | Identity on BSUID + linking via login |
+| Costs beyond 1,000 messages/month | Medium | Chunk limit, compact replies, counter in the admin, rate limit |
+| Long turns / restart with `--workers 1` | Medium | Persisted inbound + resume at startup, "working on it" message |
+| Ban or quality drop of the number (user reports) | Low (internal users) | Only linked users, no unsolicited messages |
+| Graph API version or field changes | Medium | Configurable version, parser tolerant to unknown fields, updated fixtures |
 
-## Fonti
+## Sources
 
 - [Business-scoped user IDs — Meta for Developers](https://developers.facebook.com/documentation/business-messaging/whatsapp/business-scoped-user-ids)
 - [Pricing — WhatsApp Business Platform](https://developers.facebook.com/documentation/business-messaging/whatsapp/pricing)
@@ -447,6 +455,6 @@ e `.env.docker.example`:
 - [Webhooks overview](https://developers.facebook.com/documentation/business-messaging/whatsapp/webhooks/overview)
 - [Introducing Graph API v26](https://developers.facebook.com/blog/post/2026/07/29/introducing-graph-api-v26-and-marketing-api-v26/)
 - [On-Premises API changelog (sunset)](https://developers.facebook.com/docs/whatsapp/on-premises/changelog)
-- [Commissione UE — misure provvisorie su Meta (IP/26/1276)](https://ec.europa.eu/commission/presscorner/api/files/document/print/en/ip_26_1276/IP_26_1276_EN.pdf)
-- [AGCM — misure cautelari A576](https://www.agcm.it/dotcmsdoc/allegati-news/A576_adoz%20misure%20cautelari_omi_signed_signed.pdf)
+- [EU Commission — interim measures on Meta (IP/26/1276)](https://ec.europa.eu/commission/presscorner/api/files/document/print/en/ip_26_1276/IP_26_1276_EN.pdf)
+- [AGCM — interim measures A576](https://www.agcm.it/dotcmsdoc/allegati-news/A576_adoz%20misure%20cautelari_omi_signed_signed.pdf)
 - [TechCrunch — WhatsApp changes its terms to bar general-purpose chatbots](https://techcrunch.com/2025/10/18/whatssapp-changes-its-terms-to-bar-general-purpose-chatbots-from-its-platform/)

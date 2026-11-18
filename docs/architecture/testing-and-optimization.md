@@ -1,12 +1,12 @@
 ---
 sidebar_position: 4
-title: Testing, Profiling & Optimization
-description: Guide to the use of the Profiler, Optuna and the Evaluation Harness in AION V3.
+title: Testing, profiling and optimization
+description: Step-by-step guide to find bottlenecks, run quality tests and tune AION parameters.
 ---
 
 # Step-by-Step Guide: Testing and Optimization
 
-This guide explains how to use the new AION V3 stack to ensure quality, performance and stability.
+This guide explains how to use the AION V3 tooling to keep the agent fast, correct and stable: the profiler finds where time is spent, the evaluation harness checks answers against a dataset, and Optuna (a hyper-parameter optimization library) searches for better settings. It is written for developers and operators who need to diagnose a slow agent, catch regressions before a release, or tune a deployment.
 
 ## 1. Bottleneck Analysis (Profiling)
 
@@ -15,9 +15,9 @@ If you notice that the agent is slow, follow these steps:
 1. **Enable Profiling**: Make sure that `AION_PROFILING_ENABLED=1` is in your `.env`.
 2. **Run conversations**: Use the agent normally.
 3. **Check the reports**:
-   - Go to the Admin Panel (if available) or query the API:
+   - Go to the Admin Panel (if available) or query the API (default backend port `8001`; `/admin/*` requires an admin Bearer token):
      ```bash
-     curl http://localhost:8000/admin/profiling/bottlenecks
+     curl -H "Authorization: Bearer $TOKEN" http://localhost:8001/admin/profiling/bottlenecks
      ```
    - The system will tell you if the problem is the LLM, a specific tool or memory retrieval.
 

@@ -1,10 +1,12 @@
 ---
 sidebar_position: 12
-title: Harness v2 (Pi-inspired)
-description: Optional two-layer messages, structured injections, unified compaction, and explicit turn boundaries behind feature flags.
+title: Harness v2
+description: Optional, flag-controlled improvements to how AION builds the model context for each turn.
 ---
 
 # Harness v2 (Pi-inspired patterns)
+
+The "harness" is the code around the language model that decides what goes into its context on each turn: which messages, which injected memory or hints, and how old history is compacted. Harness v2 is a set of optional improvements to that code, each behind its own feature flag, so they can be rolled out one at a time. This page lists the flags and their effect; it is for developers working on the agent runtime.
 
 AION keeps Haystack as the agent runtime. Harness v2 ports **context-shaping patterns** from [Pi](https://github.com/earendil-works/pi) without replacing the Python stack.
 
@@ -21,7 +23,7 @@ All flags default to **off** for safe rollout. Enable incrementally and run the 
 | `AION_HARNESS_V2_TOOLS` | `src/runtime/tool_protocol.py` | Skip tool execution after `finish_reason=length` |
 | `AION_HARNESS_V2_TURN` | `src/runtime/turn/model.py` | Explicit input message count instead of object-identity slicing |
 
-## Fase 0 quick wins (always on unless overridden)
+## Phase 0 quick wins (always on unless overridden) {#fase-0-quick-wins-always-on-unless-overridden}
 
 | Variable | Default | Notes |
 |----------|---------|-------|

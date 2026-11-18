@@ -1,10 +1,12 @@
 ---
-title: Two-Factor Authentication (TOTP)
+title: Two-factor authentication
 sidebar_position: 4
-description: Optional TOTP two-factor authentication for the classic password login, enabled by the administrator.
+description: Require a one-time code from an authenticator app in addition to the password.
 ---
 
 # Two-Factor Authentication (TOTP)
+
+Two-factor authentication (2FA) adds a second check at login: besides the password, the user types a 6-digit code from an authenticator app on their phone. The code is a TOTP (time-based one-time password) that changes every 30 seconds, so a stolen password alone is not enough to sign in. This page is for **administrators** who turn it on and for **users** who need to set up or recover their authenticator.
 
 The administrator can require a TOTP code (Google Authenticator, Microsoft Authenticator, any RFC 6238 app) on top of the password. It applies to **every login through `POST /auth/login`** (chat-ui and admin-ui) and **only while `login_mode` is `password`**. SSO logins are never affected; when an SSO mode is active the setting is ignored (and cannot be enabled: `PUT /admin/auth/2fa` returns `409 sso_active`). Exception: during an SSO migration, users who already enrolled keep their TOTP and must enter the code at password login until they link SSO (see [SSO migration](./sso-migration.md)).
 

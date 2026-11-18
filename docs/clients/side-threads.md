@@ -1,14 +1,16 @@
 ---
-title: Side threads (chat-ui)
+title: Side threads
 sidebar_position: 3
-description: Child conversations opened from a highlighted passage of an assistant answer, shown in a side panel and persisted like any chat.
+description: Open a separate follow-up chat on a passage of an answer, in a side panel.
 ---
 
 # Side threads
 
-A **side thread** lets the user dig into a passage of an assistant answer without
-cluttering the main conversation. The user selects text in an answer, clicks
-**Approfondisci in un thread** and keeps chatting in a panel next to the main chat.
+A **side thread** lets you dig into a passage of an assistant answer without
+cluttering the main conversation. Select text in an answer, click
+**Approfondisci in un thread** ("Explore in a thread") and keep chatting in a panel next to the main chat.
+The first section ([User flow](#user-flow)) is for end users; the rest describes the API, storage and
+implementation for developers.
 
 A side thread is **not temporary**: it is a regular conversation with its own id,
 history, STM window, MCP session and stream. It can be reopened from the parent

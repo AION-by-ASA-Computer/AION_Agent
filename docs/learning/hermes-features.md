@@ -1,10 +1,12 @@
 ---
 sidebar_position: 1
-title: Hermes Features - Philosophy and Trade-offs
-description: Why Hermes exists, when to enable/disable each feature, and the architectural rationales.
+title: Hermes learning features
+description: The optional features that let the agent learn from use, and when to turn each one on or off.
 ---
 
 # Hermes Features
+
+Hermes is the umbrella name for AION's optional "learning" features: context compression, turning repeated successful tool sequences into reusable skills, suggesting features to users ("nudges") and similar mechanisms. Each feature is switched on or off with its own environment variable. This page explains why each one exists, what it costs and when to enable it; it is for developers and administrators deciding how a deployment should behave.
 
 ## Philosophy of the learning system
 

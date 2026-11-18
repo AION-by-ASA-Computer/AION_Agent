@@ -1,12 +1,17 @@
 ---
-title: Filesystem policy and PNG promo export
+title: Filesystem policy and promo export
 sidebar_position: 2
-description: Template fs_policy, exec in sandbox, Playwright for MCP promo_render and integration in setup/upgrade scripts.
+description: Optional setup for sandbox file/exec rules and for exporting promo graphics to PNG.
 ---
 
 # Filesystem policy and PNG promo export
 
-Two optional features share the same setup hook: **YAML policy for filesystem/exec** and **Playwright for the `promo_render` MCP server**.
+This page covers two optional features that are installed by the same setup step:
+
+- a **filesystem/exec policy** (a YAML file) that controls which files the agent may read or write and which commands it may run in the session sandbox;
+- **Playwright** (a headless browser) for the `promo_render` MCP server, which turns React/HTML designs into PNG images.
+
+It is for **administrators and IT staff** who run the setup and upgrade scripts. MCP (Model Context Protocol) servers are the plug-in tool providers the agent calls.
 
 ## What the scripts do
 

@@ -1,10 +1,12 @@
 ---
 sidebar_position: 3
 title: Skills and system prompt
-description: Index/full modes, skill registry and MCP skills_hub.
+description: What skills are, how they reach the agent system prompt, and how to write one.
 ---
 
 # Skills and system prompt
+
+A **skill** is a Markdown file of instructions that teaches the agent how to do a specific job (for example, how to build a Word document or how to cite web sources). Skills are attached to agent [profiles](./profiles.md); the **system prompt** is the hidden set of instructions the agent receives before every conversation. This page explains how skills are added to that prompt, the skill file format and the skills registry. It is for **administrators** who manage profiles and skills and for **developers** who write new skills.
 
 ## Two modes of skill injection
 

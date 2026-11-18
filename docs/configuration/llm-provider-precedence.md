@@ -1,10 +1,12 @@
 ---
 sidebar_position: 8
-title: LLM provider and API key precedence
-description: Which endpoint, model and API key every AI feature (chat, Deep Research, memory extraction, probes) uses, and how to check them.
+title: Which LLM and API key are used
+description: How AION picks the language model endpoint, model and API key for each AI feature.
 ---
 
 # LLM provider and API key precedence
+
+AION talks to a large language model (LLM) through an API endpoint, a model name and an API key. These can be set in the Admin UI (**LLM providers**) or in the `.env` file. This page explains which of the two wins, so an **administrator** can tell which model and key a feature (chat, Deep Research, memory extraction) is really using.
 
 Every AI feature resolves **URL, model and API key together**, from one source,
 through `resolve_llm_credentials()` in `src/runtime/llm_adapter.py`:

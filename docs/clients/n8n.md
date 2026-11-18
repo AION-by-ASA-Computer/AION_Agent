@@ -1,13 +1,16 @@
 ---
-title: N8N Integration
+title: n8n integration
 sidebar_position: 4
-description: Connect AION Agent to n8n workflows via the community node and sync chat API.
+description: Call AION agents from n8n automation workflows.
 ---
 
 # N8N Integration
 
-AION can drive **n8n** automations through a community node that selects an existing
-agent **profile** and runs a synchronous chat turn.
+[n8n](https://n8n.io) is a workflow automation tool. With the AION community node, an n8n
+workflow can send a question to an existing AION agent **profile** and use the answer in the next
+steps (for example: summarise an incoming email, then post the summary to a channel). This page is
+for **administrators and integrators** who build n8n workflows; it explains what to set up on the
+AION side and how to configure the node credentials.
 
 The community package lives in a **separate repository**: `n8n-nodes-aion`
 (sibling of this monorepo). Keep packaging, npm publish, and n8n CLI tooling there;

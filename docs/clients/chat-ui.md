@@ -1,12 +1,32 @@
 ---
 sidebar_position: 2
-title: Chat UI (Next.js)
-description: Main Next.js chat client, stack aligned with admin-ui.
+title: Chat UI
+description: The web app where users chat with AION, plus how to configure and run it.
 ---
 
 # Chat UI (`chat-ui/`)
 
-**Next.js 16 + React 19 + Tailwind 4** application separate from [`admin-ui`](./admin-ui.md), on dev port **8003** (`npm run dev` in `chat-ui/`).
+Chat UI is the web application where people talk to AION: they pick an agent profile, ask questions, upload files and get answers, documents and charts back. It is the main client for end users. Administrators manage users, profiles and integrations in a separate app, the [Admin UI](./admin-ui.md).
+
+Technically it is a **Next.js 16 + React 19 + Tailwind 4** application, separate from `admin-ui`, served on dev port **8003** (`npm run dev` in `chat-ui/`).
+
+:::tip On this page
+- **End users**: read [What you can do with Chat UI](#what-you-can-do-with-chat-ui), [User settings](#user-settings-settings) and [My integrations](#my-integrations).
+- **Administrators / IT**: also read [Environment variables](#environment-variables) and [Brand (logo / favicon)](#brand-logo--favicon).
+- **Developers**: everything from [Backend endpoints used](#backend-endpoints-used) onwards (timeline, design system, troubleshooting).
+:::
+
+## What you can do with Chat UI
+
+- **Chat with an agent**: choose a profile and a reasoning effort, then follow the answer as it streams, including the agent's reasoning and the tools it calls.
+- **Work with files**: upload documents (legacy Word `.doc` files are converted automatically), and preview or download the files the agent creates in the side dock.
+- **See charts inline**: charts produced by the agent appear directly in the conversation and are restored when you reload.
+- **Dig into a passage**: select text in an answer and open a [side thread](./side-threads.md) without cluttering the main chat.
+- **Dictate**: use the microphone button to speak instead of typing (when enabled by the administrator).
+- **Approve plans**: when the agent proposes a multi-step plan, review and approve it from the Plan dock.
+- **Tune the agent**: adjust limits and generation parameters from the sidebar and save them as presets.
+- **Manage your account**: profile, appearance, password, personal API keys, personal instructions and credentials for your own integrations.
+- **Pick up where you left off**: conversations are saved; if you leave during a long answer, the chat resumes when you come back.
 
 ## Quick start
 
@@ -67,7 +87,7 @@ Backend (`.env`): `AION_CORS_ORIGINS` can list `http://localhost:8003`; default 
 
 ## Sidebar tunings (runtime + presets)
 
-**Tuning e parametri** (sidebar nav) opens a **sidebar panel** while the current chat stays in the main column. Deep-link: `/c/{id}?tunings=runtime` or `?tunings=presets`.
+**Tuning e parametri** ("Tuning and parameters", in the sidebar nav) opens a **sidebar panel** while the current chat stays in the main column. Deep-link: `/c/{id}?tunings=runtime` or `?tunings=presets`.
 
 - **Runtime** tab: data-driven sliders from `GET /v1/runtime-settings` (loop limits, sampling, thinking). `.env` values are the Reset defaults; the server clamps every field.
 - **Presets** tab: save / apply / rename / delete user-scoped snapshots stored in `users.metadata.runtime_settings`.
@@ -77,7 +97,7 @@ Hard ceilings (cannot be raised from the UI): 200 agent steps, 200 tool calls pe
 
 ## User settings (`/settings`)
 
-Full-page route (profile menu → **Impostazioni**): profile, appearance, security, API keys, instructions (`USER.md`). Same layout as before the tunings panel — not embedded in the sidebar.
+Full-page route (profile menu → **Impostazioni**, i.e. "Settings"): profile, appearance, security, API keys, instructions (`USER.md`). Same layout as before the tunings panel — not embedded in the sidebar.
 
 The **API keys** tab (`/settings?tab=api-keys`, shown only with a chat login token) lets the user create, list and revoke personal keys within the policy set by the admin (enabled flag, max active keys, max lifetime). The full key is shown only once at creation. Keys act as the user; see [API keys](../security/api-keys.md).
 
@@ -136,7 +156,7 @@ During long reasoning **before** `tool_start`, only the reasoning block is visib
 - **DB**: additive column `messages.timeline_json` (JSON array of segments: `reasoning` | `tool` | `artifact` | `text`).
 - **API** (`GET /chat-ui/conversations/{id}/messages`): each assistant message includes `timeline` (the parsed segments), alongside `steps`, `artifacts`, `rating` and `feedback_comment`; existing fields (`content`, `reasoning`, `tool_name`, `tool_call_id`, `created_at`) remain unchanged for legacy integrations.
 - **New turns**: `agent_pipeline` builds the timeline from the same SSE chunks sent to the client.
-- **Historical messages**: automatic backfill on `./scripts/upgrade-aion.sh`, `scripts/init_unified_db.py`, setup wizard and backend startup (idempotente); manual: `python scripts/backfill_message_timelines.py`. Best-effort: reasoning at the head, tool/artifact by `created_at`, text at the tail. GET also does lazy-backfill if `timeline_json` is still null.
+- **Historical messages**: automatic backfill on `./scripts/upgrade-aion.sh`, `scripts/init_unified_db.py`, setup wizard and backend startup (idempotent); manual: `python scripts/backfill_message_timelines.py`. Best-effort: reasoning at the head, tool/artifact by `created_at`, text at the tail. GET also does lazy-backfill if `timeline_json` is still null.
 - **Chat-ui**: `segmentsForMessage()` prefers `timeline` / `segments` in memory; fallback `segmentsFromHistoryMessage()` only if absent.
 
 ## Design system
@@ -196,9 +216,7 @@ Update this section with dark/light captures from the active chat-ui (header + s
 - **Symptom**: you change chat from the sidebar and upon returning you do not see previous messages (without a full refresh).
 - **Common causes**:
   - `GET /chat-ui/conversations/{id}/messages` in error (403 secret, 404 conversation/user, 503 unified DB disabled) — the UI shows the `chat.history_load_error` banner instead of a silent empty chat.
-  - Stream still active on another conversation that was blocking the merge (mitigato: abort + `chatStop` on thread change, merge only for the conversation in stream) [Nota: "mitigato" was "mitigato" or "mitigato" -> let's double check, line 161 in original: "mitigato: abort + `chatStop` al cambio thread" wait, original line 161: "mitigato: abort + `chatStop` al cambio thread" in the view_file was actually "mitigato" or "mitigato" -> wait, line 161 says "(mitigato: abort..." wait, let's look at the view_file output:
-  "  - Stream ancora attivo su un’altra conversazione che bloccava il merge (mitigato: abort + `chatStop` al cambio thread, merge solo per la conversazione in stream)."
-  So "mitigato: abort + `chatStop` al cambio thread" translates to "mitigated: abort + `chatStop` on thread change"]
+  - Stream still active on another conversation that was blocking the merge (mitigated: abort + `chatStop` on thread change, merge only for the conversation in stream).
   - Messages in the DB but filtered as technical (role `internal`, orchestrator content, empty assistant without steps/timeline).
 - **Debug**: `NEXT_PUBLIC_AION_CHAT_UI_DEBUG=1` logs in the console `[aion-chat-ui] history fetch` with `count`, `streamingRef`, `source`. With password auth on, verify the chat token is present: `X-AION-User-Id` alone does not select the user.
 - **Implementation**: local/server merge in `chat-ui/lib/merge-chat-history.ts`, orchestration in `chat-ui/lib/use-conversation-transcript.ts`.

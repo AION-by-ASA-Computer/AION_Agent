@@ -1,10 +1,12 @@
 ---
 sidebar_position: 1
-title: Identity and chat auth
-description: user_id resolution, chat-ui login, admin roles, database schema, and sub-agent status.
+title: Users, identity and chat login
+description: How AION knows who is chatting - user ids, Chat UI login, admin roles and where users are stored.
 ---
 
 # Identity, users, and chat authentication
+
+Every conversation in AION belongs to a user, so the agent can keep each person's chats, preferences and memory separate. This page explains how AION identifies the user (open mode vs. password login), how roles such as `admin` work and where users are stored. It is for **administrators and IT staff** who set up login; developers will find the API and database details further down.
 
 Operational guide for linking **real users** (tenant / organization), **agent profiles**, and **USER preferences** (SOUL/MEMORY deprecated — see [soul-memory-user](../configuration/soul-memory-user.md)), with authenticated chat-ui and conversation tracking.
 

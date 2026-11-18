@@ -1,12 +1,14 @@
 ---
 sidebar_position: 3
-title: Observability & Telemetry
-description: Three-pillar observability stack (Traces, Metrics, Logs) with OTLP push, dual-export Prometheus, OpenLit auto-instrumentation and Opik for LLM telemetry.
+title: Observability and telemetry
+description: How AION exposes traces, metrics and logs so you can monitor and debug it in production.
 ---
 
 # Observability & Telemetry
 
-AION Agents V3 integrates a complete native observability stack, compatible with OpenTelemetry standards, designed for advanced monitoring of LLM agents in production environments.
+Observability is what lets you answer "what is the agent doing, how fast, and why did it fail?" without attaching a debugger. AION Agents V3 integrates a complete native observability stack based on OpenTelemetry (OTel, the open standard for traces, metrics and logs), designed for monitoring LLM (large language model) agents in production. This page is for developers and IT/operations staff who need to wire AION into a monitoring backend (Jaeger, Tempo, Prometheus, Grafana, Opik) or troubleshoot a deployment.
+
+OTLP below stands for OpenTelemetry Protocol, the wire format used to push data to an OTel collector.
 
 ## Architecture Overview
 

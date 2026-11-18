@@ -1,10 +1,12 @@
 ---
-title: Session isolation
+title: Session isolation (sandbox)
 sidebar_position: 2
-description: Container-based session sandbox isolation, threat model, and environment variables.
+description: How code run by the agent is kept in a separate container per chat, and how to configure it.
 ---
 
 # Session isolation
+
+The agent can write and run code (Python or Node scripts, package installs) to analyse files or build documents. To keep that code from touching the server, other users' data or secrets, AION runs it inside an isolated container (a "sandbox") dedicated to each chat session. This page describes what the isolation protects against, how it is built and which settings control it. It is for **IT staff and security reviewers**; for installing the container runtime see [Podman sandbox deploy](../deployment/podman-sandbox.md).
 
 AION isolates untrusted agent code (Python/Node scripts, pip/npm installs) per chat session.
 

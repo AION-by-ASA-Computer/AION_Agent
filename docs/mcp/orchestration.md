@@ -1,154 +1,152 @@
 ---
 sidebar_position: 2
-title: Orchestrazione e HITL
-description: Piani di esecuzione, wait registry, API approve e integrazione Chat UI.
+title: Orchestration and HITL
+description: Execution plans, the wait registry, the approve API and Chat UI integration.
 ---
 
-# Orchestrazione MCP, Task Graph e HITL
+# Orchestration, task graph and HITL
 
-L'architettura di orchestrazione di AION introduce un sistema centralizzato per la pianificazione, la tracciabilità e la validazione interattiva (Human-in-the-Loop - HITL) dei flussi di lavoro complessi dell'agente.
-
----
-
-## 1. Modelli Dati & Protocollo
-
-I contratti e i modelli del grafo di esecuzione sono definiti in Pydantic v2 all'interno di [protocol.py](src/a2a/protocol.py):
-
-*   **`TaskStatus`**: Enum che definisce il ciclo di vita di un singolo task:
-    *   `pending`: In attesa che le dipendenze vengano risolte.
-    *   `ready`: Dipendenze completate, pronto per essere eseguito.
-    *   `running`: Attualmente in esecuzione.
-    *   `completed`: Completato con successo.
-    *   `failed`: Esecuzione fallita.
-    *   `skipped`: Saltato a causa di fallimenti a monte o modifiche al piano.
-*   **`ExecutionTask`**: Rappresenta un nodo del grafo con:
-    *   `id`: Identificativo univoco autogenerato (es. `task_01`).
-    *   `title`: Titolo descrittivo dell'azione atomica da compiere.
-    *   `description`: Dettagli operativi, vincoli o criteri di accettazione del task.
-    *   `depends_on`: Lista di ID di task da cui dipende. Il modello impedisce auto-dipendenze (`_no_self_dep`).
-    *   `target_profile`: Nome dell'agente specializzato a cui delegare il task (opzionale).
-    *   `status`: Stato corrente (`TaskStatus`).
-*   **`ExecutionPlan`**: Contenitore del grafo che valida:
-    *   L'assenza di ID duplicati tra i task.
-    *   La risoluzione delle dipendenze (nessuna dipendenza verso task inesistenti).
-    *   L'assenza di cicli nel grafo tramite algoritmo DFS (`_graph_consistent`).
+For complex requests, the AION agent can first write an **execution plan** (a list of tasks with dependencies), wait for a person to approve or edit it, and then carry it out step by step while showing progress in the chat sidebar. This approval step is called **HITL (Human-in-the-Loop)**. This page describes the data model, the built-in tools, the approval flow and the internal API behind it; it is mainly for developers/operators, while end users only see the plan panel in chat-ui.
 
 ---
 
-## 2. Single Source of Truth (SSOT)
+## 1. Data models and protocol
 
-Il markdown del piano e lo stato di avanzamento delle checkbox **non risiedono nel workspace** come file fisici `execution_plan_*.md`. 
+The execution-graph contracts and models are defined with Pydantic v2 in [protocol.py](src/a2a/protocol.py):
 
-L'unica fonte di verità (SSOT) è il database relazionale SQLite (`data/aion.db`):
-
-*   **Tabella `execution_plans`**: Mappata in [models.py](src/data/models.py#L326-L344) come `ExecutionPlanRecord`. Registra la cronologia, le revisioni incrementali, il markdown (sia bozza che approvato), le annotazioni utente e i todo strutturati.
-*   **Pipeline & Artifacts**: Quando l'agente emette o modifica il piano nel tag `<plan>`, l'evento nel pipeline viene marcato con `saved: false` e `storage_key: orchestration://{plan_id}` (invece di salvare file nel workspace).
-*   **Visualizzazione**: La sidebar (`TaskPlanManagerV4`) fa poll sul database e visualizza lo stato corrente ripristinandolo in caso di refresh della pagina. L'agente legge lo stato solo con `get_execution_plan()` e con l'output di `mark_task_completed()`.
-
----
-
-## 3. Tool di Orchestrazione In-Process
-
-Questi tool sono **built-in** per ogni profilo e registrati in-process tramite `merge_builtin_orchestration_tools()` in [main.py](src/main.py#L830). Eseguono in-process per garantire la coerenza tra lo stato HITL e i canali SSE di `chat-ui`:
-
-1.  **`draft_execution_plan(goal, tasks)`**:
-    Genera un piano di esecuzione in stato di bozza nel DB, inviando una notifica SSE `orchestration_plan_pending` e registrandolo nel Wait Registry.
-2.  **`list_session_execution_plans(limit)`**:
-    Elenca i piani di esecuzione registrati per la sessione corrente indicando quale sia il piano attivo.
-3.  **`get_execution_plan(plan_id)`**:
-    Recupera la bozza o il piano approvato in formato Markdown e lo stato di completamento di ciascun task direttamente dal database.
-4.  **`update_execution_plan(plan_id, plan_markdown)`**:
-    Consente all'agente o all'utente di sovrascrivere l'intero markdown del piano (es. per modificare i task o aggiungere passaggi di remediation a seguito di errori).
-5.  **`mark_task_completed(plan_id, task_id)`**:
-    Segna un task come completato (spuntando la checkbox `- [x]` nel markdown salvato sul DB). Ha un guard integrato per cui l'agente può eseguire una sola chiamata con successo per turno.
+- **`TaskStatus`**: enum describing the life cycle of a single task:
+  - `pending`: waiting for its dependencies to be resolved.
+  - `ready`: dependencies done, ready to run.
+  - `running`: currently running.
+  - `completed`: finished successfully.
+  - `failed`: execution failed.
+  - `skipped`: skipped because of upstream failures or plan changes.
+- **`ExecutionTask`**: a node of the graph, with:
+  - `id`: auto-generated unique identifier (e.g. `task_01`).
+  - `title`: short description of the atomic action to perform.
+  - `description`: operational details, constraints or acceptance criteria.
+  - `depends_on`: list of task IDs it depends on. The model forbids self-dependencies (`_no_self_dep`).
+  - `target_profile`: name of the specialized agent the task is delegated to (optional).
+  - `status`: current state (`TaskStatus`).
+- **`ExecutionPlan`**: the graph container. It validates:
+  - no duplicate IDs among tasks;
+  - every dependency points to an existing task;
+  - no cycles in the graph, using a DFS algorithm (`_graph_consistent`).
 
 ---
 
-## 4. Flusso HITL e Wait Registry
+## 2. Single source of truth (SSOT)
 
-Il flusso di approvazione garantisce la validazione umana prima dell'esecuzione di codice o azioni mutanti:
+The plan markdown and the checkbox progress **do not live in the workspace** as physical `execution_plan_*.md` files.
+
+The only source of truth is the SQLite relational database (`data/aion.db`):
+
+- **`execution_plans` table**: mapped in [models.py](src/data/models.py) as `ExecutionPlanRecord`. It stores the history, incremental revisions, the markdown (both draft and approved), user annotations and structured todos.
+- **Pipeline and artifacts**: when the agent emits or changes the plan in the `<plan>` tag, the pipeline event is marked `saved: false` with `storage_key: orchestration://{plan_id}` (instead of saving a file in the workspace).
+- **Display**: the sidebar (`TaskPlanManagerV4`) polls the database and shows the current state, restoring it after a page refresh. The agent reads the state only through `get_execution_plan()` and the output of `mark_task_completed()`.
+
+---
+
+## 3. In-process orchestration tools
+
+These tools are **built in** for every profile and registered in-process by `merge_builtin_orchestration_tools()` in [orchestration_tools.py](src/runtime/orchestration_tools.py) (called from `get_agent` in [main.py](src/main.py)). They run in-process to keep the HITL state consistent with the `chat-ui` SSE (Server-Sent Events) channels:
+
+1. **`draft_execution_plan(goal, tasks)`**: creates a draft execution plan in the DB, sends an `orchestration_plan_pending` SSE notification and registers it in the Wait Registry.
+2. **`list_session_execution_plans(limit)`**: lists the execution plans of the current session and shows which one is active.
+3. **`get_execution_plan(plan_id)`**: returns the draft or approved plan as Markdown, plus the completion state of each task, straight from the database.
+4. **`update_execution_plan(plan_id, plan_markdown)`**: lets the agent or the user overwrite the whole plan markdown (e.g. to change tasks or add remediation steps after errors).
+5. **`mark_task_completed(plan_id, task_id)`**: marks a task as done (ticking the `- [x]` checkbox in the markdown stored in the DB). A built-in guard allows only one successful call per turn.
+
+---
+
+## 4. HITL flow and Wait Registry
+
+The approval flow guarantees human validation before code or state-changing actions run:
 
 ```mermaid
 sequenceDiagram
-    participant Agent as Agente AION
+    participant Agent as AION agent
     participant DB as SQLite (execution_plans)
     participant WR as Wait Registry (Redis/Local)
     participant UI as Chat UI (PlanPanel)
 
-    Agent->>DB: draft_execution_plan o tag <plan>
-    DB-->>UI: Evento SSE (plan_pending)
-    Agent->>WR: set_pending() & attesa approvazione
-    Note over UI: L'utente analizza, modifica o integra
+    Agent->>DB: draft_execution_plan or <plan> tag
+    DB-->>UI: SSE event (plan_pending)
+    Agent->>WR: set_pending() & wait for approval
+    Note over UI: The user reviews, edits or adds to the plan
     UI->>WR: POST /approve (approved_markdown)
-    WR-->>Agent: Sblocco ed esecuzione del primo task
+    WR-->>Agent: Unblock and run the first task
 ```
 
-*   **Attesa Attiva**: Quando l'agente crea o aggiorna una bozza di piano, il thread di esecuzione attende che lo stato nel Wait Registry cambi da `pending` a `approved` o `rejected`.
-*   **Wait Registry**: Implementato in [plan_wait_registry.py](src/runtime/plan_wait_registry.py). Si appoggia a Redis o a una coda in-memory locale (`LocalFallback`) se `AION_REDIS_FALLBACK_LOCAL=1` è configurato.
-*   **Timeout**: Gestito dalla variabile `AION_ORCH_PLAN_WAIT_TIMEOUT_SEC` (default 600 secondi). Se scade, il piano viene marcato come `timeout` e l'esecuzione interrotta.
+- **Active wait**: when the agent creates or updates a draft plan, the execution thread waits for the Wait Registry state to change from `pending` to `approved` or `rejected`.
+- **Wait Registry**: implemented in [plan_wait_registry.py](src/runtime/plan_wait_registry.py). It uses Redis, or a local in-memory queue (`LocalFallback`) when `AION_REDIS_FALLBACK_LOCAL=1` is set.
+- **Timeout**: controlled by `AION_ORCH_PLAN_WAIT_TIMEOUT_SEC` (default 600 seconds). When it expires, the plan is marked `timeout` and execution stops.
 
 ---
 
-## 5. API Interne di Orchestrazione
+## 5. Internal orchestration API
 
-Il router `src/api/orchestration.py` espone gli endpoint sotto il prefisso `/internal/orchestration`:
+The router `src/api/orchestration.py` exposes these endpoints under the `/internal/orchestration` prefix:
 
-*   `GET /sessions/{session_id}/plans`: Elenca tutti i piani registrati per la conversazione.
-*   `GET /plans/{plan_id}?session_id={session_id}`: Restituisce lo stato, la revisione e il markdown del piano specificato.
-*   `POST /plans/{plan_id}/approve`: Approva il piano. Supporta l'invio del markdown modificato (`approved_markdown`), annotazioni e todo strutturati. Sveglia l'agente inviando un evento SSE ed enucleando la prima task pendente.
-*   `POST /plans/{plan_id}/reject`: Rifiuta il piano inserendo la motivazione fornita dall'utente.
-*   `POST /plans/{plan_id}/tasks/{task_id}/complete`: Marca manualmente una checkbox come completata dall'interfaccia.
-*   `POST /plans/{plan_id}/tasks/complete-all`: Marca tutte le task aperte come completate.
+| Method and path | Purpose |
+|-----------------|---------|
+| `GET /sessions/{session_id}/plans` | List all plans of the conversation |
+| `GET /plans/{plan_id}?session_id={session_id}` | Return the status, revision and markdown of the plan |
+| `POST /plans/{plan_id}/approve` | Approve the plan. Accepts edited markdown (`approved_markdown`), annotations and structured todos. Wakes the agent with an SSE event and picks the first pending task |
+| `POST /plans/{plan_id}/reject` | Reject the plan with the reason given by the user |
+| `POST /plans/{plan_id}/tasks/{task_id}/complete` | Manually tick one checkbox from the UI |
+| `POST /plans/{plan_id}/tasks/complete-all` | Mark all open tasks as completed |
 
-### Sicurezza e Autenticazione delle API
+### API security and authentication
 
-L'accesso alle API interne è regolato da due livelli in `orchestration_auth`:
+Access to the internal API is controlled at two levels in `orchestration_auth`:
 
-1.  **JWT Bearer Token (`Authorization`)**: Utilizzato da `chat-ui` per le richieste degli utenti. Il backend convalida che la sessione appartenga all'utente loggato confrontando `user_id` con la tabella `conversations`.
-2.  **Secret Interno (`X-AION-Orch-Secret`)**: Utilizzato per comunicazioni server-to-server o background job. Abilitato impostando `AION_ORCHESTRATION_SECRET_AUTH=1` e confrontando l'header con il segreto configurato in `AION_ORCHESTRATION_INTERNAL_SECRET`.
-
----
-
-## 6. Sub-agent e Delega (Sotto Sviluppo Attivo)
-
-> [!WARNING]
-> Il modulo dei Sub-agent (`aion_subagents` e le funzioni di delega come `delegate_task` / `delegate_to_subagent`) **non è attualmente funzionante ed è in fase di sviluppo attivo**. Non deve essere configurato o utilizzato in ambienti di produzione.
-
-### Architettura Prevista per i Sub-agent
-
-Il design originario dei sub-agent prevede un'architettura di isolamento a cascata:
-
-*   **Punto di Ingresso**: Gestito da `delegate_to_subagent_async` in [delegate_subagent.py](src/runtime/delegate_subagent.py), che a sua volta invoca `run_subagent_task` in [subagent_orchestrator.py](src/runtime/subagent_orchestrator.py).
-*   **Sessioni Figlie**: Ogni delega crea una sessione isolata temporanea identificata come `sub_{profile_slug}_{uuid}`.
-*   **Copia dei File**: I file caricati dall'utente nella sessione padre (sotto `uploads/`) vengono copiati automaticamente nella cartella della sessione figlia prima dell'avvio del sub-agente (funzione `sync_parent_uploads_to_child` in [session_workspace.py](src/session_workspace.py#L213-L232)).
-*   **Limitazioni Ambientali**: La sincronizzazione dei file tra sessioni padre e figlio è protetta da limiti massimi configurabili per prevenire l'esaurimento del disco (`AION_SUBAGENT_UPLOAD_SYNC_MAX_TOTAL_MB` e `AION_SUBAGENT_UPLOAD_SYNC_MAX_FILE_MB`).
-*   **Integrazione**: Il risultato testuale del sub-agente viene condensato/tagliato in base a `AION_ORCH_DISTILL_MAX_CHARS` e restituito all'agente chiamante.
+1. **JWT Bearer token (`Authorization`)**: used by `chat-ui` for user requests. The backend checks that the session belongs to the logged-in user by comparing `user_id` with the `conversations` table.
+2. **Internal secret (`X-AION-Orch-Secret`)**: used for server-to-server calls or background jobs. Enabled with `AION_ORCHESTRATION_SECRET_AUTH=1`; the header is compared with the secret in `AION_ORCHESTRATION_INTERNAL_SECRET`.
 
 ---
 
-## 7. Variabili d'Ambiente Rilevanti
+## 6. Sub-agents and delegation (under active development)
 
-Di seguito sono elencate le variabili d'ambiente utilizzate per configurare l'orchestrazione e il comportamento HITL:
+:::warning
+The sub-agent module (`aion_subagents` and delegation functions such as `delegate_task` / `delegate_to_subagent`) **does not currently work and is under active development**. Do not configure or use it in production.
+:::
 
-| Variabile | Valore Default | Descrizione |
+### Planned sub-agent architecture
+
+The original design uses cascading isolation:
+
+- **Entry point**: `delegate_to_subagent_async` in [delegate_subagent.py](src/runtime/delegate_subagent.py), which calls `run_subagent_task` in [subagent_orchestrator.py](src/runtime/subagent_orchestrator.py).
+- **Child sessions**: each delegation creates a temporary isolated session named `sub_{profile_slug}_{uuid}`.
+- **File copy**: files uploaded by the user in the parent session (under `uploads/`) are copied automatically into the child session folder before the sub-agent starts (`sync_parent_uploads_to_child` in [session_workspace.py](src/session_workspace.py)).
+- **Resource limits**: file sync between parent and child sessions is capped by configurable limits to avoid filling the disk (`AION_SUBAGENT_UPLOAD_SYNC_MAX_TOTAL_MB` and `AION_SUBAGENT_UPLOAD_SYNC_MAX_FILE_MB`).
+- **Integration**: the sub-agent's text result is condensed/truncated according to `AION_ORCH_DISTILL_MAX_CHARS` and returned to the calling agent.
+
+---
+
+## 7. Relevant environment variables
+
+These variables configure orchestration and HITL behavior:
+
+| Variable | Default | Description |
 | :--- | :--- | :--- |
-| `AION_ORCHESTRATION_INTERNAL_SECRET` | `aion-orchestration-dev` | Segreto per autenticare le richieste server-to-server tramite header `X-AION-Orch-Secret`. |
-| `AION_ORCHESTRATION_SECRET_AUTH` | `1` | Abilita (`1`) o disabilita (`0`) l'autenticazione tramite secret per le API interne. |
-| `AION_ORCH_PLAN_WAIT_TIMEOUT_SEC` | `600` | Timeout massimo di attesa per l'approvazione umana (HITL). |
-| `AION_ORCH_TOOL_TIMEOUT_SEC` | `900` | Timeout massimo per l'esecuzione in background di un tool di orchestrazione. |
-| `AION_PLAN_MODE_TOOL_FIRST` | `1` | Forza l'agente a usare il tool `draft_execution_plan` anziché i tag XML `<plan>`. |
-| `AION_PLAN_TEXT_PARSER` | `0` | Se impostato a `1`, abilita il fallback per il parsing dei piani in formato testo `<plan>...</plan>`. |
-| `AION_PLAN_MODE_MAX_RESEARCH_TOOLS` | `2` | Numero massimo di tool di ricerca/lettura che l'agente può invocare prima di registrare un piano in Plan Mode. |
-| `AION_PLAN_MODE_BLOCKED_TOOLS` | *(Vedi .env.example)* | CSV dei tool mutanti disabilitati durante la fase di pianificazione (Plan Mode). |
-| `AION_REDIS_FALLBACK_LOCAL` | `0` | Se impostato a `1`, usa una coda locale in-memory invece di Redis per il Wait Registry (solo per sviluppo a singolo worker). |
-| `AION_SUBAGENT_UPLOAD_SYNC_MAX_TOTAL_MB` | `50` | Limite massimo cumulativo di file trasferibili verso la sessione di un sub-agente. |
-| `AION_SUBAGENT_UPLOAD_SYNC_MAX_FILE_MB` | `25` | Limite massimo per singolo file trasferibile verso la sessione di un sub-agente. |
-| `AION_ORCH_DISTILL_MAX_CHARS` | — | Numero massimo di caratteri per condensare l'output di un sub-agente. |
+| `AION_ORCHESTRATION_INTERNAL_SECRET` | `aion-orchestration-dev` | Secret that authenticates server-to-server requests via the `X-AION-Orch-Secret` header. |
+| `AION_ORCHESTRATION_SECRET_AUTH` | `1` | Enables (`1`) or disables (`0`) secret authentication for the internal API. |
+| `AION_ORCH_PLAN_WAIT_TIMEOUT_SEC` | `600` | Maximum wait for human approval (HITL). |
+| `AION_ORCH_TOOL_TIMEOUT_SEC` | `900` | Maximum time for background execution of an orchestration tool. |
+| `AION_PLAN_MODE_TOOL_FIRST` | `1` | Forces the agent to use the `draft_execution_plan` tool instead of `<plan>` XML tags. |
+| `AION_PLAN_TEXT_PARSER` | `0` | When `1`, enables the fallback parser for text plans in `<plan>...</plan>` format. |
+| `AION_PLAN_MODE_MAX_RESEARCH_TOOLS` | `2` | Maximum number of research/read tools the agent may call before registering a plan in Plan Mode. |
+| `AION_PLAN_MODE_BLOCKED_TOOLS` | *(see .env.example)* | CSV of state-changing tools disabled during the planning phase (Plan Mode). |
+| `AION_REDIS_FALLBACK_LOCAL` | `0` | When `1`, uses a local in-memory queue instead of Redis for the Wait Registry (single-worker development only). |
+| `AION_SUBAGENT_UPLOAD_SYNC_MAX_TOTAL_MB` | `50` | Maximum total size of files copied to a sub-agent session. |
+| `AION_SUBAGENT_UPLOAD_SYNC_MAX_FILE_MB` | `25` | Maximum size of a single file copied to a sub-agent session. |
+| `AION_ORCH_DISTILL_MAX_CHARS` | — | Maximum number of characters used to condense a sub-agent's output. |
 
 ---
 
-## Documenti Correlati
+## Related documents
 
-*   [Registry MCP - Filosofia e Design](registry.md) - Informazioni sul caricamento e la configurazione dei server MCP.
-*   [Plan Mode (tool-first)](../architecture/plan-execution-run-model.md) - Modalità operativa per la creazione dei piani da parte dell'agente.
-*   [Plan execution — run model e activity feed](../architecture/plan-execution-run-model.md) - Dettagli sul monitoraggio in background dei piani e i canali di streaming.
+- [MCP registry](registry.md) — how MCP servers are loaded and configured.
+- [Tool-first plan mode](../api-and-runtime/agent-pipeline.md#tool-first-plan-mode) — how the agent creates plans.
+- [Plan execution — run model and activity feed](../architecture/plan-execution-run-model.md) — background monitoring of plans and the streaming channels.

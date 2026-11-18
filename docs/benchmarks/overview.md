@@ -1,10 +1,12 @@
 ---
-title: Benchmarks & Evaluation
+title: Benchmarks and evaluation
 sidebar_position: 1
-description: Dev-only CLI benchmark harness for Mnemos, agent regression, and LME integration tests.
+description: Developer command-line tools that measure memory recall and catch agent regressions.
 ---
 
 # Benchmarks & Evaluation
+
+Benchmarks are repeatable tests that score how well a part of AION performs, so a change can be checked against a known baseline before it ships. This page lists the available benchmarks, where their datasets live and how to run them from the command line; it is for developers working on memory, retrieval or the agent loop.
 
 Benchmarks are **developer tools only** — they validate memory retrieval, agent regressions, and integration paths during development. They are **not** exposed in the admin UI or customer-facing surfaces.
 

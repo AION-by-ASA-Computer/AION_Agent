@@ -1,5 +1,6 @@
 /**
- * Allineamento a theme.json (Chainlit) e admin-ui: primario rosso/corallo, sfondo scuro, Inter.
+ * Theme of the documentation site, aligned with chat-ui and admin-ui:
+ * red/coral primary colour, dark background by default, Inter font.
  */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -84,4 +85,23 @@ html {
 
 [data-theme='dark'] .mermaid {
   filter: brightness(1.05) contrast(1.02);
+}
+
+/* Readability: tables are the main way the docs present options and errors,
+   so let them use the full content width and keep cells compact. */
+.markdown table {
+  display: table;
+  width: 100%;
+}
+.markdown table th,
+.markdown table td {
+  padding: 0.5rem 0.75rem;
+  vertical-align: top;
+}
+
+/* Keep long lines of prose at a comfortable reading length. */
+.markdown > p,
+.markdown > ul,
+.markdown > ol {
+  max-width: 52rem;
 }
