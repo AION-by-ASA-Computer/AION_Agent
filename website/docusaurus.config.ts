@@ -140,7 +140,7 @@ const config: Config = {
       theme: {light: 'neutral', dark: 'dark'},
     },
     navbar: {
-      title: 'AION Agents',
+      // No text title: the AION logo alone is the link to the home page.
       hideOnScroll: false,
       logo: {
         alt: 'AION',
@@ -158,12 +158,14 @@ const config: Config = {
         {href: GITHUB_REPO, label: 'GitHub', position: 'right'},
       ],
     },
+    // Footer follows the page theme (light/dark), styled in src/css/custom.css.
     footer: {
-      style: 'dark',
+      style: 'light',
       logo: {
         alt: 'AION',
-        src: 'img/aion-logo-dark.svg',
-        height: 36,
+        src: 'img/aion-logo-light.png',
+        srcDark: 'img/aion-logo-dark.svg',
+        height: 26,
         href: 'https://aion-asa.com',
       },
       links: [
@@ -201,7 +203,7 @@ const config: Config = {
           ],
         },
       ],
-      copyright: `© ${new Date().getFullYear()} AION · ASA Computer`,
+      copyright: `© ${new Date().getFullYear()} AION · ASA Computer · Documentation for AION Agents`,
     },
     prism: {
       theme: prismThemes.github,
