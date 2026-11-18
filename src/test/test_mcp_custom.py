@@ -39,13 +39,20 @@ def isolated_custom_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
     (root / ".staging").mkdir(parents=True, exist_ok=True)
     (root / ".versions").mkdir(parents=True, exist_ok=True)
     monkeypatch.setattr("src.mcp_custom.paths.custom_root", lambda: root)
-    monkeypatch.setattr("src.mcp_custom.package.staging_root", lambda: root / ".staging")
+    monkeypatch.setattr(
+        "src.mcp_custom.package.staging_root", lambda: root / ".staging"
+    )
     monkeypatch.setattr("src.mcp_custom.install.custom_root", lambda: root)
-    monkeypatch.setattr("src.mcp_custom.install.versions_root", lambda: root / ".versions")
+    monkeypatch.setattr(
+        "src.mcp_custom.install.versions_root", lambda: root / ".versions"
+    )
     local_reg = tmp_path / "mcp_registry.local.yaml"
     local_reg.write_text("{}", encoding="utf-8")
-    monkeypatch.setattr("src.mcp_manager.mcp_manager.local_registry_path", str(local_reg))
+    monkeypatch.setattr(
+        "src.mcp_manager.mcp_manager.local_registry_path", str(local_reg)
+    )
     from src.mcp_manager import mcp_manager
+
     mcp_manager._registry_local = {}
     mcp_manager._rebuild_merged()
 
@@ -53,6 +60,7 @@ def isolated_custom_root(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
 # ─────────────────────────────────────────────────────────────
 # 1. Manifest tests
 # ─────────────────────────────────────────────────────────────
+
 
 def test_manifest_valid_python():
     data = {
@@ -66,7 +74,12 @@ def test_manifest_valid_python():
         "credentials": {
             "mode": "org_shared",
             "fields": [
-                {"key": "CRM_API_KEY", "label": "API Key", "secret": True, "required": True}
+                {
+                    "key": "CRM_API_KEY",
+                    "label": "API Key",
+                    "secret": True,
+                    "required": True,
+                }
             ],
         },
         "env": {"CRM_BASE_URL": "https://crm.local"},
@@ -165,6 +178,7 @@ def test_manifest_rejects_env_credentials_overlap():
 # 2. Package & Zip staging tests
 # ─────────────────────────────────────────────────────────────
 
+
 def test_package_zip_slip_rejected():
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w") as z:
@@ -176,8 +190,12 @@ def test_package_zip_slip_rejected():
     assert any("unsafe path" in err for err in staged.errors)
 
 
-def test_package_single_py_needs_manifest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    monkeypatch.setattr("src.mcp_custom.paths.staging_root", lambda: tmp_path / "staging")
+def test_package_single_py_needs_manifest(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    monkeypatch.setattr(
+        "src.mcp_custom.paths.staging_root", lambda: tmp_path / "staging"
+    )
     code = """
 import os
 from fastmcp import FastMCP
@@ -196,8 +214,12 @@ def hello() -> str:
     assert "DEMO_API_KEY" in staged.env_used
 
 
-def test_package_valid_zip_with_manifest(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
-    monkeypatch.setattr("src.mcp_custom.paths.staging_root", lambda: tmp_path / "staging")
+def test_package_valid_zip_with_manifest(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
+    monkeypatch.setattr(
+        "src.mcp_custom.paths.staging_root", lambda: tmp_path / "staging"
+    )
     manifest_yaml = """
 aion_mcp: 1
 slug: sales_tool
@@ -247,6 +269,7 @@ def get_status() -> str:
 # 3. Paths & Slugs
 # ─────────────────────────────────────────────────────────────
 
+
 def test_slug_validation():
     assert slug_format_error("crm") is None
     assert slug_format_error("my_custom_mcp_server") is None
@@ -266,6 +289,7 @@ def test_slug_conflict_with_std():
 # ─────────────────────────────────────────────────────────────
 # 4. Container Policy & Security Jail
 # ─────────────────────────────────────────────────────────────
+
 
 def test_is_docker_runtime():
     assert is_docker_runtime("docker") is True
@@ -319,6 +343,7 @@ def test_build_custom_mcp_run_argv():
 # 5. Runtime & Spawn Guards
 # ─────────────────────────────────────────────────────────────
 
+
 def test_kill_switch_blocks_custom_mcp(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setenv("AION_CUSTOM_MCP_FORCE_DISABLE", "1")
     custom_cfg = {"aion_custom": {"name": "test", "version": "1.0.0"}}
@@ -334,14 +359,18 @@ async def test_prepare_custom_spawn_unsandboxed_dev(
     """Without a container engine, the dev flag lets the server run on the host."""
     monkeypatch.setenv("AION_CUSTOM_MCP_ALLOW_UNSANDBOXED", "1")
     monkeypatch.delenv("AION_CUSTOM_MCP_FORCE_DISABLE", raising=False)
-    monkeypatch.setattr("src.mcp_custom.runtime.container_isolation_available", lambda: False)
+    monkeypatch.setattr(
+        "src.mcp_custom.runtime.container_isolation_available", lambda: False
+    )
 
     server_dir = tmp_path / "custom" / "demo_srv"
     server_dir.mkdir(parents=True)
     (server_dir / "server.py").write_text("print('ok')")
 
     monkeypatch.setattr("src.mcp_custom.paths.custom_root", lambda: tmp_path / "custom")
-    monkeypatch.setattr("src.mcp_custom.runtime.server_dir", lambda slug: tmp_path / "custom" / slug)
+    monkeypatch.setattr(
+        "src.mcp_custom.runtime.server_dir", lambda slug: tmp_path / "custom" / slug
+    )
 
     cfg = {
         "command": "python",
@@ -377,8 +406,10 @@ async def test_prepare_custom_spawn_unsandboxed_dev(
 # 6. Real Container Jail Execution Test (Docker / Podman)
 # ─────────────────────────────────────────────────────────────
 
+
 def test_container_custom_mcp_jail_execution(tmp_path: Path):
     from src.security.container_runtime import get_container_runtime
+
     runtime = get_container_runtime()
     if not runtime.is_available():
         pytest.skip("Container runtime (Docker/Podman) not available")
@@ -395,6 +426,7 @@ if __name__ == "__main__":
 """)
 
     import subprocess
+
     test_argv = [
         runtime.runtime,
         "run",
@@ -426,9 +458,11 @@ if __name__ == "__main__":
 # 7. FastMCP Stdio Roundtrip inside Container Jail
 # ─────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_container_custom_mcp_fastmcp_stdio_roundtrip(tmp_path: Path):
     from src.security.container_runtime import get_container_runtime
+
     runtime = get_container_runtime()
     if not runtime.is_available():
         pytest.skip("Container runtime (Docker/Podman) not available")
@@ -439,7 +473,8 @@ async def test_container_custom_mcp_fastmcp_stdio_roundtrip(tmp_path: Path):
     srv_dir = tmp_path / "custom" / "calc_srv"
     srv_dir.mkdir(parents=True, exist_ok=True)
     server_py = srv_dir / "server.py"
-    server_py.write_text("""from fastmcp import FastMCP
+    server_py.write_text(
+        """from fastmcp import FastMCP
 
 mcp = FastMCP("calc-server")
 
@@ -450,7 +485,9 @@ def multiply(x: int, y: int) -> int:
 
 if __name__ == "__main__":
     mcp.run()
-""", encoding="utf-8")
+""",
+        encoding="utf-8",
+    )
 
     cmd, args, spawn_env = runtime.build_custom_mcp_spawn(
         "calc_server",
@@ -476,8 +513,11 @@ if __name__ == "__main__":
 # 8. Full Admin API Workflow Test (/admin/mcp-custom)
 # ─────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
-async def test_admin_custom_mcp_api_workflow(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+async def test_admin_custom_mcp_api_workflow(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
     from unittest.mock import AsyncMock, patch
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
@@ -526,10 +566,16 @@ async def test_admin_custom_mcp_api_workflow(monkeypatch: pytest.MonkeyPatch, tm
         """Stand-in for the jail verification (Docker is not needed by this test)."""
         from src.mcp_custom.verify import _update
 
-        _update(upload_id, status="ok", tools=[{"name": "search_customer", "description": ""}])
+        _update(
+            upload_id,
+            status="ok",
+            tools=[{"name": "search_customer", "description": ""}],
+        )
 
     with (
-        patch("src.mcp_integration_sync.sync_mcp_server_config_from_registry", AsyncMock()),
+        patch(
+            "src.mcp_integration_sync.sync_mcp_server_config_from_registry", AsyncMock()
+        ),
         patch("src.mcp_custom.install._audit", AsyncMock()),
         patch("src.mcp_custom.install.invalidate_runtime", AsyncMock()),
         patch("src.api.admin_custom_mcp.start_verification", fake_verification),
@@ -557,6 +603,7 @@ async def test_admin_custom_mcp_api_workflow(monkeypatch: pytest.MonkeyPatch, tm
 
         # Verify custom server installed
         from src.mcp_custom.paths import server_dir
+
         installed_dir = server_dir("example_server")
         assert installed_dir.is_dir()
         assert (installed_dir / "server.py").is_file()
@@ -570,10 +617,9 @@ async def test_admin_custom_mcp_api_workflow(monkeypatch: pytest.MonkeyPatch, tm
 
         # 6. Removal of custom artifacts
         from src.mcp_custom.install import remove_custom_artifacts
+
         remove_custom_artifacts("example_server")
         assert not installed_dir.exists()
-
-
 
 
 # ───────────────────────── regression: custom entry overwritten by installs ─────────────────────────
@@ -582,12 +628,21 @@ _CUSTOM_ENTRY = {
     "command": "python",
     "args": ["-u", "custom/mcp_test_one/server.py"],
     "env": {},
-    "aion_custom": {"name": "Test", "version": "1.0.0", "runtime": "python", "entrypoint": "server.py"},
+    "aion_custom": {
+        "name": "Test",
+        "version": "1.0.0",
+        "runtime": "python",
+        "entrypoint": "server.py",
+    },
 }
 
 
-@pytest.mark.parametrize("slug,expected", [("mcp_test_one", True), ("other_server", False)])
-def test_install_endpoints_refuse_custom_slug(monkeypatch: pytest.MonkeyPatch, slug: str, expected: bool):
+@pytest.mark.parametrize(
+    "slug,expected", [("mcp_test_one", True), ("other_server", False)]
+)
+def test_install_endpoints_refuse_custom_slug(
+    monkeypatch: pytest.MonkeyPatch, slug: str, expected: bool
+):
     """Zero-install/remote/script installs must not replace a custom server's registry entry.
 
     Regression: the Hub opened the zero-install wizard right after a custom upload and
@@ -598,7 +653,9 @@ def test_install_endpoints_refuse_custom_slug(monkeypatch: pytest.MonkeyPatch, s
     from src.api import admin as admin_api
 
     monkeypatch.setattr(admin_api.mcp_manager, "load_registry", lambda *a, **k: None)
-    monkeypatch.setattr(admin_api.mcp_manager, "_registry", {"mcp_test_one": _CUSTOM_ENTRY})
+    monkeypatch.setattr(
+        admin_api.mcp_manager, "_registry", {"mcp_test_one": _CUSTOM_ENTRY}
+    )
     if expected:
         with pytest.raises(HTTPException) as exc:
             admin_api._reject_custom_slug_overwrite(slug)
@@ -612,7 +669,9 @@ def test_install_endpoints_refuse_custom_slug(monkeypatch: pytest.MonkeyPatch, s
 
 
 @pytest.mark.asyncio
-async def test_dev_flag_does_not_disable_working_jail(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+async def test_dev_flag_does_not_disable_working_jail(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
     """With a container engine available, the server runs in the jail even when
     AION_CUSTOM_MCP_ALLOW_UNSANDBOXED=1 (the flag is only a fallback), and the
     credential value reaches the container through the private --env-file: neither
@@ -620,11 +679,15 @@ async def test_dev_flag_does_not_disable_working_jail(monkeypatch: pytest.Monkey
     monkeypatch.setenv("AION_CUSTOM_MCP_ALLOW_UNSANDBOXED", "1")
     monkeypatch.delenv("AION_CUSTOM_MCP_FORCE_DISABLE", raising=False)
     monkeypatch.setenv("AION_CONTAINER_RUNTIME", "docker")
-    monkeypatch.setattr("src.mcp_custom.runtime.container_isolation_available", lambda: True)
+    monkeypatch.setattr(
+        "src.mcp_custom.runtime.container_isolation_available", lambda: True
+    )
     server = tmp_path / "custom" / "jail_srv"
     server.mkdir(parents=True)
     (server / "server.py").write_text("print('ok')")
-    monkeypatch.setattr("src.mcp_custom.runtime.server_dir", lambda slug: tmp_path / "custom" / slug)
+    monkeypatch.setattr(
+        "src.mcp_custom.runtime.server_dir", lambda slug: tmp_path / "custom" / slug
+    )
 
     async def fake_credentials(*_a, **_k):
         return {"SECRET_TOKEN": "s3cr3t"}
@@ -633,8 +696,17 @@ async def test_dev_flag_does_not_disable_working_jail(monkeypatch: pytest.Monkey
     import src.security.container_runtime as cr
 
     monkeypatch.setattr(cr, "_RUNTIME", None)
-    cfg = {"aion_custom": {"name": "J", "version": "1.0.0", "entrypoint": "server.py", "credential_mode": "org_shared"}}
-    cmd, args, env, cwd = await prepare_custom_spawn("jail_srv", cfg, "python", [], {}, user_id="u1", tenant_id="default")
+    cfg = {
+        "aion_custom": {
+            "name": "J",
+            "version": "1.0.0",
+            "entrypoint": "server.py",
+            "credential_mode": "org_shared",
+        }
+    }
+    cmd, args, env, cwd = await prepare_custom_spawn(
+        "jail_srv", cfg, "python", [], {}, user_id="u1", tenant_id="default"
+    )
     assert cmd == "docker" and "run" in args and cwd is None
     assert not any("s3cr3t" in a for a in args)
     assert "SECRET_TOKEN" not in env
@@ -658,10 +730,14 @@ def _make_custom_layout(root: Path, slug: str, *, marker: bool) -> None:
     (root / ".versions" / slug / "1.0.0__x").mkdir(parents=True)
     staged = root / ".staging" / ("a" * 32)
     staged.mkdir(parents=True)
-    (staged / "upload.json").write_text(_json.dumps({"manifest": {"slug": slug}, "suggested_slug": slug}))
+    (staged / "upload.json").write_text(
+        _json.dumps({"manifest": {"slug": slug}, "suggested_slug": slug})
+    )
 
 
-def test_remove_custom_artifacts_removes_code_versions_and_uploads(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+def test_remove_custom_artifacts_removes_code_versions_and_uploads(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
     """Deleting a custom server removes its code, archived versions and pending uploads."""
     from src.mcp_custom import install
 
@@ -669,7 +745,9 @@ def test_remove_custom_artifacts_removes_code_versions_and_uploads(monkeypatch: 
     monkeypatch.setattr(install, "custom_root", lambda: root)
     monkeypatch.setattr(install, "server_dir", lambda s: root / s)
     monkeypatch.setattr(install, "versions_root", lambda: root / ".versions")
-    monkeypatch.setattr("src.mcp_custom.runtime.container_isolation_available", lambda: False)
+    monkeypatch.setattr(
+        "src.mcp_custom.runtime.container_isolation_available", lambda: False
+    )
     _make_custom_layout(root, "gone_srv", marker=True)
 
     result = install.remove_custom_artifacts("gone_srv")
@@ -681,7 +759,9 @@ def test_remove_custom_artifacts_removes_code_versions_and_uploads(monkeypatch: 
     assert install.has_custom_artifacts("gone_srv") is False
 
 
-def test_cleanup_orphans_only_removes_aion_installed_folders(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+def test_cleanup_orphans_only_removes_aion_installed_folders(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
     """At startup, folders AION installed (marker) without a registry entry are removed;
     folders copied by hand (no marker) are kept for a later activation."""
     from src.mcp_custom import install
@@ -690,12 +770,16 @@ def test_cleanup_orphans_only_removes_aion_installed_folders(monkeypatch: pytest
     monkeypatch.setattr(install, "custom_root", lambda: root)
     monkeypatch.setattr(install, "server_dir", lambda s: root / s)
     monkeypatch.setattr(install, "versions_root", lambda: root / ".versions")
-    monkeypatch.setattr("src.mcp_custom.runtime.container_isolation_available", lambda: False)
+    monkeypatch.setattr(
+        "src.mcp_custom.runtime.container_isolation_available", lambda: False
+    )
     monkeypatch.setattr("src.mcp_custom.package.cleanup_expired", lambda: 0)
     from src.mcp_manager import mcp_manager
 
     monkeypatch.setattr(mcp_manager, "load_registry", lambda *a, **k: None)
-    monkeypatch.setattr(mcp_manager, "_registry", {"kept_srv": {"aion_custom": {"version": "1.0.0"}}})
+    monkeypatch.setattr(
+        mcp_manager, "_registry", {"kept_srv": {"aion_custom": {"version": "1.0.0"}}}
+    )
     _make_custom_layout(root, "orphan_srv", marker=True)
     (root / "manual_srv").mkdir()
     (root / "manual_srv" / "server.py").write_text("print('x')")
@@ -713,7 +797,9 @@ def test_cleanup_orphans_only_removes_aion_installed_folders(monkeypatch: pytest
 # ───────────────────────── clearing a shared credential ─────────────────────────
 
 
-def test_clearing_custom_org_credential_deletes_stored_value(monkeypatch: pytest.MonkeyPatch):
+def test_clearing_custom_org_credential_deletes_stored_value(
+    monkeypatch: pytest.MonkeyPatch,
+):
     """Emptying a shared credential in Configure deletes the encrypted copy (the custom
     spawn reads only the store) and puts the ${KEY} placeholder back."""
     import asyncio
@@ -727,13 +813,22 @@ def test_clearing_custom_org_credential_deletes_stored_value(monkeypatch: pytest
         return True
 
     monkeypatch.setattr("src.runtime.credential_store.delete_credential", fake_delete)
-    env = {"CATALOG_SECRET_KEY": "", "OTHER_SECRET": "${OTHER_SECRET}", "CATALOG_CURRENCY": "EUR"}
+    env = {
+        "CATALOG_SECRET_KEY": "",
+        "OTHER_SECRET": "${OTHER_SECRET}",
+        "CATALOG_CURRENCY": "EUR",
+    }
     out = asyncio.run(
-        admin_api._clear_custom_org_credentials("cat", env, ["CATALOG_SECRET_KEY", "OTHER_SECRET"])
+        admin_api._clear_custom_org_credentials(
+            "cat", env, ["CATALOG_SECRET_KEY", "OTHER_SECRET"]
+        )
     )
     assert out["CATALOG_SECRET_KEY"] == "${CATALOG_SECRET_KEY}"
     assert out["CATALOG_CURRENCY"] == "EUR"
-    assert sorted(deleted) == [("default", "cat", "CATALOG_SECRET_KEY"), ("org_shared", "cat", "CATALOG_SECRET_KEY")]
+    assert sorted(deleted) == [
+        ("default", "cat", "CATALOG_SECRET_KEY"),
+        ("org_shared", "cat", "CATALOG_SECRET_KEY"),
+    ]
 
 
 def test_guide_manifest_template_is_valid_and_matches_server():
@@ -749,7 +844,6 @@ def test_guide_manifest_template_is_valid_and_matches_server():
         assert key in SERVER_TEMPLATE
 
 
-
 # ───────────────────────── phase A: free dependencies, verified in the jail ─────────────────────────
 
 
@@ -761,7 +855,9 @@ def _zip(files: Dict[str, str]) -> bytes:
     return buf.getvalue()
 
 
-_MANIFEST_DEPS = "aion_mcp: 1\nslug: deps_srv\nname: Deps\ndescription: d\nversion: 1.0.0\n"
+_MANIFEST_DEPS = (
+    "aion_mcp: 1\nslug: deps_srv\nname: Deps\ndescription: d\nversion: 1.0.0\n"
+)
 _SERVER_OK = "from fastmcp import FastMCP\nmcp = FastMCP('x')\n@mcp.tool()\ndef t() -> str:\n    'x'\n    return 'x'\nmcp.run()\n"
 
 
@@ -771,14 +867,23 @@ def test_requirements_are_accepted_and_normalised(monkeypatch: pytest.MonkeyPatc
 
     staged = stage_upload(
         "deps.zip",
-        _zip({"server.py": _SERVER_OK, "aion-mcp.yaml": _MANIFEST_DEPS, "requirements.txt": "# libs\nrequests==2.32.3\nhumanize\n"}),
+        _zip(
+            {
+                "server.py": _SERVER_OK,
+                "aion-mcp.yaml": _MANIFEST_DEPS,
+                "requirements.txt": "# libs\nrequests==2.32.3\nhumanize\n",
+            }
+        ),
         actor="t",
     )
     assert staged.errors == []
     assert staged.requirements == ["requests==2.32.3", "humanize"]
     assert staged.status == "verifying"
     normalized = upload_src_dir(staged.upload_id) / NORMALIZED_REQUIREMENTS
-    assert normalized.read_text(encoding="utf-8").split() == ["requests==2.32.3", "humanize"]
+    assert normalized.read_text(encoding="utf-8").split() == [
+        "requests==2.32.3",
+        "humanize",
+    ]
 
 
 def test_pyproject_dependencies_are_used_without_building_the_project():
@@ -786,7 +891,13 @@ def test_pyproject_dependencies_are_used_without_building_the_project():
     pyproject = '[project]\nname = "x"\nversion = "1"\ndependencies = ["httpx>=0.27", "humanize"]\n'
     staged = stage_upload(
         "deps.zip",
-        _zip({"server.py": _SERVER_OK, "aion-mcp.yaml": _MANIFEST_DEPS, "pyproject.toml": pyproject}),
+        _zip(
+            {
+                "server.py": _SERVER_OK,
+                "aion-mcp.yaml": _MANIFEST_DEPS,
+                "pyproject.toml": pyproject,
+            }
+        ),
         actor="t",
     )
     assert staged.requirements == ["httpx>=0.27", "humanize"]
@@ -805,7 +916,11 @@ def test_deps_build_argv_is_jailed_and_wheels_only():
         requirements_rel=".aion-requirements.txt",
     )
     joined = " ".join(argv)
-    assert "--cap-drop=ALL" in argv and "--read-only" in argv and "no-new-privileges" in argv
+    assert (
+        "--cap-drop=ALL" in argv
+        and "--read-only" in argv
+        and "no-new-privileges" in argv
+    )
     assert ":/server:ro" in joined and ":/deps:rw" in joined
     assert "--only-binary=:all:" in argv
     assert argv[argv.index("--user") + 1] == "65534:65534"
@@ -828,7 +943,11 @@ def test_jail_env_uses_tmp_home_and_deps_path():
     """In the jail HOME/caches are in /tmp (read-only root) and /deps is on PYTHONPATH."""
     from src.mcp_custom.runtime import finalize_process_env
 
-    env = finalize_process_env({"HOME": "/app/data/users/u/mcp_home", "XDG_CONFIG_HOME": "/app/x"}, in_container=True, deps_dir=Path("/whatever"))
+    env = finalize_process_env(
+        {"HOME": "/app/data/users/u/mcp_home", "XDG_CONFIG_HOME": "/app/x"},
+        in_container=True,
+        deps_dir=Path("/whatever"),
+    )
     assert env["HOME"] == "/tmp" and env["PYTHONPATH"] == "/deps"
     assert "XDG_CONFIG_HOME" not in env
 
@@ -840,17 +959,27 @@ def test_activation_requires_successful_verification(monkeypatch: pytest.MonkeyP
     from src.mcp_custom.install import ActivationError, activate
     from src.mcp_custom.verify import _update
 
-    staged = stage_upload("ok.zip", _zip({"server.py": _SERVER_OK, "aion-mcp.yaml": _MANIFEST_DEPS}), actor="t")
+    staged = stage_upload(
+        "ok.zip",
+        _zip({"server.py": _SERVER_OK, "aion-mcp.yaml": _MANIFEST_DEPS}),
+        actor="t",
+    )
     with pytest.raises(ActivationError) as exc:
         asyncio.run(activate(staged.upload_id, actor="t"))
     assert exc.value.code == "verification_pending"
-    _update(staged.upload_id, status="failed", error="ModuleNotFoundError: No module named 'x'")
+    _update(
+        staged.upload_id,
+        status="failed",
+        error="ModuleNotFoundError: No module named 'x'",
+    )
     with pytest.raises(ActivationError) as exc:
         asyncio.run(activate(staged.upload_id, actor="t"))
     assert exc.value.code == "verification_failed"
 
 
-def test_gc_deps_keeps_only_referenced_sets(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+def test_gc_deps_keeps_only_referenced_sets(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
     """Dependency folders nobody references are deleted; in-use and fresh builds stay."""
     from src.mcp_custom import verify
 
@@ -899,12 +1028,16 @@ def test_podman_build_uses_engine_default_network(monkeypatch: pytest.MonkeyPatc
     assert "--only-binary=:all:" in argv
 
 
-def test_host_path_derived_from_sandbox_data_dir(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
+def test_host_path_derived_from_sandbox_data_dir(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+):
     """Without AION_CUSTOM_MCP_HOST_DIR the host path comes from AION_SANDBOX_HOST_DATA_DIR."""
     from src.security import container_runtime
 
     monkeypatch.delenv("AION_CUSTOM_MCP_HOST_DIR", raising=False)
     monkeypatch.delenv("AION_SANDBOX_HOST_REPO", raising=False)
     monkeypatch.setenv("AION_SANDBOX_HOST_DATA_DIR", "/srv/aion/data")
-    path = container_runtime.resolve_custom_mcp_host_path(Path("/app/mcp_servers/custom/.deps/abc"))
+    path = container_runtime.resolve_custom_mcp_host_path(
+        Path("/app/mcp_servers/custom/.deps/abc")
+    )
     assert path.as_posix().endswith("/srv/aion/mcp_servers/custom/.deps/abc")

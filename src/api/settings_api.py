@@ -142,7 +142,11 @@ _ENV_ONLY_KEYS = ("AION_CUSTOM_MCP_ALLOW_UNSANDBOXED",)
 
 def _changed_keys(before: Dict[str, str], after: Dict[str, str]) -> set:
     """Keys whose value differs between two env maps (missing counts as empty)."""
-    return {k for k in set(before) | set(after) if (before.get(k) or "") != (after.get(k) or "")}
+    return {
+        k
+        for k in set(before) | set(after)
+        if (before.get(k) or "") != (after.get(k) or "")
+    }
 
 
 async def _restart_custom_mcp_workers() -> None:
@@ -276,7 +280,9 @@ async def update_settings(update: SettingsUpdate):
 
         # Only custom MCP settings changed: already live after the reload above, no
         # restart; running custom servers restart so limits and kill switch apply.
-        hot_only = bool(changed) and all(k.startswith(_HOT_RELOAD_PREFIX) for k in changed)
+        hot_only = bool(changed) and all(
+            k.startswith(_HOT_RELOAD_PREFIX) for k in changed
+        )
         if any(k.startswith(_HOT_RELOAD_PREFIX) for k in changed):
             asyncio.create_task(_restart_custom_mcp_workers())
 

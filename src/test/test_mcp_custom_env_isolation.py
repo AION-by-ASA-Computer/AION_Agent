@@ -33,7 +33,10 @@ def runtime(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
 
 
 def _env_file_values(path: str) -> dict:
-    return dict(line.split("=", 1) for line in Path(path).read_text(encoding="utf-8").splitlines())
+    return dict(
+        line.split("=", 1)
+        for line in Path(path).read_text(encoding="utf-8").splitlines()
+    )
 
 
 def test_manifest_docker_host_cannot_redirect_the_cli(runtime, tmp_path: Path):
@@ -61,7 +64,9 @@ def test_multiline_values_go_by_name_except_cli_settings(runtime, tmp_path: Path
         server_path=tmp_path / "srv",
         env={"SERVICE_KEY": pem, "HTTPS_PROXY": "http://x\nhttp://y", "PLAIN": "1"},
     )
-    assert args[args.index("SERVICE_KEY") - 1] == "-e" and spawn_env["SERVICE_KEY"] == pem
+    assert (
+        args[args.index("SERVICE_KEY") - 1] == "-e" and spawn_env["SERVICE_KEY"] == pem
+    )
     assert "HTTPS_PROXY" not in args
     assert spawn_env.get("HTTPS_PROXY") != "http://x\nhttp://y"
     assert _env_file_values(args[args.index("--env-file") + 1]) == {"PLAIN": "1"}
@@ -86,13 +91,17 @@ def test_jail_variables_come_last():
     assert argv.index("--env-file") < argv.index("AION_JAIL_UID=65534")
 
 
-@pytest.mark.parametrize("key", ["PATH", "LD_PRELOAD", "PYTHONPATH", "AION_JAIL_UID", "HOME"])
+@pytest.mark.parametrize(
+    "key", ["PATH", "LD_PRELOAD", "PYTHONPATH", "AION_JAIL_UID", "HOME"]
+)
 def test_reserved_names_are_refused(key: str):
     """The single name rule refuses what would change how the jail starts."""
     assert env_key_error(key)
 
 
-@pytest.mark.parametrize("key", ["DOCKER_HOST", "HTTPS_PROXY", "SSL_CERT_FILE", "CRM_API_KEY"])
+@pytest.mark.parametrize(
+    "key", ["DOCKER_HOST", "HTTPS_PROXY", "SSL_CERT_FILE", "CRM_API_KEY"]
+)
 def test_legit_names_stay_allowed(key: str):
     """Names that are harmless inside the container are not blocked."""
     assert env_key_error(key) is None
@@ -103,7 +112,10 @@ def test_spawn_drops_reserved_registry_env(monkeypatch: pytest.MonkeyPatch):
     from src.mcp_custom import runtime as rt
     from src.mcp_manager import mcp_manager
 
-    cfg = {"env": {"LD_PRELOAD": "/deps/x.so", "PATH": "/evil", "CRM_URL": "https://crm"}, "aion_custom": {}}
+    cfg = {
+        "env": {"LD_PRELOAD": "/deps/x.so", "PATH": "/evil", "CRM_URL": "https://crm"},
+        "aion_custom": {},
+    }
     monkeypatch.setattr(mcp_manager, "_registry", {"srv": cfg})
     assert rt._literal_env("srv", set(), cfg) == {"CRM_URL": "https://crm"}
 
@@ -112,7 +124,9 @@ def test_jail_env_has_no_backend_path():
     """In the container PATH comes from the image, not from the backend."""
     from src.mcp_custom.runtime import finalize_process_env
 
-    out = finalize_process_env({"PATH": r"C:\Windows;C:\Python"}, in_container=True, deps_dir=None)
+    out = finalize_process_env(
+        {"PATH": r"C:\Windows;C:\Python"}, in_container=True, deps_dir=None
+    )
     assert "PATH" not in out
 
 
@@ -125,8 +139,16 @@ def test_admin_edit_with_reserved_name_is_refused(monkeypatch: pytest.MonkeyPatc
     from src.api import admin
     from src.mcp_manager import mcp_manager
 
-    cfg = {"command": "python", "env": {}, "aion_custom": {"credential_mode": "none", "credential_schema": []}}
+    cfg = {
+        "command": "python",
+        "env": {},
+        "aion_custom": {"credential_mode": "none", "credential_schema": []},
+    }
     monkeypatch.setattr(mcp_manager, "_registry", {"srv": cfg})
     with pytest.raises(HTTPException) as err:
-        asyncio.run(admin.update_mcp_config("srv", admin.MCPUpdate(env={"LD_PRELOAD": "/deps/x.so"})))
+        asyncio.run(
+            admin.update_mcp_config(
+                "srv", admin.MCPUpdate(env={"LD_PRELOAD": "/deps/x.so"})
+            )
+        )
     assert err.value.status_code == 422

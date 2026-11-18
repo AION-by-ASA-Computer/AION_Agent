@@ -122,7 +122,9 @@ def _entrypoint_path(server_name: str, config: Dict[str, Any]) -> Path:
     return entry
 
 
-def _literal_env(server_name: str, credential_keys: set, config: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
+def _literal_env(
+    server_name: str, credential_keys: set, config: Optional[Dict[str, Any]] = None
+) -> Dict[str, str]:
     """Non-secret ``env`` values of the registry entry, placeholders excluded.
 
     Read from the raw (unresolved) registry: the config passed to the spawn code
@@ -131,7 +133,11 @@ def _literal_env(server_name: str, credential_keys: set, config: Optional[Dict[s
     """
     from ..mcp_manager import mcp_manager
 
-    reg_entry = mcp_manager._registry.get(server_name) if hasattr(mcp_manager, "_registry") else None
+    reg_entry = (
+        mcp_manager._registry.get(server_name)
+        if hasattr(mcp_manager, "_registry")
+        else None
+    )
     raw = (reg_entry or config or {}).get("env")
     env_block = raw if isinstance(raw, dict) else {}
     out: Dict[str, str] = {}
@@ -142,14 +148,18 @@ def _literal_env(server_name: str, credential_keys: set, config: Optional[Dict[s
         # registries: reserved names (PATH, LD_*, PYTHON*, AION_*...) never reach the jail.
         err = env_key_error(str(key))
         if err:
-            logger.warning("Custom MCP '%s': env %s ignored (%s)", server_name, key, err)
+            logger.warning(
+                "Custom MCP '%s': env %s ignored (%s)", server_name, key, err
+            )
             continue
         if isinstance(value, str) and "${" not in value:
             out[str(key)] = value
     return out
 
 
-async def _credential_env(server_name: str, config: Dict[str, Any], user_id: str, tenant_id: str) -> Dict[str, str]:
+async def _credential_env(
+    server_name: str, config: Dict[str, Any], user_id: str, tenant_id: str
+) -> Dict[str, str]:
     """Credential values for this server, read only from the encrypted store.
 
     ``get_credential`` applies the server's mode: ``per_user`` reads only the
@@ -165,7 +175,9 @@ async def _credential_env(server_name: str, config: Dict[str, Any], user_id: str
         key = str(field.get("key") or "")
         if not key or env_key_error(key):
             continue
-        value = await get_credential(user_id or "default", server_name, key, tenant_id=tenant_id or "default")
+        value = await get_credential(
+            user_id or "default", server_name, key, tenant_id=tenant_id or "default"
+        )
         if value is not None and str(value) != "":
             out[key] = str(value)
     return out
@@ -180,14 +192,18 @@ def base_process_env() -> Dict[str, str]:
     """
     from ..security.session_env import build_mcp_stdio_base_env
 
-    env: Dict[str, str] = dict(build_mcp_stdio_base_env(first_party=False, always_scrub=True))
+    env: Dict[str, str] = dict(
+        build_mcp_stdio_base_env(first_party=False, always_scrub=True)
+    )
     for key in ("DOCKER_HOST", "CONTAINER_HOST"):
         env.pop(key, None)
     env.update(_FIXED_ENV)
     return env
 
 
-def network_allowlist(config: Optional[Dict[str, Any]], manifest_list: Optional[List[str]] = None) -> List[str]:
+def network_allowlist(
+    config: Optional[Dict[str, Any]], manifest_list: Optional[List[str]] = None
+) -> List[str]:
     """Network allowlist of a custom server (empty list = no network).
 
     Registry value (set at activation from the manifest, editable by the admin
@@ -197,7 +213,11 @@ def network_allowlist(config: Optional[Dict[str, Any]], manifest_list: Optional[
     """
     from .egress import AllowlistError, normalize_allowlist
 
-    value = (custom_meta(config) or {}).get("network") if config is not None else manifest_list
+    value = (
+        (custom_meta(config) or {}).get("network")
+        if config is not None
+        else manifest_list
+    )
     if not isinstance(value, list):
         return []
     try:
@@ -230,7 +250,13 @@ def finalize_process_env(
     if in_container:
         # PATH comes from the image (the backend's may even be a Windows PATH);
         # the netjail entrypoint and python are found through it.
-        for key in ("PATH", "USERPROFILE", "APPDATA", "XDG_CONFIG_HOME", "XDG_DATA_HOME"):
+        for key in (
+            "PATH",
+            "USERPROFILE",
+            "APPDATA",
+            "XDG_CONFIG_HOME",
+            "XDG_DATA_HOME",
+        ):
             out.pop(key, None)
         out["HOME"] = "/tmp"
         out["XDG_CACHE_HOME"] = "/tmp/.cache"
@@ -283,7 +309,9 @@ async def prepare_custom_spawn(
 
     ca_path = jail_ca_bundle()
 
-    credential_keys = {str(f.get("key")) for f in custom_credential_schema(config) or []}
+    credential_keys = {
+        str(f.get("key")) for f in custom_credential_schema(config) or []
+    }
     new_env = base_process_env()
     for key in _CONTEXT_KEYS:
         if env.get(key):
@@ -299,8 +327,15 @@ async def prepare_custom_spawn(
             "available and AION_CUSTOM_MCP_ALLOW_UNSANDBOXED=1 (development only)",
             server_name,
         )
-        host_env = finalize_process_env(new_env, in_container=False, deps_dir=deps_dir, ca_path=ca_path)
-        return sys.executable, ["-u", str(entry)], host_env, str(server_dir(server_name).resolve())
+        host_env = finalize_process_env(
+            new_env, in_container=False, deps_dir=deps_dir, ca_path=ca_path
+        )
+        return (
+            sys.executable,
+            ["-u", str(entry)],
+            host_env,
+            str(server_dir(server_name).resolve()),
+        )
 
     # Default: hardened container jail (one container per server and user).
     from ..security.container_runtime import get_container_runtime
@@ -314,7 +349,9 @@ async def prepare_custom_spawn(
         server_name,
         server_path=server_dir(server_name),
         entrypoint=entrypoint_rel,
-        env=finalize_process_env(new_env, in_container=True, deps_dir=deps_dir, ca_path=ca_path),
+        env=finalize_process_env(
+            new_env, in_container=True, deps_dir=deps_dir, ca_path=ca_path
+        ),
         user_id=user_id,
         session_id=session_id,
         deps_path=deps_dir,

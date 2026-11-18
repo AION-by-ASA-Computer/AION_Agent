@@ -109,11 +109,15 @@ def _parse_ports(text: str, entry: str) -> Tuple[PortRange, ...]:
         part = part.strip()
         m = re.fullmatch(r"(\d{1,5})(?:-(\d{1,5}))?", part)
         if not m:
-            raise AllowlistError(f"'{entry}': invalid port '{part}' (use 443, or 8470-8476)")
+            raise AllowlistError(
+                f"'{entry}': invalid port '{part}' (use 443, or 8470-8476)"
+            )
         lo = int(m.group(1))
         hi = int(m.group(2) or lo)
         if not (1 <= lo <= hi <= 65535):
-            raise AllowlistError(f"'{entry}': ports must be between 1 and 65535 (and ranges ascending)")
+            raise AllowlistError(
+                f"'{entry}': ports must be between 1 and 65535 (and ranges ascending)"
+            )
         ranges.append((lo, hi))
     return tuple(sorted(set(ranges)))
 
@@ -126,8 +130,14 @@ def _parse_host(text: str, entry: str) -> Tuple[Optional[str], Optional[IpNetwor
         pass
     name = text.lower().rstrip(".")
     if "*" in name:
-        raise AllowlistError(f"'{entry}': wildcards are not supported, list the exact host names")
-    if "/" in name or len(name) > 253 or not all(_LABEL_RE.match(label) for label in name.split(".")):
+        raise AllowlistError(
+            f"'{entry}': wildcards are not supported, list the exact host names"
+        )
+    if (
+        "/" in name
+        or len(name) > 253
+        or not all(_LABEL_RE.match(label) for label in name.split("."))
+    ):
         raise AllowlistError(f"'{entry}': not a valid host name, IP address or subnet")
     return name, None
 
@@ -192,7 +202,9 @@ def resolve(entries: Sequence[AllowEntry]) -> ResolvedEgress:
         try:
             infos = socket.getaddrinfo(entry.host, None, proto=socket.IPPROTO_TCP)
         except OSError:
-            out.warnings.append(f"{entry.host}: the name does not resolve, connections to it will fail")
+            out.warnings.append(
+                f"{entry.host}: the name does not resolve, connections to it will fail"
+            )
             continue
         addresses = sorted({info[4][0].split("%")[0] for info in infos})
         for addr in addresses:
@@ -215,9 +227,11 @@ def render_nft(rules: Sequence[Tuple[IpNetwork, Tuple[PortRange, ...]]]) -> str:
         family = "ip" if network.version == 4 else "ip6"
         match = f"{family} daddr {network}"
         if ports:
-            match += " meta l4proto { tcp, udp } th dport { " + ", ".join(
-                str(a) if a == b else f"{a}-{b}" for a, b in ports
-            ) + " }"
+            match += (
+                " meta l4proto { tcp, udp } th dport { "
+                + ", ".join(str(a) if a == b else f"{a}-{b}" for a, b in ports)
+                + " }"
+            )
         allow_lines.append(f"    {match} accept")
     lines = [
         "table inet aion_jail {",

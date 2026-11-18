@@ -72,7 +72,9 @@ def _describe(cert) -> Dict[str, Any]:
     from cryptography.hazmat.primitives import hashes
 
     try:
-        is_ca = bool(cert.extensions.get_extension_for_class(x509.BasicConstraints).value.ca)
+        is_ca = bool(
+            cert.extensions.get_extension_for_class(x509.BasicConstraints).value.ca
+        )
     except x509.ExtensionNotFound:
         is_ca = False
     not_after = cert.not_valid_after_utc
@@ -107,9 +109,13 @@ def parse_certificates(data: bytes) -> _Parsed:
         else:
             certs = [x509.load_der_x509_certificate(data)]
     except ValueError as exc:
-        raise CompanyCAError("the file is not a valid certificate (PEM .pem/.crt or DER .cer/.der expected)") from exc
+        raise CompanyCAError(
+            "the file is not a valid certificate (PEM .pem/.crt or DER .cer/.der expected)"
+        ) from exc
     if len(certs) > MAX_CERTIFICATES:
-        raise CompanyCAError(f"too many certificates in the file (maximum {MAX_CERTIFICATES})")
+        raise CompanyCAError(
+            f"too many certificates in the file (maximum {MAX_CERTIFICATES})"
+        )
 
     described = [_describe(c) for c in certs]
     warnings: List[str] = []

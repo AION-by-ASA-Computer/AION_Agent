@@ -29,8 +29,17 @@ from pydantic import BaseModel, Field
 from src.api.auth_login import ChatAuthIdentity, require_admin_role
 from src.mcp_custom import settings
 from src.mcp_custom.egress import MAX_ENTRIES as MAX_NETWORK_ENTRIES
-from src.mcp_custom.install import ActivationError, activate, list_custom_servers, set_network_allowlist
-from src.mcp_custom.manifest import ManifestError, SUPPORTED_RUNTIMES, manifest_json_schema
+from src.mcp_custom.install import (
+    ActivationError,
+    activate,
+    list_custom_servers,
+    set_network_allowlist,
+)
+from src.mcp_custom.manifest import (
+    ManifestError,
+    SUPPORTED_RUNTIMES,
+    manifest_json_schema,
+)
 from src.mcp_custom.package import (
     UploadError,
     UploadNotFound,
@@ -40,7 +49,11 @@ from src.mcp_custom.package import (
     submit_manifest,
 )
 from src.mcp_custom.template import guide_templates
-from src.mcp_custom.verify import cancel_verification, recover_interrupted, start_verification
+from src.mcp_custom.verify import (
+    cancel_verification,
+    recover_interrupted,
+    start_verification,
+)
 
 logger = logging.getLogger("aion.api.admin_custom_mcp")
 
@@ -75,7 +88,10 @@ def _require_enabled() -> None:
 def _not_found(upload_id: str) -> HTTPException:
     return HTTPException(
         status_code=404,
-        detail={"error": "upload_not_found", "message": f"Upload {upload_id} not found or expired."},
+        detail={
+            "error": "upload_not_found",
+            "message": f"Upload {upload_id} not found or expired.",
+        },
     )
 
 
@@ -131,10 +147,20 @@ async def upload_custom_mcp(
     # buffering arbitrarily large bodies.
     data = await file.read(limit + 1)
     try:
-        staged = await asyncio.to_thread(stage_upload, file.filename or "", data, actor=_actor(auth))
+        staged = await asyncio.to_thread(
+            stage_upload, file.filename or "", data, actor=_actor(auth)
+        )
     except UploadError as exc:
-        raise HTTPException(status_code=400, detail={"error": "upload_rejected", "message": str(exc)}) from exc
-    logger.info("Custom MCP upload %s staged by %s (%s, %s)", staged.upload_id, _actor(auth), staged.source_kind, staged.status)
+        raise HTTPException(
+            status_code=400, detail={"error": "upload_rejected", "message": str(exc)}
+        ) from exc
+    logger.info(
+        "Custom MCP upload %s staged by %s (%s, %s)",
+        staged.upload_id,
+        _actor(auth),
+        staged.source_kind,
+        staged.status,
+    )
     # With a valid manifest the verification (dependencies + probe in the jail) starts
     # right away; admin-ui polls GET /uploads/{id} until it is ready or failed.
     if staged.status == "verifying":
@@ -163,14 +189,19 @@ async def verify_custom_mcp_upload(upload_id: str) -> Dict[str, Any]:
     if staged.status not in ("verifying", "verify_failed"):
         raise HTTPException(
             status_code=409,
-            detail={"error": "not_verifiable", "message": f"nothing to verify in status '{staged.status}'"},
+            detail={
+                "error": "not_verifiable",
+                "message": f"nothing to verify in status '{staged.status}'",
+            },
         )
     start_verification(upload_id)
     return (await asyncio.to_thread(load_staged, upload_id)).to_public()
 
 
 @router.put("/uploads/{upload_id}/manifest")
-async def put_custom_mcp_manifest(upload_id: str, body: Dict[str, Any]) -> Dict[str, Any]:
+async def put_custom_mcp_manifest(
+    upload_id: str, body: Dict[str, Any]
+) -> Dict[str, Any]:
     """Attach the manifest filled in the admin-ui form; returns the updated review."""
     _require_enabled()
     try:
@@ -178,9 +209,13 @@ async def put_custom_mcp_manifest(upload_id: str, body: Dict[str, Any]) -> Dict[
     except UploadNotFound as exc:
         raise _not_found(upload_id) from exc
     except ManifestError as exc:
-        raise HTTPException(status_code=422, detail={"error": "manifest_invalid", "errors": exc.errors}) from exc
+        raise HTTPException(
+            status_code=422, detail={"error": "manifest_invalid", "errors": exc.errors}
+        ) from exc
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail={"error": "manifest_locked", "message": str(exc)}) from exc
+        raise HTTPException(
+            status_code=409, detail={"error": "manifest_locked", "message": str(exc)}
+        ) from exc
     if staged.status == "verifying":
         start_verification(upload_id)
     return staged.to_public()
@@ -210,7 +245,9 @@ async def activate_custom_mcp(
     except UploadNotFound as exc:
         raise _not_found(upload_id) from exc
     except ActivationError as exc:
-        raise HTTPException(status_code=409, detail={"error": exc.code, "message": exc.message}) from exc
+        raise HTTPException(
+            status_code=409, detail={"error": exc.code, "message": exc.message}
+        ) from exc
 
 
 @router.delete("/uploads/{upload_id}")
@@ -247,4 +284,6 @@ async def put_custom_mcp_network(
         return await set_network_allowlist(slug, body.allow, actor=_actor(auth))
     except ActivationError as exc:
         status = 404 if exc.code == "not_custom" else 422
-        raise HTTPException(status_code=status, detail={"error": exc.code, "message": exc.message}) from exc
+        raise HTTPException(
+            status_code=status, detail={"error": exc.code, "message": exc.message}
+        ) from exc

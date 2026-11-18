@@ -40,7 +40,13 @@ from typing import Any, Dict, List, Optional
 
 from . import settings
 from .manifest import Manifest
-from .package import NORMALIZED_REQUIREMENTS, StagedUpload, _save_state, load_staged, upload_src_dir
+from .package import (
+    NORMALIZED_REQUIREMENTS,
+    StagedUpload,
+    _save_state,
+    load_staged,
+    upload_src_dir,
+)
 from .paths import deps_root
 
 logger = logging.getLogger("aion.mcp_custom.verify")
@@ -73,12 +79,16 @@ def _tail(text: str) -> str:
 
 
 def _image() -> str:
-    return (os.environ.get("AION_SANDBOX_CONTAINER_IMAGE") or "aion/sandbox:latest").strip()
+    return (
+        os.environ.get("AION_SANDBOX_CONTAINER_IMAGE") or "aion/sandbox:latest"
+    ).strip()
 
 
 def deps_key(requirements: List[str]) -> str:
     """Content key of a dependency set: same requirements + image + build mode, same folder."""
-    material = "\n".join([_image(), f"source_builds={settings.allow_source_builds()}", *requirements])
+    material = "\n".join(
+        [_image(), f"source_builds={settings.allow_source_builds()}", *requirements]
+    )
     return hashlib.sha256(material.encode("utf-8")).hexdigest()[:24]
 
 
@@ -91,7 +101,9 @@ def deps_ready(key: str) -> bool:
     return bool(key) and (deps_path(key) / DEPS_MARKER).is_file()
 
 
-async def _run(argv: List[str], env: Dict[str, str], timeout: int, cwd: Optional[str] = None) -> tuple[int, str]:
+async def _run(
+    argv: List[str], env: Dict[str, str], timeout: int, cwd: Optional[str] = None
+) -> tuple[int, str]:
     """Run a command, merged stdout/stderr, killed after ``timeout`` seconds."""
     proc = await asyncio.create_subprocess_exec(
         *argv,
@@ -109,7 +121,9 @@ async def _run(argv: List[str], env: Dict[str, str], timeout: int, cwd: Optional
     return proc.returncode or 0, out.decode("utf-8", errors="replace")
 
 
-async def _build_deps(staged: StagedUpload, slug: str, key: str, in_container: bool) -> str:
+async def _build_deps(
+    staged: StagedUpload, slug: str, key: str, in_container: bool
+) -> str:
     """Install the declared dependencies into ``.deps/<key>``; returns the build log."""
     final = deps_path(key)
     tmp = deps_root() / f"{key}.building-{staged.upload_id}"
@@ -137,7 +151,11 @@ async def _build_deps(staged: StagedUpload, slug: str, key: str, in_container: b
         from .runtime import base_process_env
 
         uv = shutil.which("uv")
-        pip = [uv, "pip", "install", "--python", sys.executable] if uv else [sys.executable, "-m", "pip", "install", "--no-input"]
+        pip = (
+            [uv, "pip", "install", "--python", sys.executable]
+            if uv
+            else [sys.executable, "-m", "pip", "install", "--no-input"]
+        )
         argv = [*pip, "--target", str(tmp)]
         if not settings.allow_source_builds():
             argv.append("--only-binary=:all:")
@@ -157,7 +175,9 @@ async def _build_deps(staged: StagedUpload, slug: str, key: str, in_container: b
                 " A package may have no wheel for this platform: source builds are disabled "
                 "(AION_CUSTOM_MCP_ALLOW_SOURCE_BUILDS=1 enables them)."
             )
-        raise VerifyError(f"dependency installation failed (exit code {code}).{hint}", _tail(log))
+        raise VerifyError(
+            f"dependency installation failed (exit code {code}).{hint}", _tail(log)
+        )
 
     # Marker last: a folder without it is an interrupted build and is never used.
     (tmp / DEPS_MARKER).write_text(
@@ -183,7 +203,12 @@ async def _build_deps(staged: StagedUpload, slug: str, key: str, in_container: b
 # ───────────────────────── probe ─────────────────────────
 
 
-async def _probe(staged: StagedUpload, manifest: Manifest, deps_dir: Optional[Path], in_container: bool) -> List[Dict[str, str]]:
+async def _probe(
+    staged: StagedUpload,
+    manifest: Manifest,
+    deps_dir: Optional[Path],
+    in_container: bool,
+) -> List[Dict[str, str]]:
     """Start the staged server like at run time (no credentials) and list its tools."""
     from mcp import ClientSession, StdioServerParameters
     from mcp.client.stdio import stdio_client
@@ -195,7 +220,9 @@ async def _probe(staged: StagedUpload, manifest: Manifest, deps_dir: Optional[Pa
     ca_path = jail_ca_bundle()
     env = base_process_env()
     env.update(manifest.env)
-    env = finalize_process_env(env, in_container=in_container, deps_dir=deps_dir, ca_path=ca_path)
+    env = finalize_process_env(
+        env, in_container=in_container, deps_dir=deps_dir, ca_path=ca_path
+    )
     if in_container:
         from ..security.container_runtime import get_container_runtime
 
@@ -211,11 +238,16 @@ async def _probe(staged: StagedUpload, manifest: Manifest, deps_dir: Optional[Pa
         params = StdioServerParameters(command=command, args=args, env=spawn_env)
     else:
         params = StdioServerParameters(
-            command=sys.executable, args=["-u", str(src / manifest.entrypoint)], env=env, cwd=str(src)
+            command=sys.executable,
+            args=["-u", str(src / manifest.entrypoint)],
+            env=env,
+            cwd=str(src),
         )
 
     # The server's stderr (tracebacks, missing imports) is what the admin needs to see.
-    with tempfile.TemporaryFile(mode="w+", encoding="utf-8", errors="replace") as errlog:
+    with tempfile.TemporaryFile(
+        mode="w+", encoding="utf-8", errors="replace"
+    ) as errlog:
         try:
             async with asyncio.timeout(settings.probe_timeout_seconds()):
                 async with stdio_client(params, errlog=errlog) as (read, write):
@@ -223,21 +255,31 @@ async def _probe(staged: StagedUpload, manifest: Manifest, deps_dir: Optional[Pa
                         await session.initialize()
                         result = await session.list_tools()
         except BaseException as exc:  # noqa: BLE001 - report any failure of the probe
-            if isinstance(exc, asyncio.CancelledError) and asyncio.current_task().cancelling():
+            if (
+                isinstance(exc, asyncio.CancelledError)
+                and asyncio.current_task().cancelling()
+            ):
                 raise
             errlog.seek(0)
             stderr = errlog.read()
             # The last stderr line of the server (e.g. "ModuleNotFoundError: No module
             # named 'x'") explains far better than the MCP client's exception group.
-            last_line = next((ln.strip() for ln in reversed(stderr.splitlines()) if ln.strip()), "")
+            last_line = next(
+                (ln.strip() for ln in reversed(stderr.splitlines()) if ln.strip()), ""
+            )
             if isinstance(exc, TimeoutError):
                 reason = "it did not answer in time"
             elif last_line:
                 reason = last_line
             else:
                 reason = f"{type(exc).__name__}: {exc}"
-            raise VerifyError(f"the server did not start correctly: {reason}", _tail(stderr))
-    return [{"name": t.name, "description": (t.description or "")[:300]} for t in result.tools]
+            raise VerifyError(
+                f"the server did not start correctly: {reason}", _tail(stderr)
+            )
+    return [
+        {"name": t.name, "description": (t.description or "")[:300]}
+        for t in result.tools
+    ]
 
 
 # ───────────────────────── orchestration ─────────────────────────
@@ -260,7 +302,15 @@ async def run_verification(upload_id: str) -> None:
     manifest = Manifest.model_validate(staged.manifest)
     started = time.monotonic()
     in_container = container_isolation_available()
-    _update(upload_id, status="running", step="dependencies", started_at=_now(), isolated=in_container, error=None, log="")
+    _update(
+        upload_id,
+        status="running",
+        step="dependencies",
+        started_at=_now(),
+        isolated=in_container,
+        error=None,
+        log="",
+    )
     try:
         if not in_container and not settings.allow_unsandboxed():
             raise VerifyError(
@@ -288,7 +338,9 @@ async def run_verification(upload_id: str) -> None:
         _update(upload_id, step="probe", deps_key=key or None, log=log)
         tools = await _probe(staged, manifest, deps_dir, in_container)
         if not tools:
-            raise VerifyError("the server started but exposes no tools (no function decorated with @mcp.tool())")
+            raise VerifyError(
+                "the server started but exposes no tools (no function decorated with @mcp.tool())"
+            )
         _update(
             upload_id,
             status="ok",
@@ -298,10 +350,21 @@ async def run_verification(upload_id: str) -> None:
             duration_s=round(time.monotonic() - started, 1),
         )
     except VerifyError as exc:
-        _update(upload_id, status="failed", error=str(exc), log=exc.log or "", finished_at=_now())
+        _update(
+            upload_id,
+            status="failed",
+            error=str(exc),
+            log=exc.log or "",
+            finished_at=_now(),
+        )
     except Exception as exc:  # unexpected: keep the upload reviewable
         logger.exception("Verification of custom MCP upload %s failed", upload_id)
-        _update(upload_id, status="failed", error=f"unexpected error: {exc}", finished_at=_now())
+        _update(
+            upload_id,
+            status="failed",
+            error=f"unexpected error: {exc}",
+            finished_at=_now(),
+        )
 
 
 def start_verification(upload_id: str) -> None:
@@ -309,7 +372,9 @@ def start_verification(upload_id: str) -> None:
     task = _TASKS.get(upload_id)
     if task is not None and not task.done():
         return
-    task = asyncio.create_task(run_verification(upload_id), name=f"mcp-custom-verify-{upload_id[:8]}")
+    task = asyncio.create_task(
+        run_verification(upload_id), name=f"mcp-custom-verify-{upload_id[:8]}"
+    )
     _TASKS[upload_id] = task
     task.add_done_callback(lambda _t: _TASKS.pop(upload_id, None))
 
@@ -347,7 +412,9 @@ def referenced_deps_keys() -> set:
     if root.is_dir():
         for state in root.glob("*/upload.json"):
             try:
-                key = (json.loads(state.read_text(encoding="utf-8")).get("build") or {}).get("deps_key")
+                key = (
+                    json.loads(state.read_text(encoding="utf-8")).get("build") or {}
+                ).get("deps_key")
             except (OSError, ValueError):
                 continue
             if key:

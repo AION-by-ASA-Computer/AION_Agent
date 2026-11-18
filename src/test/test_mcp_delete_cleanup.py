@@ -55,12 +55,16 @@ def _db_session(rowcount: int):
     return ctx, session
 
 
-def _delete(name, *, registry, user_rows, policy_rows, invalidate=None, custom_files=False):
+def _delete(
+    name, *, registry, user_rows, policy_rows, invalidate=None, custom_files=False
+):
     """Run DELETE /admin/mcp/{name} with registry, profiles and DB mocked."""
     from src.api import admin as admin_api
 
     ctx, session = _db_session(policy_rows)
-    delete_user_data = AsyncMock(return_value={"credentials_deleted": user_rows, "preferences_deleted": 0})
+    delete_user_data = AsyncMock(
+        return_value={"credentials_deleted": user_rows, "preferences_deleted": 0}
+    )
     profiles = SimpleNamespace(load_all=lambda: None, _profiles={})
     with (
         patch.object(mcp_manager, "_registry_base", {}),
@@ -68,7 +72,10 @@ def _delete(name, *, registry, user_rows, policy_rows, invalidate=None, custom_f
         patch.object(mcp_manager, "delete_server", side_effect=lambda n: n in registry),
         patch("src.agent_profile.profile_manager", profiles),
         patch("src.api.admin.get_async_session_maker", return_value=lambda: ctx),
-        patch("src.runtime.mcp_integration_integrity.delete_mcp_user_data", delete_user_data),
+        patch(
+            "src.runtime.mcp_integration_integrity.delete_mcp_user_data",
+            delete_user_data,
+        ),
         patch("src.api.admin._invalidate_mcp_runtime", invalidate or AsyncMock()),
         patch("src.mcp_custom.install.has_custom_artifacts", return_value=custom_files),
         patch("src.api.admin._remove_market_mcp_artifacts"),

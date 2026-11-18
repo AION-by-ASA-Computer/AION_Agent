@@ -117,7 +117,9 @@ def resolve_connector_row_for_mcp_server(
     """
     # Customer-built servers are never catalog connectors: a slug like "github_crm"
     # must not inherit the GitHub connector's credentials or OAuth settings.
-    if isinstance(server_config, dict) and isinstance(server_config.get("aion_custom"), dict):
+    if isinstance(server_config, dict) and isinstance(
+        server_config.get("aion_custom"), dict
+    ):
         return None
     explicit = (server_config.get("aion_connector_id") or "").strip()
     if explicit:

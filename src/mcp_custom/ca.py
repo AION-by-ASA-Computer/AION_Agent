@@ -30,7 +30,13 @@ CA_IN_CONTAINER = "/etc/aion/ca-bundle.pem"
 
 # Variables read by the common TLS stacks: Python ssl/httpx (SSL_CERT_FILE),
 # requests, curl, pip, Node (extra CAs, additive).
-_CA_ENV_KEYS = ("SSL_CERT_FILE", "REQUESTS_CA_BUNDLE", "CURL_CA_BUNDLE", "PIP_CERT", "NODE_EXTRA_CA_CERTS")
+_CA_ENV_KEYS = (
+    "SSL_CERT_FILE",
+    "REQUESTS_CA_BUNDLE",
+    "CURL_CA_BUNDLE",
+    "PIP_CERT",
+    "NODE_EXTRA_CA_CERTS",
+)
 
 # (source path, mtime, size) of the last bundle written, to skip rewriting it at
 # every server start.
@@ -70,9 +76,17 @@ def jail_ca_bundle() -> Optional[Path]:
     import certifi
 
     public = Path(certifi.where()).read_text(encoding="utf-8")
-    combined = public.rstrip() + "\n\n# --- Company CA (AION Settings -> Network) ---\n" + company.strip() + "\n"
+    combined = (
+        public.rstrip()
+        + "\n\n# --- Company CA (AION Settings -> Network) ---\n"
+        + company.strip()
+        + "\n"
+    )
     target.parent.mkdir(parents=True, exist_ok=True)
-    if not target.is_file() or target.read_text(encoding="utf-8", errors="replace") != combined:
+    if (
+        not target.is_file()
+        or target.read_text(encoding="utf-8", errors="replace") != combined
+    ):
         tmp = target.with_suffix(".tmp")
         tmp.write_text(combined, encoding="utf-8")
         os.chmod(tmp, 0o644)  # read by the unprivileged jail user

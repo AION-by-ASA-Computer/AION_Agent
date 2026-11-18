@@ -105,10 +105,15 @@ async def put_company_ca(
     data = await file.read(company_ca.MAX_CA_BYTES + 1)
     try:
         result = await asyncio.to_thread(
-            company_ca.save_uploaded_ca, data, filename=file.filename or "", actor=_actor(auth)
+            company_ca.save_uploaded_ca,
+            data,
+            filename=file.filename or "",
+            actor=_actor(auth),
         )
     except company_ca.CompanyCAError as exc:
-        raise HTTPException(status_code=400, detail={"error": "ca_invalid", "message": str(exc)}) from exc
+        raise HTTPException(
+            status_code=400, detail={"error": "ca_invalid", "message": str(exc)}
+        ) from exc
     restarted = await _apply_to_running_servers()
     await _audit(
         _actor(auth),
@@ -119,12 +124,18 @@ async def put_company_ca(
             "servers_restarted": restarted,
         },
     )
-    logger.info("Company CA uploaded by %s (%d certificates)", _actor(auth), len(result.get("certificates", [])))
+    logger.info(
+        "Company CA uploaded by %s (%d certificates)",
+        _actor(auth),
+        len(result.get("certificates", [])),
+    )
     return {**result, "servers_restarted": restarted, "network": _network_summary()}
 
 
 @router.delete("/ca")
-async def delete_company_ca(auth: ChatAuthIdentity = Depends(require_admin_role)) -> Dict[str, Any]:
+async def delete_company_ca(
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+) -> Dict[str, Any]:
     """Remove the uploaded company CA; applied immediately."""
     if company_ca.env_override():
         raise HTTPException(
@@ -137,5 +148,7 @@ async def delete_company_ca(auth: ChatAuthIdentity = Depends(require_admin_role)
     removed = await asyncio.to_thread(company_ca.remove_uploaded_ca)
     restarted = await _apply_to_running_servers() if removed else 0
     if removed:
-        await _audit(_actor(auth), "network.company_ca.delete", {"servers_restarted": restarted})
+        await _audit(
+            _actor(auth), "network.company_ca.delete", {"servers_restarted": restarted}
+        )
     return {"removed": removed, "servers_restarted": restarted}

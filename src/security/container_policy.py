@@ -78,9 +78,7 @@ def _container_user_args(runtime: str = "") -> List[str]:
     if is_docker_runtime(runtime):
         # Docker Desktop on Windows/macOS maps permissions through the virtualization
         # layer; --userns=keep-id is a Podman-only option that causes Docker to error out.
-        mode = (
-            (os.environ.get("AION_SANDBOX_CONTAINER_USERNS") or "").strip().lower()
-        )
+        mode = (os.environ.get("AION_SANDBOX_CONTAINER_USERNS") or "").strip().lower()
         if mode == "root":
             return ["--user", "0:0"]
         uid = (os.environ.get("AION_SANDBOX_HOST_UID") or "").strip()
@@ -241,7 +239,14 @@ _CUSTOM_MCP_DOCKER_USER = "65534:65534"
 CUSTOM_MCP_CA_PATH = "/etc/aion/ca-bundle.pem"
 
 # Corporate proxy variables forwarded (by name) to the dependency build when set.
-_PROXY_KEYS = ("HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "http_proxy", "https_proxy", "no_proxy")
+_PROXY_KEYS = (
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "NO_PROXY",
+    "http_proxy",
+    "https_proxy",
+    "no_proxy",
+)
 
 
 # Entrypoint of the sandbox image that loads the allowlist rules and drops every
@@ -267,7 +272,9 @@ def _custom_mcp_user_args(runtime: str) -> List[str]:
     return user_args
 
 
-def custom_mcp_jail_args(runtime: str, egress: Optional["ResolvedEgress"]) -> Tuple[List[str], List[str]]:
+def custom_mcp_jail_args(
+    runtime: str, egress: Optional["ResolvedEgress"]
+) -> Tuple[List[str], List[str]]:
     """Network, user and entrypoint flags of a custom MCP jail.
 
     Returns ``(flags, command)``: ``flags`` go before the image, ``command`` is the
@@ -374,15 +381,25 @@ def build_custom_mcp_run_argv(
         f"{host_dir_str}:/server:ro{_selinux_mount_suffix(runtime, shared=True)}",
     ]
     if host_deps_dir is not None:
-        argv.extend(["-v", f"{host_deps_dir.resolve()}:/deps:ro{_selinux_mount_suffix(runtime, shared=True)}"])
+        argv.extend(
+            [
+                "-v",
+                f"{host_deps_dir.resolve()}:/deps:ro{_selinux_mount_suffix(runtime, shared=True)}",
+            ]
+        )
     if host_ca_bundle is not None:
-        argv.extend(["-v", f"{host_ca_bundle.resolve()}:{CUSTOM_MCP_CA_PATH}:ro{_selinux_mount_suffix(runtime, shared=True)}"])
+        argv.extend(
+            [
+                "-v",
+                f"{host_ca_bundle.resolve()}:{CUSTOM_MCP_CA_PATH}:ro{_selinux_mount_suffix(runtime, shared=True)}",
+            ]
+        )
     jail_flags, command = custom_mcp_jail_args(runtime, egress)
     # Server variables first: Docker/Podman apply --env-file, then -e in order (last
     # wins), so the jail's own -e AION_JAIL_* inside jail_flags always prevail.
     if env_file is not None:
         argv.extend(["--env-file", str(env_file)])
-    for key in (env or {}):
+    for key in env or {}:
         if not key.startswith("AION_JAIL_"):
             argv.extend(["-e", key])
     argv.extend(
@@ -449,7 +466,9 @@ def build_custom_mcp_deps_argv(
     the packages; source distributions (``setup.py``) are allowed only with
     ``AION_CUSTOM_MCP_ALLOW_SOURCE_BUILDS=1`` and still build inside this jail.
     """
-    tmp_opts = "rw,nosuid,size=1g" if allow_source_builds else "rw,noexec,nosuid,size=1g"
+    tmp_opts = (
+        "rw,nosuid,size=1g" if allow_source_builds else "rw,noexec,nosuid,size=1g"
+    )
     argv: List[str] = [
         runtime,
         "run",
@@ -469,7 +488,12 @@ def build_custom_mcp_deps_argv(
     ]
     if host_ca_bundle is not None:
         # Private package indexes behind the company CA.
-        argv.extend(["-v", f"{host_ca_bundle.resolve()}:{CUSTOM_MCP_CA_PATH}:ro{_selinux_mount_suffix(runtime, shared=True)}"])
+        argv.extend(
+            [
+                "-v",
+                f"{host_ca_bundle.resolve()}:{CUSTOM_MCP_CA_PATH}:ro{_selinux_mount_suffix(runtime, shared=True)}",
+            ]
+        )
     argv += [
         "-w",
         "/server",
@@ -499,7 +523,14 @@ def build_custom_mcp_deps_argv(
     ):
         argv.extend(["-e", f"{key}={value}"])
     if host_ca_bundle is not None:
-        argv.extend(["-e", f"PIP_CERT={CUSTOM_MCP_CA_PATH}", "-e", f"SSL_CERT_FILE={CUSTOM_MCP_CA_PATH}"])
+        argv.extend(
+            [
+                "-e",
+                f"PIP_CERT={CUSTOM_MCP_CA_PATH}",
+                "-e",
+                f"SSL_CERT_FILE={CUSTOM_MCP_CA_PATH}",
+            ]
+        )
     # Corporate proxy: forwarded by name, the value comes from the CLI environment.
     for key in _PROXY_KEYS:
         if os.environ.get(key):

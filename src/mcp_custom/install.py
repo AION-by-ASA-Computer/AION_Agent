@@ -31,7 +31,13 @@ from typing import Any, Dict, List, Optional
 from . import settings
 from .manifest import Manifest
 from .package import discard, load_staged, upload_src_dir
-from .paths import custom_root, is_custom_config, server_dir, slug_conflict, versions_root
+from .paths import (
+    custom_root,
+    is_custom_config,
+    server_dir,
+    slug_conflict,
+    versions_root,
+)
 
 logger = logging.getLogger("aion.mcp_custom.install")
 
@@ -87,7 +93,11 @@ def build_registry_entry(
         prev_env = previous.get("env") or {}
         prev_defaults = previous["aion_custom"].get("env_defaults") or {}
         for key in manifest.env:
-            if key in prev_env and key in prev_defaults and prev_env[key] != prev_defaults[key]:
+            if (
+                key in prev_env
+                and key in prev_defaults
+                and prev_env[key] != prev_defaults[key]
+            ):
                 env[key] = prev_env[key]
 
     # Credential placeholders, resolved only from the encrypted store at spawn time.
@@ -131,12 +141,16 @@ def _network_choice(manifest: Manifest, previous: Optional[Dict[str, Any]]) -> t
     Returns ``(entries, "admin" | "manifest")``.
     """
     prev_meta = previous["aion_custom"] if is_custom_config(previous) else {}
-    if prev_meta.get("network_source") == "admin" and isinstance(prev_meta.get("network"), list):
+    if prev_meta.get("network_source") == "admin" and isinstance(
+        prev_meta.get("network"), list
+    ):
         return list(prev_meta["network"]), "admin"
     return list(manifest.network), "manifest"
 
 
-async def set_network_allowlist(slug: str, entries: List[str], *, actor: str) -> Dict[str, Any]:
+async def set_network_allowlist(
+    slug: str, entries: List[str], *, actor: str
+) -> Dict[str, Any]:
     """Admin edit of the network allowlist of an installed custom server.
 
     Validates and normalizes the entries, rewrites the registry entry, restarts the
@@ -178,12 +192,18 @@ def _prune_versions(slug: str) -> None:
     root = versions_root() / slug
     if not root.is_dir():
         return
-    archived = sorted((p for p in root.iterdir() if p.is_dir()), key=lambda p: p.stat().st_mtime, reverse=True)
-    for old in archived[settings.keep_versions():]:
+    archived = sorted(
+        (p for p in root.iterdir() if p.is_dir()),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for old in archived[settings.keep_versions() :]:
         shutil.rmtree(old, ignore_errors=True)
 
 
-def _swap_in(slug: str, staged_src: Path, current_version: Optional[str]) -> Optional[Path]:
+def _swap_in(
+    slug: str, staged_src: Path, current_version: Optional[str]
+) -> Optional[Path]:
     """Move the staged code into place, archiving the active version first.
 
     Returns the archive path of the previous version (None on first install). On
@@ -231,7 +251,9 @@ async def invalidate_runtime(slug: str) -> None:
         logger.exception("Failed to stop pooled workers of custom MCP '%s'", slug)
 
 
-async def _audit(actor: str, operation: str, slug: str, payload: Dict[str, Any]) -> None:
+async def _audit(
+    actor: str, operation: str, slug: str, payload: Dict[str, Any]
+) -> None:
     from ..data.audit import record_admin_action
 
     await record_admin_action(
@@ -244,7 +266,9 @@ async def _audit(actor: str, operation: str, slug: str, payload: Dict[str, Any])
     )
 
 
-async def activate(upload_id: str, *, actor: str, replace_same_version: bool = False) -> Dict[str, Any]:
+async def activate(
+    upload_id: str, *, actor: str, replace_same_version: bool = False
+) -> Dict[str, Any]:
     """Activate a reviewed upload. Raises ``ActivationError`` or ``UploadNotFound``.
 
     Side effects: filesystem swap under ``mcp_servers/custom``, registry overlay
@@ -256,16 +280,26 @@ async def activate(upload_id: str, *, actor: str, replace_same_version: bool = F
     async with _ACTIVATION_LOCK:
         staged = await asyncio.to_thread(load_staged, upload_id)
         if staged.status == "invalid":
-            raise ActivationError("upload_invalid", "the upload has blocking errors: " + "; ".join(staged.errors))
+            raise ActivationError(
+                "upload_invalid",
+                "the upload has blocking errors: " + "; ".join(staged.errors),
+            )
         if staged.manifest is None:
-            raise ActivationError("manifest_required", "fill in the server details (manifest) before activating")
+            raise ActivationError(
+                "manifest_required",
+                "fill in the server details (manifest) before activating",
+            )
         # Only an upload proven to work in the jail (dependencies + probe) goes live.
         if staged.status == "verifying":
-            raise ActivationError("verification_pending", "the package is still being verified: wait for it to finish")
+            raise ActivationError(
+                "verification_pending",
+                "the package is still being verified: wait for it to finish",
+            )
         if staged.status != "ready":
             raise ActivationError(
                 "verification_failed",
-                "the package did not pass the verification: " + str((staged.build or {}).get("error") or "unknown error"),
+                "the package did not pass the verification: "
+                + str((staged.build or {}).get("error") or "unknown error"),
             )
         manifest = Manifest.model_validate(staged.manifest)
         slug = manifest.slug
@@ -276,7 +310,11 @@ async def activate(upload_id: str, *, actor: str, replace_same_version: bool = F
             raise ActivationError("slug_conflict", conflict)
         mcp_manager.load_registry()
         previous = mcp_manager._registry.get(slug)
-        current_version = previous["aion_custom"].get("version") if is_custom_config(previous) else None
+        current_version = (
+            previous["aion_custom"].get("version")
+            if is_custom_config(previous)
+            else None
+        )
         if current_version == manifest.version and not replace_same_version:
             raise ActivationError(
                 "same_version",
@@ -292,7 +330,9 @@ async def activate(upload_id: str, *, actor: str, replace_same_version: bool = F
         )
 
         # Code first, then registry: on registry failure restore the previous code.
-        archived = await asyncio.to_thread(_swap_in, slug, upload_src_dir(upload_id), current_version)
+        archived = await asyncio.to_thread(
+            _swap_in, slug, upload_src_dir(upload_id), current_version
+        )
         try:
             mcp_manager.load_registry()
             mcp_manager._registry_local[slug] = entry
@@ -303,7 +343,9 @@ async def activate(upload_id: str, *, actor: str, replace_same_version: bool = F
             await asyncio.to_thread(_restore_previous, slug, archived)
             raise
 
-        await asyncio.to_thread(_write_install_marker, slug, manifest, staged.sha256, actor)
+        await asyncio.to_thread(
+            _write_install_marker, slug, manifest, staged.sha256, actor
+        )
         await asyncio.to_thread(discard, upload_id)
         await asyncio.to_thread(_prune_versions, slug)
         await sync_mcp_server_config_from_registry(slug)
@@ -321,7 +363,13 @@ async def activate(upload_id: str, *, actor: str, replace_same_version: bool = F
                 "credential_mode": manifest.credentials.mode,
             },
         )
-        logger.info("Custom MCP '%s' %s -> %s activated by %s", slug, current_version, manifest.version, actor)
+        logger.info(
+            "Custom MCP '%s' %s -> %s activated by %s",
+            slug,
+            current_version,
+            manifest.version,
+            actor,
+        )
         return {
             "server_slug": slug,
             "version": manifest.version,
@@ -351,13 +399,19 @@ def list_custom_servers() -> List[Dict[str, Any]]:
                 "credential_mode": meta.get("credential_mode", "none"),
                 # Allowlist in force (anything but a list, e.g. a hand-edited
                 # registry, means no network) and the one the manifest asks for.
-                "network": meta.get("network") if isinstance(meta.get("network"), list) else [],
+                "network": meta.get("network")
+                if isinstance(meta.get("network"), list)
+                else [],
                 "network_source": meta.get("network_source") or "manifest",
-                "network_manifest": meta.get("network_manifest") if isinstance(meta.get("network_manifest"), list) else [],
+                "network_manifest": meta.get("network_manifest")
+                if isinstance(meta.get("network_manifest"), list)
+                else [],
                 "uploaded_by": meta.get("uploaded_by"),
                 "uploaded_at": meta.get("uploaded_at"),
                 "code_present": server_dir(slug).is_dir(),
-                "archived_versions": sorted(p.name.split("__")[0] for p in archive.iterdir() if p.is_dir())
+                "archived_versions": sorted(
+                    p.name.split("__")[0] for p in archive.iterdir() if p.is_dir()
+                )
                 if archive.is_dir()
                 else [],
             }
@@ -371,12 +425,20 @@ def list_custom_servers() -> List[Dict[str, Any]]:
 INSTALL_MARKER = ".aion-installed.json"
 
 
-def _write_install_marker(slug: str, manifest: Manifest, sha256: str, actor: str) -> None:
+def _write_install_marker(
+    slug: str, manifest: Manifest, sha256: str, actor: str
+) -> None:
     import json
 
     (server_dir(slug) / INSTALL_MARKER).write_text(
         json.dumps(
-            {"slug": slug, "version": manifest.version, "sha256": sha256, "installed_by": actor, "installed_at": _now_iso()},
+            {
+                "slug": slug,
+                "version": manifest.version,
+                "sha256": sha256,
+                "installed_by": actor,
+                "installed_at": _now_iso(),
+            },
             indent=2,
         ),
         encoding="utf-8",
@@ -420,7 +482,9 @@ def _staged_uploads_for(slug: str) -> List[Path]:
     for entry in root.iterdir():
         state = entry / "upload.json"
         try:
-            data = json.loads(state.read_text(encoding="utf-8")) if state.is_file() else {}
+            data = (
+                json.loads(state.read_text(encoding="utf-8")) if state.is_file() else {}
+            )
         except (OSError, ValueError):
             continue
         manifest_slug = (data.get("manifest") or {}).get("slug")
@@ -451,7 +515,11 @@ def remove_custom_artifacts(slug: str) -> Dict[str, Any]:
     root = custom_root().resolve()
     removed: List[str] = []
     failed: List[str] = []
-    for target in (server_dir(slug), versions_root() / slug, *_staged_uploads_for(slug)):
+    for target in (
+        server_dir(slug),
+        versions_root() / slug,
+        *_staged_uploads_for(slug),
+    ):
         resolved = target.resolve()
         if root not in resolved.parents or not resolved.is_dir():
             continue
@@ -470,7 +538,12 @@ def remove_custom_artifacts(slug: str) -> Dict[str, Any]:
     from .verify import gc_deps
 
     deps_removed = gc_deps()
-    return {"removed": removed, "failed": failed, "containers_removed": containers, "deps_removed": deps_removed}
+    return {
+        "removed": removed,
+        "failed": failed,
+        "containers_removed": containers,
+        "deps_removed": deps_removed,
+    }
 
 
 def cleanup_orphans() -> Dict[str, Any]:
@@ -488,20 +561,30 @@ def cleanup_orphans() -> Dict[str, Any]:
     from .package import cleanup_expired
 
     mcp_manager.load_registry()
-    custom_slugs = {s for s, cfg in mcp_manager._registry.items() if is_custom_config(cfg)}
+    custom_slugs = {
+        s for s, cfg in mcp_manager._registry.items() if is_custom_config(cfg)
+    }
     summary: Dict[str, Any] = {"expired_uploads": cleanup_expired(), "servers": {}}
     root = custom_root()
     if not root.is_dir():
         return summary
     for entry in root.iterdir():
-        if entry.name.startswith(".") or not entry.is_dir() or entry.name in custom_slugs:
+        if (
+            entry.name.startswith(".")
+            or not entry.is_dir()
+            or entry.name in custom_slugs
+        ):
             continue
         if (entry / INSTALL_MARKER).is_file():
             summary["servers"][entry.name] = remove_custom_artifacts(entry.name)
     versions = versions_root()
     if versions.is_dir():
         for entry in versions.iterdir():
-            if entry.is_dir() and entry.name not in custom_slugs and not server_dir(entry.name).exists():
+            if (
+                entry.is_dir()
+                and entry.name not in custom_slugs
+                and not server_dir(entry.name).exists()
+            ):
                 summary["servers"][entry.name] = remove_custom_artifacts(entry.name)
     from .verify import gc_deps
 

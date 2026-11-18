@@ -46,7 +46,13 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 from . import settings
-from .manifest import MANIFEST_FILENAMES, Manifest, ManifestError, parse_manifest_data, parse_manifest_text
+from .manifest import (
+    MANIFEST_FILENAMES,
+    Manifest,
+    ManifestError,
+    parse_manifest_data,
+    parse_manifest_text,
+)
 from .paths import is_custom_config, slug_conflict, staging_root
 
 _UPLOAD_ID_RE = re.compile(r"^[0-9a-f]{32}$")
@@ -78,7 +84,18 @@ _ENV_TEMPLATE_NAMES = frozenset({".env.example", ".env.sample", ".env.template"}
 # library plus the libraries every MCP server depends on. "test" is excluded on
 # purpose (a common folder name, never imported by a server at runtime).
 _SHADOW_EXTRA = frozenset(
-    {"mcp", "fastmcp", "pydantic", "pydantic_core", "httpx", "anyio", "starlette", "uvicorn", "yaml", "typing_extensions"}
+    {
+        "mcp",
+        "fastmcp",
+        "pydantic",
+        "pydantic_core",
+        "httpx",
+        "anyio",
+        "starlette",
+        "uvicorn",
+        "yaml",
+        "typing_extensions",
+    }
 )
 _SHADOW_NAMES = (frozenset(sys.stdlib_module_names) | _SHADOW_EXTRA) - {"test"}
 
@@ -194,7 +211,9 @@ def upload_src_dir(upload_id: str) -> Path:
 
 def _save_state(staged: StagedUpload) -> None:
     path = _upload_dir(staged.upload_id) / "upload.json"
-    path.write_text(json.dumps(asdict(staged), indent=2, ensure_ascii=False), encoding="utf-8")
+    path.write_text(
+        json.dumps(asdict(staged), indent=2, ensure_ascii=False), encoding="utf-8"
+    )
 
 
 def load_staged(upload_id: str) -> StagedUpload:
@@ -257,7 +276,9 @@ def _safe_member_path(name: str) -> Optional[PurePosixPath]:
 
 
 def _is_env_file(name: str) -> bool:
-    return (name == ".env" or name.startswith(".env.")) and name not in _ENV_TEMPLATE_NAMES
+    return (
+        name == ".env" or name.startswith(".env.")
+    ) and name not in _ENV_TEMPLATE_NAMES
 
 
 def _extract_zip(data: bytes, dest: Path) -> Tuple[List[str], List[str]]:
@@ -275,7 +296,9 @@ def _extract_zip(data: bytes, dest: Path) -> Tuple[List[str], List[str]]:
     for info in archive.infolist():
         rel = _safe_member_path(info.filename)
         if rel is None:
-            errors.append(f"unsafe path in archive: {info.filename!r} (absolute or containing '..')")
+            errors.append(
+                f"unsafe path in archive: {info.filename!r} (absolute or containing '..')"
+            )
             continue
         if info.flag_bits & 0x1:
             errors.append(f"encrypted entries are not supported: {info.filename!r}")
@@ -286,7 +309,11 @@ def _extract_zip(data: bytes, dest: Path) -> Tuple[List[str], List[str]]:
             continue
         if info.is_dir():
             continue
-        if any(part in _IGNORED_DIRS for part in rel.parts[:-1]) or rel.name in _IGNORED_FILES or rel.suffix == ".pyc":
+        if (
+            any(part in _IGNORED_DIRS for part in rel.parts[:-1])
+            or rel.name in _IGNORED_FILES
+            or rel.suffix == ".pyc"
+        ):
             skipped_ignored += 1
             continue
         if _is_env_file(rel.name):
@@ -353,7 +380,9 @@ def _list_files(src: Path) -> List[Dict[str, Any]]:
     out = []
     for p in sorted(src.rglob("*")):
         if p.is_file():
-            out.append({"path": p.relative_to(src).as_posix(), "size": p.stat().st_size})
+            out.append(
+                {"path": p.relative_to(src).as_posix(), "size": p.stat().st_size}
+            )
     return out
 
 
@@ -368,12 +397,18 @@ def _is_environ(node: ast.AST) -> bool:
 
 
 def _str_const(node: Optional[ast.AST]) -> Optional[str]:
-    return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
+    return (
+        node.value
+        if isinstance(node, ast.Constant) and isinstance(node.value, str)
+        else None
+    )
 
 
 # Path fragments a server has no reason to touch: AION's data/config and system
 # secrets. Matched against string constants passed to open()/Path().
-_SENSITIVE_PATH_RE = re.compile(r"(^/app\b|^/proc\b|^/etc/|^/root\b|^/run/|\.env$|aion\.db|podman\.sock|docker\.sock)")
+_SENSITIVE_PATH_RE = re.compile(
+    r"(^/app\b|^/proc\b|^/etc/|^/root\b|^/run/|\.env$|aion\.db|podman\.sock|docker\.sock)"
+)
 
 
 class _CodeScanner(ast.NodeVisitor):
@@ -387,7 +422,12 @@ class _CodeScanner(ast.NodeVisitor):
 
     def _note(self, node: ast.AST, severity: str, message: str) -> None:
         self.notes.append(
-            {"file": self.rel_path, "line": getattr(node, "lineno", None), "severity": severity, "message": message}
+            {
+                "file": self.rel_path,
+                "line": getattr(node, "lineno", None),
+                "severity": severity,
+                "message": message,
+            }
         )
 
     def visit_Import(self, node: ast.Import) -> None:
@@ -407,39 +447,89 @@ class _CodeScanner(ast.NodeVisitor):
             if key:
                 self.env_keys.add(key)
             else:
-                self._note(node, "info", "reads an environment variable with a computed name (cannot be checked)")
+                self._note(
+                    node,
+                    "info",
+                    "reads an environment variable with a computed name (cannot be checked)",
+                )
         self.generic_visit(node)
 
     def visit_Call(self, node: ast.Call) -> None:
         func = node.func
         first = node.args[0] if node.args else None
         # os.environ.get("KEY") / os.getenv("KEY") / getenv("KEY")
-        is_env_get = isinstance(func, ast.Attribute) and func.attr in ("get", "pop", "setdefault") and _is_environ(func.value)
-        is_getenv = (isinstance(func, ast.Attribute) and func.attr == "getenv") or (isinstance(func, ast.Name) and func.id == "getenv")
+        is_env_get = (
+            isinstance(func, ast.Attribute)
+            and func.attr in ("get", "pop", "setdefault")
+            and _is_environ(func.value)
+        )
+        is_getenv = (isinstance(func, ast.Attribute) and func.attr == "getenv") or (
+            isinstance(func, ast.Name) and func.id == "getenv"
+        )
         if is_env_get or is_getenv:
             key = _str_const(first)
             if key:
                 self.env_keys.add(key)
             elif first is not None:
-                self._note(node, "info", "reads an environment variable with a computed name (cannot be checked)")
+                self._note(
+                    node,
+                    "info",
+                    "reads an environment variable with a computed name (cannot be checked)",
+                )
         # dict(os.environ) / os.environ.copy() / os.environ.items(): the whole environment.
-        if isinstance(func, ast.Name) and func.id == "dict" and first is not None and _is_environ(first):
+        if (
+            isinstance(func, ast.Name)
+            and func.id == "dict"
+            and first is not None
+            and _is_environ(first)
+        ):
             self._note(node, "high", "copies the whole environment (dict(os.environ))")
-        if isinstance(func, ast.Attribute) and func.attr in ("copy", "items", "keys", "values") and _is_environ(func.value):
-            self._note(node, "high", f"reads the whole environment (os.environ.{func.attr}())")
+        if (
+            isinstance(func, ast.Attribute)
+            and func.attr in ("copy", "items", "keys", "values")
+            and _is_environ(func.value)
+        ):
+            self._note(
+                node, "high", f"reads the whole environment (os.environ.{func.attr}())"
+            )
         # Dynamic code execution.
-        if isinstance(func, ast.Name) and func.id in ("eval", "exec", "compile", "__import__"):
+        if isinstance(func, ast.Name) and func.id in (
+            "eval",
+            "exec",
+            "compile",
+            "__import__",
+        ):
             self._note(node, "high", f"executes dynamic code ({func.id})")
         # External commands.
         if isinstance(func, ast.Attribute) and isinstance(func.value, ast.Name):
             mod, attr = func.value.id, func.attr
             if mod == "subprocess":
-                shell = any(k.arg == "shell" and isinstance(k.value, ast.Constant) and k.value.value is True for k in node.keywords)
-                self._note(node, "critical" if shell else "high", f"runs external commands (subprocess.{attr}{', shell=True' if shell else ''})")
-            elif mod == "os" and attr in ("system", "popen", "execv", "execve", "execvp", "spawnv", "fork", "kill"):
+                shell = any(
+                    k.arg == "shell"
+                    and isinstance(k.value, ast.Constant)
+                    and k.value.value is True
+                    for k in node.keywords
+                )
+                self._note(
+                    node,
+                    "critical" if shell else "high",
+                    f"runs external commands (subprocess.{attr}{', shell=True' if shell else ''})",
+                )
+            elif mod == "os" and attr in (
+                "system",
+                "popen",
+                "execv",
+                "execve",
+                "execvp",
+                "spawnv",
+                "fork",
+                "kill",
+            ):
                 self._note(node, "high", f"runs or controls processes (os.{attr})")
             elif mod in ("pickle", "marshal") and attr in ("load", "loads"):
-                self._note(node, "medium", f"deserialises untrusted data ({mod}.{attr})")
+                self._note(
+                    node, "medium", f"deserialises untrusted data ({mod}.{attr})"
+                )
             elif mod == "ctypes":
                 self._note(node, "high", "uses native code (ctypes)")
         # File access to sensitive paths (string constants only).
@@ -468,7 +558,9 @@ def _scan_code(src: Path) -> Tuple[Set[str], Set[str], List[Dict[str, Any]], Lis
             tree = ast.parse(py.read_text(encoding="utf-8"), filename=rel)
         except (SyntaxError, UnicodeDecodeError) as exc:
             line = getattr(exc, "lineno", None)
-            syntax_errors.append(f"{rel}{f':{line}' if line else ''}: {exc.__class__.__name__}: {getattr(exc, 'msg', exc)}")
+            syntax_errors.append(
+                f"{rel}{f':{line}' if line else ''}: {exc.__class__.__name__}: {getattr(exc, 'msg', exc)}"
+            )
             continue
         scanner = _CodeScanner(rel)
         scanner.visit(tree)
@@ -507,7 +599,9 @@ def _declared_requirements(src: Path) -> Tuple[List[str], List[str]]:
     if req_file.is_file():
         lines = [
             line.strip()
-            for line in req_file.read_text(encoding="utf-8", errors="replace").splitlines()
+            for line in req_file.read_text(
+                encoding="utf-8", errors="replace"
+            ).splitlines()
             if line.strip() and not line.strip().startswith("#")
         ]
         return lines, []
@@ -556,7 +650,11 @@ def _review(staged: StagedUpload, src: Path) -> None:
     # Any change to the package review invalidates a previous verification.
     staged.build = {}
     readme = src / "README.md"
-    staged.readme = readme.read_text(encoding="utf-8", errors="replace")[:README_MAX_CHARS] if readme.is_file() else None
+    staged.readme = (
+        readme.read_text(encoding="utf-8", errors="replace")[:README_MAX_CHARS]
+        if readme.is_file()
+        else None
+    )
 
     manifest = Manifest.model_validate(staged.manifest) if staged.manifest else None
     staged.update_of = None
@@ -566,7 +664,9 @@ def _review(staged: StagedUpload, src: Path) -> None:
     else:
         staged.entrypoint = manifest.entrypoint
         if not (src / manifest.entrypoint).is_file():
-            errors.append(f"entrypoint '{manifest.entrypoint}' not found in the package")
+            errors.append(
+                f"entrypoint '{manifest.entrypoint}' not found in the package"
+            )
         # Variables check: what the code reads vs what the manifest provides.
         declared = set(manifest.env) | {f.key for f in manifest.credentials.fields}
         undeclared = sorted(env_keys - declared - PROVIDED_ENV)
@@ -574,11 +674,13 @@ def _review(staged: StagedUpload, src: Path) -> None:
         staged.env_check = {"undeclared": undeclared, "unused": unused}
         if undeclared:
             warnings.append(
-                "the code reads variables not declared in the manifest (they will be empty): " + ", ".join(undeclared)
+                "the code reads variables not declared in the manifest (they will be empty): "
+                + ", ".join(undeclared)
             )
         if unused:
             warnings.append(
-                "declared in the manifest but never read with a constant name in the code: " + ", ".join(unused)
+                "declared in the manifest but never read with a constant name in the code: "
+                + ", ".join(unused)
             )
         # Slug: free, or an update of an existing custom server.
         conflict = slug_conflict(manifest.slug)
@@ -600,7 +702,9 @@ def _review(staged: StagedUpload, src: Path) -> None:
                         f"version {manifest.version} is already installed: activating replaces it (bump 'version' to keep history)"
                     )
     if staged.entrypoint is None:
-        errors.append("server.py not found at the package root: add it or set 'entrypoint' in aion-mcp.yaml")
+        errors.append(
+            "server.py not found at the package root: add it or set 'entrypoint' in aion-mcp.yaml"
+        )
 
     staged.errors = list(dict.fromkeys(errors))
     staged.warnings = list(dict.fromkeys(warnings))
@@ -617,7 +721,9 @@ def stage_upload(filename: str, data: bytes, *, actor: str) -> StagedUpload:
     ``StagedUpload`` (``errors`` block activation, ``warnings`` do not).
     """
     if len(data) > settings.max_upload_bytes():
-        raise UploadError(f"file too large (limit {settings.max_upload_bytes() // (1024 * 1024)} MB)")
+        raise UploadError(
+            f"file too large (limit {settings.max_upload_bytes() // (1024 * 1024)} MB)"
+        )
     lower = (filename or "").lower()
     if lower.endswith(".zip"):
         kind = "zip"
@@ -647,11 +753,15 @@ def stage_upload(filename: str, data: bytes, *, actor: str) -> StagedUpload:
         src.mkdir(parents=True, exist_ok=True)
 
         # Manifest shipped in the package: it owns identity and credentials.
-        manifest_file = next((src / n for n in MANIFEST_FILENAMES if (src / n).is_file()), None)
+        manifest_file = next(
+            (src / n for n in MANIFEST_FILENAMES if (src / n).is_file()), None
+        )
         if manifest_file is not None:
             staged.manifest_source = "package"
             try:
-                manifest = parse_manifest_text(manifest_file.read_text(encoding="utf-8"))
+                manifest = parse_manifest_text(
+                    manifest_file.read_text(encoding="utf-8")
+                )
                 staged.manifest = manifest.model_dump()
                 staged.suggested_slug = manifest.slug
             except (ManifestError, UnicodeDecodeError) as exc:
@@ -677,7 +787,9 @@ def submit_manifest(upload_id: str, data: Dict[str, Any]) -> StagedUpload:
     """
     staged = load_staged(upload_id)
     if staged.manifest_source == "package":
-        raise ValueError("this package ships its own aion-mcp.yaml: edit the file and upload again")
+        raise ValueError(
+            "this package ships its own aion-mcp.yaml: edit the file and upload again"
+        )
     manifest = parse_manifest_data(data)
     src = upload_src_dir(upload_id)
     for name in MANIFEST_FILENAMES:

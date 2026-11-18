@@ -3842,11 +3842,20 @@ async def update_mcp_config(name: str, config: MCPUpdate):
             custom_credential_schema,
         )
 
-        for locked in ("command", "args", "type", "url", "remote_url", "aion_connector_id"):
+        for locked in (
+            "command",
+            "args",
+            "type",
+            "url",
+            "remote_url",
+            "aion_connector_id",
+        ):
             update_data.pop(locked, None)
         target_mode = custom_credential_mode(custom_cfg) or "none"
         custom_credential_keys = [
-            str(f["key"]) for f in custom_credential_schema(custom_cfg) or [] if f.get("key")
+            str(f["key"])
+            for f in custom_credential_schema(custom_cfg) or []
+            if f.get("key")
         ]
         # Same name rules as aion-mcp.yaml: an admin cannot set reserved variables
         # (PATH, LD_*, PYTHON*, AION_*...) that would change how the jail starts.

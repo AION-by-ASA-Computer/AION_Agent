@@ -21,10 +21,17 @@ from src.api import settings_api
 @pytest.fixture
 def env(monkeypatch: pytest.MonkeyPatch):
     """In-memory env store: _parse_env/load_base_env read it, _write_env records writes."""
-    state: Dict[str, Dict[str, str]] = {"current": {"AION_MODEL": "m", "AION_CUSTOM_MCP_ENABLED": "0"}, "written": {}}
+    state: Dict[str, Dict[str, str]] = {
+        "current": {"AION_MODEL": "m", "AION_CUSTOM_MCP_ENABLED": "0"},
+        "written": {},
+    }
     monkeypatch.setattr(settings_api, "_parse_env", lambda: dict(state["current"]))
-    monkeypatch.setattr(settings_api, "load_base_env", lambda **_k: dict(state["current"]))
-    monkeypatch.setattr(settings_api, "_write_env", lambda merged: state["written"].update(merged))
+    monkeypatch.setattr(
+        settings_api, "load_base_env", lambda **_k: dict(state["current"])
+    )
+    monkeypatch.setattr(
+        settings_api, "_write_env", lambda merged: state["written"].update(merged)
+    )
     monkeypatch.setattr(settings_api, "_reload_env", lambda: None)
     monkeypatch.setattr(settings_api, "_is_container_env", lambda: True)
     exit_mock = AsyncMock()
@@ -36,7 +43,9 @@ def env(monkeypatch: pytest.MonkeyPatch):
 
 def _post(settings: Dict[str, str]):
     async def go():
-        out = await settings_api.update_settings(settings_api.SettingsUpdate(settings=settings))
+        out = await settings_api.update_settings(
+            settings_api.SettingsUpdate(settings=settings)
+        )
         await asyncio.sleep(0)  # let scheduled tasks run
         return out
 
@@ -46,7 +55,13 @@ def _post(settings: Dict[str, str]):
 def test_custom_mcp_change_needs_no_restart(env):
     """Only AION_CUSTOM_MCP_* changed: saved, no container restart, custom workers restarted."""
     state, exit_mock, workers_mock = env
-    out = _post({"AION_MODEL": "m", "AION_CUSTOM_MCP_ENABLED": "1", "AION_CUSTOM_MCP_MEMORY": "1g"})
+    out = _post(
+        {
+            "AION_MODEL": "m",
+            "AION_CUSTOM_MCP_ENABLED": "1",
+            "AION_CUSTOM_MCP_MEMORY": "1g",
+        }
+    )
     assert out["restarting"] is False
     assert state["written"]["AION_CUSTOM_MCP_ENABLED"] == "1"
     exit_mock.assert_not_awaited()

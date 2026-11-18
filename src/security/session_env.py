@@ -175,7 +175,9 @@ def mcp_env_scrub_enabled() -> bool:
     return _truthy("AION_MCP_ENV_SCRUB", "1")
 
 
-def build_mcp_stdio_base_env(*, first_party: bool, always_scrub: bool = False) -> Dict[str, str]:
+def build_mcp_stdio_base_env(
+    *, first_party: bool, always_scrub: bool = False
+) -> Dict[str, str]:
     """
     Ambiente di partenza per un server MCP stdio, prima delle variabili per server.
 

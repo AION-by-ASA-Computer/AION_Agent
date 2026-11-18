@@ -31,18 +31,28 @@ def custom_credential_mode(config: Optional[Dict[str, Any]]) -> Optional[str]:
     return mode if mode in ("none", "org_shared", "per_user") else "none"
 
 
-def custom_credential_schema(config: Optional[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:
+def custom_credential_schema(
+    config: Optional[Dict[str, Any]],
+) -> Optional[List[Dict[str, Any]]]:
     """Declared credential schema (list of fields) or None for non-custom servers."""
     meta = custom_meta(config)
     if meta is None:
         return None
     schema = meta.get("credential_schema")
-    return [dict(f) for f in schema if isinstance(f, dict)] if isinstance(schema, list) else []
+    return (
+        [dict(f) for f in schema if isinstance(f, dict)]
+        if isinstance(schema, list)
+        else []
+    )
 
 
 def custom_secret_keys(config: Optional[Dict[str, Any]]) -> List[str]:
     """Credential keys declared ``secret: true`` (stored encrypted by the Hub)."""
-    return [str(f["key"]) for f in custom_credential_schema(config) or [] if f.get("is_secret", True) and f.get("key")]
+    return [
+        str(f["key"])
+        for f in custom_credential_schema(config) or []
+        if f.get("is_secret", True) and f.get("key")
+    ]
 
 
 def custom_display_meta(config: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:

@@ -22,7 +22,14 @@ import re
 from typing import Any, Dict, List, Literal, Optional
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    field_validator,
+    model_validator,
+)
 
 from .paths import slug_format_error
 
@@ -44,7 +51,18 @@ _ENTRYPOINT_RE = re.compile(r"^[A-Za-z0-9_][A-Za-z0-9_./-]*\.py$")
 # manifest may not declare them, otherwise a package could hijack module loading
 # (PYTHONPATH, LD_PRELOAD) or impersonate AION context (AION_CURRENT_USER_ID).
 _RESERVED_ENV_KEYS = frozenset(
-    {"PATH", "HOME", "USER", "LOGNAME", "SHELL", "TMPDIR", "TEMP", "TMP", "LANG", "TERM"}
+    {
+        "PATH",
+        "HOME",
+        "USER",
+        "LOGNAME",
+        "SHELL",
+        "TMPDIR",
+        "TEMP",
+        "TMP",
+        "LANG",
+        "TERM",
+    }
 )
 _RESERVED_ENV_PREFIXES = (
     "AION_",
@@ -119,7 +137,9 @@ class Credentials(BaseModel):
         if self.mode == "none" and self.fields:
             raise ValueError("credentials.fields must be empty when mode is 'none'")
         if self.mode != "none" and not self.fields:
-            raise ValueError(f"credentials.fields must list at least one field for mode '{self.mode}'")
+            raise ValueError(
+                f"credentials.fields must list at least one field for mode '{self.mode}'"
+            )
         keys = [f.key for f in self.fields]
         dupes = sorted({k for k in keys if keys.count(k) > 1})
         if dupes:
@@ -157,7 +177,9 @@ class Manifest(BaseModel):
         if v is None:
             return []
         if not isinstance(v, list):
-            raise ValueError("network must be a list of addresses, e.g. ['crm.azienda.local:443']")
+            raise ValueError(
+                "network must be a list of addresses, e.g. ['crm.azienda.local:443']"
+            )
         try:
             return normalize_allowlist(str(item) for item in v)
         except AllowlistError as exc:
@@ -167,7 +189,9 @@ class Manifest(BaseModel):
     @classmethod
     def _check_format(cls, v: int) -> int:
         if v != MANIFEST_FORMAT_VERSION:
-            raise ValueError(f"unsupported manifest format {v}: this AION reads aion_mcp: {MANIFEST_FORMAT_VERSION}")
+            raise ValueError(
+                f"unsupported manifest format {v}: this AION reads aion_mcp: {MANIFEST_FORMAT_VERSION}"
+            )
         return v
 
     @field_validator("slug")
@@ -191,7 +215,9 @@ class Manifest(BaseModel):
         if v in SUPPORTED_RUNTIMES:
             return v
         if v in PLANNED_RUNTIMES:
-            raise ValueError(f"runtime '{v}' is not available yet (planned for AION custom MCP v1); use 'python'")
+            raise ValueError(
+                f"runtime '{v}' is not available yet (planned for AION custom MCP v1); use 'python'"
+            )
         raise ValueError(f"unknown runtime '{v}'; use 'python'")
 
     @field_validator("entrypoint")
@@ -201,7 +227,9 @@ class Manifest(BaseModel):
         while norm.startswith("./"):
             norm = norm[2:]
         if not _ENTRYPOINT_RE.match(norm) or ".." in norm.split("/"):
-            raise ValueError("entrypoint must be a relative path to a .py file inside the package")
+            raise ValueError(
+                "entrypoint must be a relative path to a .py file inside the package"
+            )
         return norm
 
     @field_validator("env")
@@ -215,7 +243,9 @@ class Manifest(BaseModel):
             # Placeholders would be expanded from the backend environment at spawn
             # time: a manifest must never be able to pull AION's own secrets.
             if "${" in str(value):
-                errors.append(f"env '{key}': placeholders like ${{VAR}} are not allowed; declare secrets in credentials")
+                errors.append(
+                    f"env '{key}': placeholders like ${{VAR}} are not allowed; declare secrets in credentials"
+                )
             if len(str(value)) > 2000:
                 errors.append(f"env '{key}': value too long (max 2000 characters)")
         if errors:
@@ -226,7 +256,9 @@ class Manifest(BaseModel):
     def _check_overlap(self) -> "Manifest":
         overlap = sorted(set(self.env) & {f.key for f in self.credentials.fields})
         if overlap:
-            raise ValueError(f"keys declared both in env and credentials: {', '.join(overlap)}")
+            raise ValueError(
+                f"keys declared both in env and credentials: {', '.join(overlap)}"
+            )
         return self
 
     # ── conversions used by install / admin API ──

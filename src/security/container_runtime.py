@@ -33,12 +33,33 @@ logger = logging.getLogger("aion.security")
 # still passed by name through the CLI env: for these names they are dropped.
 _CLI_ENV_EXACT = frozenset(
     {
-        "PATH", "HOME", "TMPDIR", "SSL_CERT_FILE", "SSL_CERT_DIR", "REGISTRY_AUTH_FILE",
-        "HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY", "ALL_PROXY",
-        "http_proxy", "https_proxy", "no_proxy", "all_proxy",
+        "PATH",
+        "HOME",
+        "TMPDIR",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+        "REGISTRY_AUTH_FILE",
+        "HTTP_PROXY",
+        "HTTPS_PROXY",
+        "NO_PROXY",
+        "ALL_PROXY",
+        "http_proxy",
+        "https_proxy",
+        "no_proxy",
+        "all_proxy",
     }
 )
-_CLI_ENV_PREFIXES = ("DOCKER_", "CONTAINER_", "CONTAINERS_", "PODMAN_", "BUILDAH_", "BUILDKIT_", "GO", "XDG_", "LD_")
+_CLI_ENV_PREFIXES = (
+    "DOCKER_",
+    "CONTAINER_",
+    "CONTAINERS_",
+    "PODMAN_",
+    "BUILDAH_",
+    "BUILDKIT_",
+    "GO",
+    "XDG_",
+    "LD_",
+)
 
 # Seconds an env file is kept: the CLI reads it when it starts (milliseconds), the
 # margin covers a slow engine. Files left by a crash are removed at the next write.
@@ -72,7 +93,9 @@ def _remove_later(path: Path, delay: float = _ENV_FILE_TTL_SECONDS) -> None:
     timer.start()
 
 
-def write_jail_env_file(slug: str, env: Dict[str, str]) -> Tuple[Optional[Path], Dict[str, str]]:
+def write_jail_env_file(
+    slug: str, env: Dict[str, str]
+) -> Tuple[Optional[Path], Dict[str, str]]:
     """Split a jail's env into an --env-file and the few values passed by name.
 
     Returns ``(env_file, by_name)``:
@@ -101,7 +124,11 @@ def write_jail_env_file(slug: str, env: Dict[str, str]) -> Tuple[Optional[Path],
         text = str(value)
         if "\n" in text or "\r" in text or "\0" in text:
             if _cli_reads(key):
-                logger.warning("custom_mcp_env slug=%s multi-line value of %s dropped (container CLI setting)", slug, key)
+                logger.warning(
+                    "custom_mcp_env slug=%s multi-line value of %s dropped (container CLI setting)",
+                    slug,
+                    key,
+                )
                 continue
             by_name[key] = text
         else:
@@ -109,13 +136,16 @@ def write_jail_env_file(slug: str, env: Dict[str, str]) -> Tuple[Optional[Path],
     if not single:
         return None, by_name
 
-    fd, name = tempfile.mkstemp(prefix=f"{slug}-", suffix=".env", dir=folder)  # created 0600
+    fd, name = tempfile.mkstemp(
+        prefix=f"{slug}-", suffix=".env", dir=folder
+    )  # created 0600
     with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
         for key, value in single.items():
             fh.write(f"{key}={value}\n")
     path = Path(name)
     _remove_later(path)
     return path, by_name
+
 
 _RUNTIME: Optional["ContainerRuntime"] = None
 
@@ -142,9 +172,7 @@ def _resolve_container_socket() -> str:
         or ""
     ).strip()
     container_host = (
-        os.environ.get("CONTAINER_HOST")
-        or os.environ.get("DOCKER_HOST")
-        or ""
+        os.environ.get("CONTAINER_HOST") or os.environ.get("DOCKER_HOST") or ""
     ).strip()
     if container_host.startswith("unix://"):
         container_host = container_host[len("unix://") :]
@@ -388,7 +416,9 @@ class ContainerRuntime:
         host_dir = resolve_custom_mcp_host_path(server_path)
         # Server variables -> private --env-file (never the CLI's own environment);
         # only multi-line values still go by name (see write_jail_env_file).
-        env_file, by_name = write_jail_env_file(slug, {k: str(v) for k, v in (env or {}).items()})
+        env_file, by_name = write_jail_env_file(
+            slug, {k: str(v) for k, v in (env or {}).items()}
+        )
         argv = build_custom_mcp_run_argv(
             runtime=self.runtime,
             image=self.image,
@@ -399,7 +429,9 @@ class ContainerRuntime:
             env_file=env_file,
             user_id=user_id,
             session_id=session_id,
-            host_deps_dir=resolve_custom_mcp_host_path(deps_path) if deps_path else None,
+            host_deps_dir=resolve_custom_mcp_host_path(deps_path)
+            if deps_path
+            else None,
             egress=egress,
             host_ca_bundle=resolve_custom_mcp_host_path(ca_path) if ca_path else None,
         )
@@ -476,7 +508,13 @@ class ContainerRuntime:
         env = self._base_env()
         try:
             listed = subprocess.run(
-                [self.runtime, "ps", "-aq", "--filter", f"label=aion.custom_mcp={slug}"],
+                [
+                    self.runtime,
+                    "ps",
+                    "-aq",
+                    "--filter",
+                    f"label=aion.custom_mcp={slug}",
+                ],
                 capture_output=True,
                 text=True,
                 timeout=15,
