@@ -5,6 +5,17 @@ All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.7.2](https://github.com/AION-by-ASA-Computer/AION_Agents/compare/v1.7.1...v1.7.2) (2026-11-18)
+
+
+### Bug Fixes
+
+* docker build ([ad00f80](https://github.com/AION-by-ASA-Computer/AION_Agents/commit/ad00f806125a2971c41bfcb5294ee4c1518aca0c))
+* docs update ([ab8c56a](https://github.com/AION-by-ASA-Computer/AION_Agents/commit/ab8c56ab88ca54a1c8b74c186ed78cdde076dd54))
+* documentation clarity and structure ([3cd976f](https://github.com/AION-by-ASA-Computer/AION_Agents/commit/3cd976ff785dc3529865345e18f9313bc59b22b9))
+* docx usage and word generation ([6adaf70](https://github.com/AION-by-ASA-Computer/AION_Agents/commit/6adaf70f5c2c7ae4afee4c59276833540d4b1bdb))
+* grafica ([4fb1435](https://github.com/AION-by-ASA-Computer/AION_Agents/commit/4fb1435c4c2d781a26a0fb0c623ab1935cc28f27))
+
 ## [1.7.1](https://github.com/AION-by-ASA-Computer/AION_Agents/compare/v1.7.0...v1.7.1) (2026-11-17)
 
 
