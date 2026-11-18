@@ -2456,6 +2456,7 @@
       "cpus": "CPU",
       "pids": "Procesos máximos",
       "v_positive": "{{key}} debe ser un número entero positivo."
+    },
     "smb": {
       "title": "Servidor de archivos Windows (SMB)",
       "description": "Servidores de archivos y carpetas compartidas a los que el agente accede con las credenciales de Windows de cada usuario: se aplican los permisos NTFS y la auditoría de Windows. Los usuarios introducen sus credenciales en el chat, en \"Mis integraciones\".",

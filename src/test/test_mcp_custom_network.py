@@ -380,3 +380,19 @@ def test_jail_env_points_tls_to_mounted_bundle():
         env["SSL_CERT_FILE"] == CUSTOM_MCP_CA_PATH
         and env["NODE_EXTRA_CA_CERTS"] == CUSTOM_MCP_CA_PATH
     )
+
+
+# ───────────────────────── CodeQL hardening ─────────────────────────
+
+
+@pytest.mark.parametrize("raw", ["[" + "[\\" * 5000, "[fd00::1", "[fd00::1]x443", "[]:443", "a" * 301])
+def test_parse_rejects_malformed_or_oversized_entries(raw: str):
+    """Unclosed brackets, junk after ']' and over-long entries are refused (no regex on them)."""
+    with pytest.raises(AllowlistError):
+        parse_entry(raw)
+
+
+def test_huge_list_is_refused_early():
+    """A list far above MAX_ENTRIES is refused without parsing every entry."""
+    with pytest.raises(AllowlistError):
+        egress.parse_allowlist(["a.local"] * 100_000)

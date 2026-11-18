@@ -2456,6 +2456,7 @@
       "cpus": "CPUs",
       "pids": "Maximale Prozesse",
       "v_positive": "{{key}} muss eine positive ganze Zahl sein."
+    },
     "smb": {
       "title": "Windows-Dateiserver (SMB)",
       "description": "Dateiserver und Freigaben, auf die der Agent mit den Windows-Anmeldedaten des jeweiligen Benutzers zugreift: NTFS-Berechtigungen und Windows-Audit gelten. Benutzer geben ihre Anmeldedaten im Chat unter \"Meine Integrationen\" ein.",

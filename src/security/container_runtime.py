@@ -136,9 +136,9 @@ def write_jail_env_file(
     if not single:
         return None, by_name
 
-    fd, name = tempfile.mkstemp(
-        prefix=f"{slug}-", suffix=".env", dir=folder
-    )  # created 0600
+    # Fixed prefix: no caller-provided text in the path (a slug from a hand-edited
+    # registry could contain "../"); mkstemp creates the file 0600 with a random name.
+    fd, name = tempfile.mkstemp(prefix="jail-", suffix=".env", dir=folder)
     with os.fdopen(fd, "w", encoding="utf-8", newline="\n") as fh:
         for key, value in single.items():
             fh.write(f"{key}={value}\n")

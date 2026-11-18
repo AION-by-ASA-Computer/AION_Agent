@@ -2457,6 +2457,7 @@
       "cpus": "CPUs",
       "pids": "Maximum processes",
       "v_positive": "{{key}} must be a positive integer."
+    },
     "smb": {
       "title": "Windows file server (SMB)",
       "description": "File servers and shared folders the agent can access with each user's own Windows credentials, so NTFS permissions and Windows audit apply. Users enter their credentials in chat, under \"My integrations\".",

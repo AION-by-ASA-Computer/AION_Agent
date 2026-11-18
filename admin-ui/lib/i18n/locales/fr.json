@@ -2456,6 +2456,7 @@
       "cpus": "CPU",
       "pids": "Processus maximum",
       "v_positive": "{{key}} doit être un entier positif."
+    },
     "smb": {
       "title": "Serveur de fichiers Windows (SMB)",
       "description": "Serveurs de fichiers et dossiers partagés auxquels l'agent accède avec les identifiants Windows de chaque utilisateur : les autorisations NTFS et l'audit Windows s'appliquent. Les utilisateurs saisissent leurs identifiants dans le chat, sous \"Mes intégrations\".",

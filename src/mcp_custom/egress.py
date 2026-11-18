@@ -39,6 +39,10 @@ from typing import Iterable, List, Optional, Sequence, Tuple, Union
 # systems, a long list usually means "open everything", which this model refuses.
 MAX_ENTRIES = 50
 
+# Longest accepted entry (253-char host name + a port list): longer input is refused
+# before parsing, so no entry can make validation slow.
+MAX_ENTRY_LENGTH = 300
+
 # Cloud metadata endpoints hand out the credentials of the virtual machine: they
 # stay blocked even when an entry (e.g. a wide subnet) would include them.
 _METADATA_V4 = ipaddress.ip_network("169.254.0.0/16")
@@ -147,13 +151,17 @@ def parse_entry(raw: str) -> AllowEntry:
     entry = str(raw or "").strip()
     if not entry:
         raise AllowlistError("empty entry")
+    # Entries come from uploads and admin edits: bound the length before any parsing
+    # (a host name is at most 253 chars, plus a port list).
+    if len(entry) > MAX_ENTRY_LENGTH:
+        raise AllowlistError(f"entry longer than {MAX_ENTRY_LENGTH} characters")
     ports_text: Optional[str] = None
     if entry.startswith("["):
-        # [IPv6]:ports
-        m = re.fullmatch(r"\[([^\]]+)\](?::(.+))?", entry)
-        if not m:
+        # [IPv6]:ports, split with plain string operations (no regex backtracking).
+        target, sep, rest = entry[1:].partition("]")
+        if not sep or not target or (rest and not rest.startswith(":")):
             raise AllowlistError(f"'{entry}': write IPv6 with ports as [address]:port")
-        target, ports_text = m.group(1), m.group(2)
+        ports_text = rest[1:] if rest else None
     elif entry.count(":") == 1:
         target, ports_text = entry.split(":")
     else:
@@ -171,7 +179,11 @@ def parse_allowlist(entries: Optional[Iterable[str]]) -> List[AllowEntry]:
     """
     out: List[AllowEntry] = []
     seen = set()
-    for raw in entries or []:
+    for index, raw in enumerate(entries or []):
+        # Refuse a huge list early instead of parsing every entry first (duplicates
+        # count here too: a legitimate list stays far below this bound).
+        if index >= MAX_ENTRIES * 4:
+            raise AllowlistError(f"at most {MAX_ENTRIES} network entries per server")
         parsed = parse_entry(raw)
         key = str(parsed)
         if key not in seen:

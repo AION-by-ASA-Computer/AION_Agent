@@ -2457,6 +2457,7 @@
       "cpus": "CPU",
       "pids": "Processi massimi",
       "v_positive": "{{key}} deve essere un numero intero positivo."
+    },
     "smb": {
       "title": "File server Windows (SMB)",
       "description": "File server e cartelle condivise a cui l'agent può accedere con le credenziali Windows di ciascun utente: valgono i permessi NTFS e l'audit di Windows. Gli utenti inseriscono le proprie credenziali in chat, in \"Le mie integrazioni\".",
