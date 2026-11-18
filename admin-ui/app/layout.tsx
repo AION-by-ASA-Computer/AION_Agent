@@ -21,7 +21,7 @@ const themeInit = `
 `;
 
 export const metadata: Metadata = {
-  title: "AION Agent | Admin Panel",
+  title: "AION Agents | Admin Panel",
   description: "Advanced agentic management platform",
 };
 

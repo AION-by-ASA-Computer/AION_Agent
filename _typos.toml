@@ -12,6 +12,10 @@ extend-ignore-re = [
   "subagent",
   "subagents",
   "unm",
+  # Abbreviated/full git commit SHAs: release-please writes them into
+  # CHANGELOG.md, and random hex like "645ba6f" or "abd56cd" would otherwise
+  # be flagged as the typos "ba" and "abd".
+  "\\b[0-9a-f]{7,40}\\b",
 ]
 
 [default.extend-words]

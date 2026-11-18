@@ -1,11 +1,11 @@
 ---
 slug: /
 sidebar_position: 1
-title: AION Agent Documentation
-description: Index of the technical documentation of the AION Agent project.
+title: AION Agents Documentation
+description: Index of the technical documentation of the AION Agents project.
 ---
 
-# AION Agent Documentation
+# AION Agents Documentation
 
 **AION · ASA:** [https://aion-asa.com](https://aion-asa.com)
 

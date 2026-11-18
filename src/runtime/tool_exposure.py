@@ -69,6 +69,19 @@ _KNOWN_COLD_TOOLS = {
     "save_successful_query": "query_memory",
     "list_saved_sql": "query_memory",
     "list_sql_projects": "query_memory",
+    # Windows file server connector (smb_files_protocol skill). Listed here so
+    # tool_search("smb_list_shares") warms the server on the first request of a
+    # fresh backend, before _LEARNED_COLD_TOOLS has ever seen these names.
+    "smb_list_shares": "smb_files",
+    "smb_list_dir": "smb_files",
+    "smb_stat": "smb_files",
+    "smb_search": "smb_files",
+    "smb_read_file": "smb_files",
+    "smb_copy_to_session": "smb_files",
+    "smb_write_text": "smb_files",
+    "smb_upload_from_session": "smb_files",
+    "smb_mkdir": "smb_files",
+    "smb_move": "smb_files",
 }
 
 # Tool name -> MCP server, learned each time a server's tools are built. Lets

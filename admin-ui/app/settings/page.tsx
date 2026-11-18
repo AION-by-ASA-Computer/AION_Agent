@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AudioLines, Boxes, Brain, Cpu, Globe, Loader2, Mail, Network, RotateCcw, Save, ScanLine, ShieldCheck, Timer } from "lucide-react";
+import { AudioLines, Boxes, Brain, Cpu, Globe, Loader2, Mail, Network, RotateCcw, Save, ScanLine, Server, ShieldCheck, Timer } from "lucide-react";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -20,6 +20,7 @@ import { RetentionSection } from "@/components/settings/RetentionSection";
 import { SmtpSection } from "@/components/settings/SmtpSection";
 import { NetworkSection } from "@/components/settings/NetworkSection";
 import { McpSection, MCP_INT_KEYS } from "@/components/settings/McpSection";
+import { SmbSection } from "@/components/settings/SmbSection";
 import { K, type Notify, type SectionCtx, type Settings } from "@/components/settings/types";
 
 const k = K;
@@ -35,11 +36,12 @@ const SECTIONS = [
   { id: "mcp", icon: Boxes },
   { id: "retention", icon: Timer },
   { id: "smtp", icon: Mail },
+  { id: "smb", icon: Server },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
 // Models, Sandbox, Network and SMTP persist on their own; the rest saves through the page bar.
-const SELF_SAVING: SectionId[] = ["models", "sandbox", "network", "smtp"];
+const SELF_SAVING: SectionId[] = ["models", "sandbox", "network", "smtp", "smb"];
 
 const isSection = (v: string): v is SectionId => SECTIONS.some((s) => s.id === v);
 const positive = (v: string | undefined) => {
@@ -284,6 +286,7 @@ export default function SettingsPage() {
           <div hidden={active !== "mcp"}><McpSection {...ctx} /></div>
           <div hidden={active !== "retention"}><RetentionSection {...ctx} /></div>
           <div hidden={active !== "smtp"}><SmtpSection t={t} notify={notify} /></div>
+          <div hidden={active !== "smb"}><SmbSection t={t} notify={notify} /></div>
         </div>
       </div>
 

@@ -1,12 +1,12 @@
 ---
 sidebar_position: 1
 title: Deploy con Docker Compose
-description: Setup container per AION Agent — singolo dominio, routing path-based via Caddy, onboarding cliente in 3 step.
+description: Setup container per AION Agents — singolo dominio, routing path-based via Caddy, onboarding cliente in 3 step.
 ---
 
 # Deploy con Docker Compose
 
-AION Agent include una stack Docker pronta per il deploy **multi-tenant**:
+AION Agents include una stack Docker pronta per il deploy **multi-tenant**:
 singolo dominio + routing path-based via reverse proxy Caddy con auto-HTTPS
 (Let's Encrypt). L'onboarding di un nuovo cliente richiede **un solo record
 DNS A** e un file `.env`.

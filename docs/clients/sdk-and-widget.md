@@ -1,7 +1,7 @@
 ---
 sidebar_position: 3
 title: SDK and Web Widget
-description: How to integrate AION Agent into external applications using the official SDKs or the JS widget.
+description: How to integrate AION Agents into external applications using the official SDKs or the JS widget.
 ---
 
 # SDK and Web Widget
@@ -9,7 +9,7 @@ description: How to integrate AION Agent into external applications using the of
 > [!WARNING]
 > The SDKs (Python and TypeScript) and the Web Widget are currently under active development. Some features may not be stable, undergo substantial interface changes, or not function correctly under all conditions. Use them with caution.
 
-To facilitate the adoption of AION Agent in different ecosystems, official SDKs are available for Python and TypeScript, in addition to a "drop-in" widget for websites.
+To facilitate the adoption of AION Agents in different ecosystems, official SDKs are available for Python and TypeScript, in addition to a "drop-in" widget for websites.
 
 All clients authenticate with a personal API key created from **chat-ui → Settings → API keys** (the admin must enable the feature for the user). The key acts **as its owner**: any `user_id` passed by the client is ignored. See [API keys](../security/api-keys.md).
 

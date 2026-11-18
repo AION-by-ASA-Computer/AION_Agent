@@ -1,5 +1,5 @@
 haystack-ai>=2.3.1
-fastapi>=0.115.0,<0.137.0
+fastapi<0.137.0,>=0.115.0
 uvicorn[standard]>=0.30.0
 sse-starlette>=2.0.0
 httpx>=0.27.0
@@ -13,6 +13,8 @@ defusedxml>=0.7.1
 reportlab>=4.0.0
 numpy>=1.26.0
 tabulate>=0.9.0
+# SMB2/3 client for the smb_files MCP server (Windows file shares, NTLM per-user auth)
+smbprotocol==1.17.0
 bcrypt>=4.0.0
 PyYAML>=6.0
 aiosqlite
@@ -24,9 +26,13 @@ segno>=1.6
 uuid6>=2025.0.1
 alembic>=1.13
 greenlet>=3.0.0
+# NOTE: upper bound is written BEFORE the floor on purpose: the osv-scanner bundled in
+# OpenSSF Scorecard v5.3.0 reads ">=X,<Y" as the unparseable version "X,<Y" and flags every
+# historical CVE of the package (15 false findings). Floors are the latest releases that
+# fixed the real advisories (mcp 1.30.0, fastmcp 3.4.11).
 # MCP 2.x breaks AION handshake (inputSchema -> input_schema) and agent_db @app.list_tools().
-mcp[cli]>=1.28.1,<2.0.0
-fastmcp>=3.2.0,<4.0.0
+mcp[cli]<2.0.0,>=1.30.0
+fastmcp<4.0.0,>=3.4.11
 mcp-haystack>=0.1.0
 # tiktoken 0.7.x has no Python 3.13 wheel and its sdist (PyO3 0.20) cannot build on 3.13.
 tiktoken>=0.8.0
@@ -54,14 +60,14 @@ markdown>=3.8.1
 anthropic-haystack
 google-genai-haystack
 litellm-haystack
-# OSV: GHSA-xcq7-p3pf-p88h fixed in opentelemetry-api 1.45.1. Floors kept aligned
+# OSV: GHSA-xcq7-p3pf-p88h fixed in opentelemetry-api 1.45.1; GHSA-mf5v-w3w3-f6cg in 1.45.2. Floors kept aligned
 # (SDK 1.45.x <-> instrumentation 0.66bX) so OSV's resolver does not abort on backtracking.
-opentelemetry-api>=1.45.1
-opentelemetry-sdk>=1.45.1
-opentelemetry-exporter-otlp>=1.45.1
-opentelemetry-instrumentation-fastapi>=0.66b1
-opentelemetry-instrumentation-sqlalchemy>=0.66b1
-opentelemetry-instrumentation-httpx>=0.66b1
+opentelemetry-api>=1.45.2
+opentelemetry-sdk>=1.45.2
+opentelemetry-exporter-otlp>=1.45.2
+opentelemetry-instrumentation-fastapi>=0.66b2
+opentelemetry-instrumentation-sqlalchemy>=0.66b2
+opentelemetry-instrumentation-httpx>=0.66b2
 prometheus-fastapi-instrumentator>=6.0.0
 structlog>=24.1.0
 # Floor needed: without it uv backtracks to openlit 1.26 (tiktoken<0.8, old OpenTelemetry).
