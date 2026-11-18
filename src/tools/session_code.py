@@ -548,12 +548,12 @@ class SessionSandboxExecutor:
         if proc.returncode != 0:
             hint = ""
             low = combined.lower()
-            if "cannot find module" in low or "module not found" in low:
-                hint = (
-                    '\nHINT: install deps with sandbox_install_npm_packages(packages=["docx"]), '
-                    "then sandbox_run_node_file again. Do not use sandbox_exec_allowlisted for Node. "
-                    "Alternative: python-docx via sandbox_install_python_packages + sandbox_run_python_file."
-                )
+            if "cannot find module" in low or "cannot find package" in low:
+                # Tells apart "really missing" from "installed but not resolvable"
+                # (ESM import, broken env), so the agent does not loop on installs.
+                from .session_npm import missing_module_hint
+
+                hint = missing_module_hint(self.session_id, combined)
             elif "unknown-layout" in low or "unknown layout" in low:
                 hint = (
                     '\nHINT: pres.layout must be a string literal, e.g. pres.layout = "LAYOUT_WIDE". '
