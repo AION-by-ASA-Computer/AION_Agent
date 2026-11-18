@@ -12,6 +12,12 @@ type RegistryConfig = {
   type?: string;
   is_base?: boolean;
   aion_connector_id?: string;
+  aion_custom?: {
+    name?: string;
+    version?: string;
+    runtime?: string;
+    [key: string]: unknown;
+  };
 };
 
 type Props = {
@@ -139,8 +145,13 @@ export function McpInstalledCard({
           </p>
         </div>
 
-        {(badges.length > 0 || connectorId) && (
+        {(badges.length > 0 || connectorId || config.aion_custom) && (
           <div className="flex flex-wrap gap-1.5">
+            {config.aion_custom ? (
+              <span className="rounded-md border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 font-mono text-[10px] font-semibold text-emerald-400">
+                Custom v{config.aion_custom.version || "1.0.0"}
+              </span>
+            ) : null}
             {badges.map((b) => (
               <span
                 key={b}

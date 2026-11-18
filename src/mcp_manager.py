@@ -341,6 +341,10 @@ def _is_first_party_stdio(
     """Server Python del repository (``mcp_servers/``, ``-m src.*``)."""
     if _is_remote_bridge(config):
         return False
+    # Customer-built servers live under mcp_servers/custom but are never first-party:
+    # they must not inherit the backend environment (src/mcp_custom/runtime.py).
+    if isinstance(config, dict) and isinstance(config.get("aion_custom"), dict):
+        return False
     if not os.path.basename(str(command or "")).lower().startswith("python"):
         return False
     root = _repo_root().resolve()
@@ -690,7 +694,28 @@ class MCPStdioWorker:
                     )
                     self._container_jail = True
 
-            server_params = StdioServerParameters(command=command, args=args, env=env)
+            # Customer-built servers (mcp_servers/custom): kill switch, isolation
+            # requirement, env rebuilt from scratch, credentials only from the
+            # encrypted store. No-op for every other server. See src/mcp_custom/runtime.py.
+            from .mcp_custom.runtime import CustomMcpUnavailable, prepare_custom_spawn
+
+            try:
+                command, args, env, spawn_cwd = await prepare_custom_spawn(
+                    self.server_name,
+                    config,
+                    command,
+                    args,
+                    env,
+                    user_id=sanitize_user_id(uid),
+                    tenant_id=tid,
+                )
+            except CustomMcpUnavailable as exc:
+                self._abort_spawn(exc)
+                return
+
+            server_params = StdioServerParameters(
+                command=command, args=args, env=env, cwd=spawn_cwd
+            )
 
             logger.info(
                 "🔌 MCP pool: avvio persistente stdio per '%s'", self.server_name
@@ -884,6 +909,15 @@ class MCPStdioWorker:
                 )
             except asyncio.TimeoutError:
                 self._task.cancel()
+            except asyncio.CancelledError:
+                # Awaiting a worker task that a caller already cancelled (e.g.
+                # restart_workers_for_server) raises CancelledError here. Swallow it
+                # unless *this* task is the one being cancelled: letting it escape
+                # aborted the admin request (DELETE /admin/mcp answered 500 "No
+                # response returned" and left the DB rows of the server behind).
+                current = asyncio.current_task()
+                if current is not None and current.cancelling():
+                    raise
         self._task = None
         self._container_jail = False
 
@@ -2003,6 +2037,13 @@ class MCPManager:
                     "MCP worker '%s' shutdown slow after config change; dropped",
                     server_name,
                 )
+            except asyncio.CancelledError:
+                # The worker task was cancelled just above: its CancelledError must
+                # not cancel the caller (an admin request). Re-raise only when the
+                # caller itself is being cancelled.
+                current = asyncio.current_task()
+                if current is not None and current.cancelling():
+                    raise
             except Exception as exc:
                 # The worker is already out of the pool: keep stopping the others.
                 logger.debug("MCP worker '%s' shutdown error: %s", server_name, exc)
@@ -2321,7 +2362,21 @@ class MCPManager:
             auth_missing = _remote_bridge_auth_missing(name, config, env)
             if auth_missing:
                 raise RuntimeError(auth_missing)
-            server_params = StdioServerParameters(command=command, args=args, env=env)
+            # Customer-built servers: same spawn policy as the pooled worker above.
+            from .mcp_custom.runtime import prepare_custom_spawn
+
+            command, args, env, spawn_cwd = await prepare_custom_spawn(
+                name,
+                config,
+                command,
+                args,
+                env,
+                user_id=sanitize_user_id(uid),
+                tenant_id=tid,
+            )
+            server_params = StdioServerParameters(
+                command=command, args=args, env=env, cwd=spawn_cwd
+            )
             init_timeout = float(os.getenv("AION_MCP_INIT_TIMEOUT", "60"))
             is_active = False
             try:

@@ -962,6 +962,23 @@ def discover_mcp_credentials(
 
     cfg = server_config or {}
 
+    # Customer-built servers declare their credentials in aion-mcp.yaml: no
+    # heuristics, the manifest is the source of truth (src/mcp_custom/integration.py).
+    from .mcp_custom.integration import custom_credential_mode, custom_credential_schema
+
+    custom_mode = custom_credential_mode(cfg)
+    if custom_mode is not None:
+        custom_schema = custom_credential_schema(cfg) or []
+        _res = CredentialDiscoveryResult(
+            env_keys=[str(f["key"]) for f in custom_schema if f.get("key")],
+            schema=custom_schema,
+            credential_mode_hint=custom_mode,
+            sources=["aion-mcp.yaml"],
+            has_env_auth=bool(custom_schema),
+        )
+        _DISCOVERY_CACHE[cache_key] = _res
+        return _res
+
     # Rilevamento server remoti (SSE o remote-bridge)
     is_remote = cfg.get("aion_market_install") == "remote" or cfg.get("type") in (
         "sse",

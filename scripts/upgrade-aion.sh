@@ -62,7 +62,7 @@ fi
 
 print_banner
 if [[ "$docker_mode" -eq 1 ]]; then
-  echo "[upgrade] Docker compose mode — will rebuild images + restart services."
+  echo "[upgrade] Docker compose mode — will rebuild images (jail sandbox included) + restart services."
 fi
 if [[ ${#extra[@]} -gt 0 ]]; then
   exec "$PYTHON_BIN" "$CORE" "${extra[@]}" "$@"

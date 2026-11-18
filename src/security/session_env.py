@@ -175,16 +175,19 @@ def mcp_env_scrub_enabled() -> bool:
     return _truthy("AION_MCP_ENV_SCRUB", "1")
 
 
-def build_mcp_stdio_base_env(*, first_party: bool) -> Dict[str, str]:
+def build_mcp_stdio_base_env(*, first_party: bool, always_scrub: bool = False) -> Dict[str, str]:
     """
     Ambiente di partenza per un server MCP stdio, prima delle variabili per server.
 
     - ``first_party`` (server Python del repository): ambiente del backend senza
       i segreti di firma, perché importano ``src.*`` e ne usano la configurazione.
     - terze parti: solo ``_MCP_THIRD_PARTY_ALLOWLIST`` (+ ``AION_MCP_ENV_ALLOWLIST``).
+    - ``always_scrub``: ignora l'interruttore di emergenza ``AION_MCP_ENV_SCRUB=0``.
+      Usato per i server MCP custom caricati dai clienti (``src/mcp_custom/runtime.py``),
+      che non devono mai ricevere l'ambiente completo del backend.
     """
     env = dict(os.environ)
-    if not mcp_env_scrub_enabled():
+    if not mcp_env_scrub_enabled() and not always_scrub:
         return env
     if first_party:
         for key in list(env):

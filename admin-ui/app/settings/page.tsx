@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { AudioLines, Brain, Cpu, Globe, Loader2, Mail, RotateCcw, Save, ScanLine, ShieldCheck, Timer } from "lucide-react";
+import { AudioLines, Boxes, Brain, Cpu, Globe, Loader2, Mail, Network, RotateCcw, Save, ScanLine, ShieldCheck, Timer } from "lucide-react";
 import { apiFetch } from "@/lib/api/headers";
 import { apiBase } from "@/lib/api";
 import { cn } from "@/lib/cn";
@@ -18,6 +18,8 @@ import { SandboxSection } from "@/components/settings/SandboxSection";
 import { SttSection, clearedStt, type SttMode } from "@/components/settings/SttSection";
 import { RetentionSection } from "@/components/settings/RetentionSection";
 import { SmtpSection } from "@/components/settings/SmtpSection";
+import { NetworkSection } from "@/components/settings/NetworkSection";
+import { McpSection, MCP_INT_KEYS } from "@/components/settings/McpSection";
 import { K, type Notify, type SectionCtx, type Settings } from "@/components/settings/types";
 
 const k = K;
@@ -29,13 +31,15 @@ const SECTIONS = [
   { id: "ocr", icon: ScanLine },
   { id: "stt", icon: AudioLines },
   { id: "sandbox", icon: ShieldCheck },
+  { id: "network", icon: Network },
+  { id: "mcp", icon: Boxes },
   { id: "retention", icon: Timer },
   { id: "smtp", icon: Mail },
 ] as const;
 type SectionId = (typeof SECTIONS)[number]["id"];
 
-// Models, Sandbox and SMTP persist on their own; the rest saves through the page bar.
-const SELF_SAVING: SectionId[] = ["models", "sandbox", "smtp"];
+// Models, Sandbox, Network and SMTP persist on their own; the rest saves through the page bar.
+const SELF_SAVING: SectionId[] = ["models", "sandbox", "network", "smtp"];
 
 const isSection = (v: string): v is SectionId => SECTIONS.some((s) => s.id === v);
 const positive = (v: string | undefined) => {
@@ -143,6 +147,7 @@ export default function SettingsPage() {
     if (!positive(settings.AION_WEB_FETCH_MAX_CHARS)) return t(`${k}.page.v_fetch_chars`);
     if (!positive(settings.AION_WEB_SEARCH_MAX_RESULTS)) return t(`${k}.page.v_search_results`);
     if (!positive(settings.AION_WEB_SEARCH_TIMEOUT_SEC)) return t(`${k}.page.v_search_timeout`);
+    for (const key of MCP_INT_KEYS) if (!positive(settings[key])) return t(`${k}.mcp.v_positive`, { key });
     return null;
   };
 
@@ -275,6 +280,8 @@ export default function SettingsPage() {
           <div hidden={active !== "ocr"}><OcrSection key={`o${rev}`} {...ctx} mode={ocrMode} setMode={setOcrMode} /></div>
           <div hidden={active !== "stt"}><SttSection key={`s${rev}`} {...ctx} mode={sttMode} setMode={setSttMode} /></div>
           <div hidden={active !== "sandbox"}><SandboxSection t={t} notify={notify} onRestart={onRestart} /></div>
+          <div hidden={active !== "network"}><NetworkSection t={t} notify={notify} /></div>
+          <div hidden={active !== "mcp"}><McpSection {...ctx} /></div>
           <div hidden={active !== "retention"}><RetentionSection {...ctx} /></div>
           <div hidden={active !== "smtp"}><SmtpSection t={t} notify={notify} /></div>
         </div>

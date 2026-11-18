@@ -27,6 +27,7 @@ from ..agent_profile import (
 )
 from ..skill_registry import skill_registry
 from ..mcp_manager import mcp_manager
+from ..mcp_custom.paths import is_custom_config
 from ..security.checker import AIONAntivirus
 from ..marketplaces.market_adapters import hub_aggregator, npx_invoke_args
 import json
@@ -76,6 +77,8 @@ from .admin_sso import router as admin_sso_router
 from .admin_whatsapp import router as admin_whatsapp_router
 from .admin_stt import router as admin_stt_router
 from .admin_service_accounts import router as admin_service_accounts_router
+from .admin_custom_mcp import router as admin_custom_mcp_router
+from .admin_network import router as admin_network_router
 from ..runtime.redis_client import redis_status
 from ..data.engine import get_async_session_maker
 from ..mcp_connector_catalog import (
@@ -312,6 +315,10 @@ router.include_router(admin_whatsapp_router)
 router.include_router(admin_stt_router)
 # /admin/service-accounts: non-human accounts used by integrations via API keys.
 router.include_router(admin_service_accounts_router)
+# /admin/mcp-custom: customer-built MCP servers uploaded from the MCP Hub.
+router.include_router(admin_custom_mcp_router)
+# /admin/network: company CA and network summary of the jails (Settings -> Network).
+router.include_router(admin_network_router)
 
 
 def _project_root() -> Path:
@@ -1518,6 +1525,19 @@ async def admin_update_mcp_integration(server_slug: str, body: McpIntegrationUpd
     )
 
     mcp_manager.load_registry()
+    # Customer-built servers: credential mode/schema belong to aion-mcp.yaml, the UI
+    # can only toggle availability and user options (src/mcp_custom/integration.py).
+    if is_custom_config(mcp_manager._registry.get(server_slug)):
+        body = body.model_copy(
+            update={
+                "credential_mode": None,
+                "requires_user_credentials": None,
+                "credential_schema": None,
+                "schema_override": False,
+                "apply_suggested_env": False,
+                "oauth_config": None,
+            }
+        )
     async with get_async_session_maker()() as session:
         row = (
             (
@@ -2297,6 +2317,17 @@ async def admin_apply_suggested_env(
         raise HTTPException(
             status_code=400, detail="credential_mode must be per_user or org_shared"
         )
+    mcp_manager.load_registry()
+    if is_custom_config(mcp_manager._registry.get(server_slug)):
+        # The env of a custom server is built at activation from its manifest; a
+        # "suggested env" would overwrite it with heuristics.
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "custom_mcp_manifest_owned",
+                "message": "Credentials of a custom MCP server are defined by its aion-mcp.yaml.",
+            },
+        )
     db_schema = None
     async with get_async_session_maker()() as session:
         row = (
@@ -2652,6 +2683,8 @@ async def _store_org_shared_secrets(
     server_slug: str,
     env: Dict[str, Any],
     secret_keys: Optional[List[str]] = None,
+    *,
+    only_listed: bool = False,
 ) -> Dict[str, Any]:
     """Move literal secret values of an org_shared server into the encrypted store.
 
@@ -2660,6 +2693,10 @@ async def _store_org_shared_secrets(
     ``${KEY}`` placeholder, so the registry YAML never holds the plaintext and the
     value read at spawn time is always the one saved last from the admin UI.
     Non-secret values and existing placeholders are returned unchanged.
+
+    ``only_listed``: store exactly ``secret_keys`` and nothing else (custom servers,
+    whose manifest says which keys are credentials; name heuristics such as
+    "TOKEN" in ``CRM_TOKEN_URL`` must not move plain configuration to the store).
     """
     from ..runtime.credential_store import set_credential
 
@@ -2669,11 +2706,12 @@ async def _store_org_shared_secrets(
         if not key_clean:
             continue
         val_str = "" if value is None else str(value).strip()
-        if (
-            val_str
-            and "${" not in val_str
-            and _is_secret_env_key(key_clean, secret_keys)
-        ):
+        is_secret = (
+            key_clean in (secret_keys or [])
+            if only_listed
+            else _is_secret_env_key(key_clean, secret_keys)
+        )
+        if val_str and "${" not in val_str and is_secret:
             for owner in ("default", "org_shared"):
                 await set_credential(
                     owner, server_slug, key_clean, val_str, tenant_id="default"
@@ -2682,6 +2720,55 @@ async def _store_org_shared_secrets(
         else:
             out[key_clean] = value
     return out
+
+
+async def _clear_custom_org_credentials(
+    server_slug: str,
+    env: Dict[str, Any],
+    credential_keys: List[str],
+) -> Dict[str, Any]:
+    """Remove from the encrypted store the shared credentials the admin emptied.
+
+    A custom server reads credentials only from the store (src/mcp_custom/runtime.py),
+    so clearing a value in the Configure dialog must delete the stored copy too,
+    otherwise the server keeps receiving the old secret. A credential key that is
+    empty or missing in the submitted env is cleared; its ``${KEY}`` placeholder is
+    put back so the key stays visible in the dialog for a new value.
+    """
+    from ..runtime.credential_store import delete_credential
+
+    out = dict(env)
+    for key in credential_keys:
+        value = str(out.get(key) or "").strip()
+        if value:
+            continue
+        for owner in ("default", "org_shared"):
+            await delete_credential(owner, server_slug, key, tenant_id="default")
+        out[key] = f"${{{key}}}"
+    return out
+
+
+def _reject_custom_slug_overwrite(server_slug: str) -> None:
+    """409 when an install endpoint would replace a customer-built (custom) server.
+
+    Zero-install, remote and script installs write the registry entry from scratch:
+    on a custom slug they would drop the ``aion_custom`` block and re-launch the
+    server as an npx/uvx package (the bug seen when the zero-install wizard was
+    opened right after a custom upload). Custom servers are updated only by
+    uploading a new version (``/admin/mcp-custom``).
+    """
+    mcp_manager.load_registry()
+    if is_custom_config(mcp_manager._registry.get(server_slug)):
+        raise HTTPException(
+            status_code=409,
+            detail={
+                "error": "custom_mcp_slug",
+                "message": (
+                    f"'{server_slug}' is a custom MCP server: upload a new version "
+                    "from the MCP Hub instead of reinstalling it."
+                ),
+            },
+        )
 
 
 async def _invalidate_mcp_runtime(server_slug: str) -> None:
@@ -2716,6 +2803,7 @@ async def install_zero_endpoint(body: ZeroInstallRequest):
     slug = re.sub(r"[^a-z0-9_-]+", "_", raw_slug).strip("_")
     if not slug:
         slug = "mcp_custom"
+    _reject_custom_slug_overwrite(slug)
 
     runner = body.runner.strip().lower()
     if runner not in ("npx", "uvx", "node", "remote"):
@@ -3099,6 +3187,17 @@ async def uninstall_zero_endpoint(server_slug: str):
         )
         await session.commit()
 
+    # Best effort, after the DB cleanup: a custom server overwritten by a
+    # zero-install entry still has its files under mcp_servers/custom/<slug>.
+    from ..mcp_custom.install import has_custom_artifacts, remove_custom_artifacts
+
+    if has_custom_artifacts(slug):
+        try:
+            await _invalidate_mcp_runtime(slug)
+            await asyncio.to_thread(remove_custom_artifacts, slug)
+        except Exception:
+            logger.exception("Removing files of custom MCP '%s' failed", slug)
+
     return {"status": "success", "server_slug": slug}
 
 
@@ -3265,6 +3364,7 @@ async def scan_mcp(req: ScanRequest):
 @router.post("/mcp/install")
 async def install_mcp(req: MCPInstallRequest):
     """Installs a modular MCP with venv isolation."""
+    _reject_custom_slug_overwrite(req.name)
     try:
         success = mcp_manager.install_stdio_server(
             req.name, req.script_path, dependencies=req.dependencies
@@ -3340,6 +3440,7 @@ async def install_from_remote_url(body: RemoteInstallBody):
         default_name = body.display_name.strip()
 
     slug = re.sub(r"[^a-z0-9_-]+", "_", default_name.lower()).strip("_") or "remote_mcp"
+    _reject_custom_slug_overwrite(slug)
     auth_type = str(body.auth_type or "").strip().lower() or "oauth2"
     if auth_type not in ("none", "oauth2", "api-key", "basic"):
         auth_type = "oauth2"
@@ -3729,6 +3830,39 @@ async def update_mcp_config(name: str, config: MCPUpdate):
     # Modalità che admin-ui salva subito dopo: non va scritta nel registry.
     target_mode = (update_data.pop("credential_mode", None) or "").strip().lower()
 
+    # Customer-built servers: the process command comes from the activated package
+    # and the credential mode from aion-mcp.yaml; only env values and description
+    # are editable here. Every declared credential (secret or not) goes to the
+    # encrypted store, the only place the custom spawn policy reads them from.
+    custom_cfg = mcp_manager._registry.get(name)
+    custom_credential_keys: Optional[List[str]] = None
+    if is_custom_config(custom_cfg):
+        from ..mcp_custom.integration import (
+            custom_credential_mode,
+            custom_credential_schema,
+        )
+
+        for locked in ("command", "args", "type", "url", "remote_url", "aion_connector_id"):
+            update_data.pop(locked, None)
+        target_mode = custom_credential_mode(custom_cfg) or "none"
+        custom_credential_keys = [
+            str(f["key"]) for f in custom_credential_schema(custom_cfg) or [] if f.get("key")
+        ]
+        # Same name rules as aion-mcp.yaml: an admin cannot set reserved variables
+        # (PATH, LD_*, PYTHON*, AION_*...) that would change how the jail starts.
+        from ..mcp_custom.manifest import env_key_error
+
+        bad = [
+            f"{key}: {err}"
+            for key in (update_data.get("env") or {})
+            if (err := env_key_error(str(key)))
+        ]
+        if bad:
+            raise HTTPException(
+                status_code=422,
+                detail={"error": "custom_mcp_env_reserved", "message": "; ".join(bad)},
+            )
+
     # Cleanup per credential_mode="none": rimuovi env e --header args per remote-bridge
     if update_data:
         async with get_async_session_maker()() as session:
@@ -3781,7 +3915,18 @@ async def update_mcp_config(name: str, config: MCPUpdate):
         # encrypted copy in the DB and the plaintext in mcp_registry.local.yaml.
         if effective_mode == "org_shared" and isinstance(update_data.get("env"), dict):
             update_data["env"] = await _store_org_shared_secrets(
-                name, update_data["env"]
+                name,
+                update_data["env"],
+                custom_credential_keys,
+                only_listed=custom_credential_keys is not None,
+            )
+        if (
+            custom_credential_keys
+            and effective_mode == "org_shared"
+            and isinstance(update_data.get("env"), dict)
+        ):
+            update_data["env"] = await _clear_custom_org_credentials(
+                name, update_data["env"], custom_credential_keys
             )
 
     try:
@@ -3885,8 +4030,15 @@ async def get_stats():
 
 
 @router.delete("/mcp/{name}")
-async def delete_mcp(name: str):
-    """Rimuove il server dal registry locale e, se installato dal marketplace, elimina clone/binario."""
+async def delete_mcp(
+    name: str,
+    auth: ChatAuthIdentity = Depends(require_admin_role),
+):
+    """Rimuove il server dal registry locale e, se installato dal marketplace, elimina clone/binario.
+
+    Per i server MCP custom (``aion_custom``) elimina anche codice e versioni
+    archiviate sotto ``mcp_servers/custom/`` e registra l'azione in audit.
+    """
     if name in mcp_manager._registry_base:
         raise HTTPException(
             status_code=400, detail="Impossibile eliminare i moduli MCP di sistema."
@@ -3912,18 +4064,53 @@ async def delete_mcp(name: str):
         )
 
     cfg = copy.deepcopy(mcp_manager._registry.get(name) or {})
-    if not mcp_manager.delete_server(name):
-        raise HTTPException(status_code=404, detail="MCP not found")
-    _remove_market_mcp_artifacts(name, cfg)
+    in_registry = mcp_manager.delete_server(name)
+    if in_registry:
+        _remove_market_mcp_artifacts(name, cfg)
+
+    # 1. Database first (policy, credentials, preferences): these rows are what the
+    #    integrity check reports. It runs right after the registry removal so a
+    #    failure in the later best-effort steps can no longer leave them orphaned.
+    #    It also runs when the server is already gone from the registry, so a
+    #    second DELETE cleans what an interrupted one left behind.
     from ..runtime.mcp_integration_integrity import delete_mcp_user_data
 
-    cleanup = await delete_mcp_user_data(name)
-    # Pulisci anche la riga McpServerConfig (policy) se presente
+    cleanup: Dict[str, Any] = dict(await delete_mcp_user_data(name))
     async with get_async_session_maker()() as session:
-        await session.execute(
+        res = await session.execute(
             delete(McpServerConfig).where(McpServerConfig.server_slug == name)
         )
         await session.commit()
+    cleanup["policy_deleted"] = int(res.rowcount or 0)
+
+    # 2. Files of custom servers go with the slug even when the registry entry lost
+    #    its aion_custom marker (e.g. overwritten by an install): otherwise code,
+    #    versions and pending uploads would pile up in mcp_servers/custom.
+    from ..mcp_custom.install import has_custom_artifacts
+
+    custom_files = is_custom_config(cfg) or has_custom_artifacts(name)
+    if not in_registry and not custom_files and not any(cleanup.values()):
+        raise HTTPException(status_code=404, detail="MCP not found")
+
+    # 3. Best effort: stop running workers/containers, then delete the files. A
+    #    failure here is logged and reported, never turned into a failed deletion.
+    try:
+        await _invalidate_mcp_runtime(name)
+    except Exception:
+        logger.exception("Stopping workers of deleted MCP '%s' failed", name)
+    if custom_files:
+        from ..mcp_custom.install import record_removal, remove_custom_artifacts
+
+        try:
+            cleanup["files"] = await asyncio.to_thread(remove_custom_artifacts, name)
+        except Exception as exc:
+            logger.exception("Removing files of custom MCP '%s' failed", name)
+            cleanup["files"] = {"removed": [], "failed": [name], "error": str(exc)}
+        await record_removal(
+            auth.identifier or auth.user_row_id or "admin",
+            name,
+            (cfg.get("aion_custom") or {}).get("version"),
+        )
     return {"status": "success", "cleanup": cleanup}
 
 
