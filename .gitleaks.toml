@@ -1,0 +1,14 @@
+# Gitleaks configuration used by the secret-scanning workflow.
+# Extends the default ruleset so every built-in rule stays active; only the
+# allowlist below is added on top of it.
+[extend]
+useDefault = true
+
+[allowlist]
+# The API guide documents how to call the API with example keys that are fake by
+# design (placeholders shown in PowerShell/bash/curl snippets), so the
+# generic-api-key rule would flag them on every change. Allowlisting by path
+# (instead of by commit fingerprint in .gitleaksignore) keeps working after a
+# squash merge, which rewrites commit hashes.
+description = "Fake example API keys in the API guide documentation"
+paths = ['''docs/api-guide/.*\.md''']
