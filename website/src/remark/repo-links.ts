@@ -4,23 +4,27 @@
  * Why: the Markdown in `docs/` often links to source files (`src/api/main.py`,
  * `../../scripts/install.sh`, `config_std/...`). Those links work when reading
  * the Markdown on GitHub or in an editor, but they are not pages of the
- * Docusaurus site, so the build reported them as broken and readers of the
- * published site (Docusaurus / Vercel) landed on 404 pages.
+ * Docusaurus site, so the build would report them as broken and readers of the
+ * published site (Vercel / Docker) would land on 404 pages.
  *
- * What it does, for every Markdown link (and link definition) whose URL is a
- * relative path that is NOT a `.md`/`.mdx` page:
- *   1. resolve it relative to the Markdown file; if that points to an existing
- *      file or folder inside the repository, use it;
- *   2. otherwise try it as a repository-root path (authors often write
- *      `src/api/main.py` from any page);
- *   3. if found, rewrite the URL to
- *      `https://github.com/<org>/<repo>/blob|tree/<branch>/<path>` keeping any
- *      `#L10`-style fragment.
- * Links that cannot be resolved are left untouched, so Docusaurus still
- * reports them as broken.
+ * Important: the plugin must NOT depend on the source files being on disk.
+ * The Docker image of the website (docker/Dockerfile.website) copies only
+ * `website/` and `docs/`, so `src/`, `scripts/`, … do not exist there. The
+ * rewrite is therefore decided from the link text alone; the disk is only
+ * consulted for files inside `docs/` (always present).
+ *
+ * Rules, for every Markdown link / link definition whose URL is a relative
+ * path that is NOT a `.md`/`.mdx` page:
+ *   - `./x` or `../x`: resolved relative to the Markdown file (repo layout);
+ *   - bare `x/y` (e.g. `src/api/main.py`): relative to the Markdown file when
+ *     that file exists inside `docs/`, otherwise relative to the repository
+ *     root (authors write repo-root paths from any page);
+ *   - the result must stay inside the repository, else the link is untouched;
+ *   - rewritten to `https://github.com/<org>/<repo>/blob|tree/<branch>/<path>`
+ *     (`tree` when the link ends with `/`), keeping any `#L10`-style fragment.
  *
  * Used by `website/docusaurus.config.ts` (docs plugin `remarkPlugins`).
- * Options: `repoRoot` (absolute path of the repository) and `githubBase`
+ * Options: `repoRoot` (absolute path of the repository), `githubBase`
  * (e.g. `https://github.com/AION-by-ASA-Computer/AION_Agent`), `branch`.
  */
 import fs from 'node:fs';
@@ -42,11 +46,11 @@ function isSkippable(url: string): boolean {
   );
 }
 
-/** Return the repo-relative POSIX path if `abs` exists inside the repository. */
-function repoRelative(abs: string, repoRoot: string): string | null {
+/** Repo-relative POSIX path of `abs`, or null when it falls outside the repository. */
+function toRepoPath(abs: string, repoRoot: string): string | null {
   const rel = path.relative(repoRoot, abs);
   if (rel === '' || rel.startsWith('..') || path.isAbsolute(rel)) return null;
-  return fs.existsSync(abs) ? rel.split(path.sep).join('/') : null;
+  return rel.split(path.sep).join('/');
 }
 
 export default function repoLinks(options: Options) {
@@ -64,15 +68,21 @@ export default function repoLinks(options: Options) {
       const hashIdx = url.indexOf('#');
       const target = decodeURI(hashIdx >= 0 ? url.slice(0, hashIdx) : url);
       const fragment = hashIdx >= 0 ? url.slice(hashIdx) : '';
+      if (!target) return;
 
-      // 1) relative to the page, 2) relative to the repository root.
-      const rel =
-        repoRelative(path.resolve(fileDir, target), repoRoot) ??
-        repoRelative(path.resolve(repoRoot, target), repoRoot);
+      // Explicitly relative links follow the repository layout from the page.
+      // Bare paths are page-relative only when they point to a file that
+      // exists next to the page (e.g. docs/api-and-runtime/contract/*.json);
+      // otherwise they are repository-root paths such as `src/api/main.py`.
+      const explicit = target.startsWith('./') || target.startsWith('../');
+      const pageRelative = path.resolve(fileDir, target);
+      const abs = explicit || fs.existsSync(pageRelative) ? pageRelative : path.resolve(repoRoot, target);
+
+      const rel = toRepoPath(abs, repoRoot);
       if (!rel) return;
 
-      const kind = fs.statSync(path.join(repoRoot, rel)).isDirectory() ? 'tree' : 'blob';
-      node.url = `${githubBase}/${kind}/${branch}/${encodeURI(rel)}${fragment}`;
+      const kind = target.endsWith('/') ? 'tree' : 'blob';
+      node.url = `${githubBase}/${kind}/${branch}/${encodeURI(rel)}${target.endsWith('/') ? '/' : ''}${fragment}`;
     };
 
     // Depth-first walk over the Markdown tree.

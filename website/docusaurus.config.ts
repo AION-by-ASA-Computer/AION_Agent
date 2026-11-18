@@ -80,6 +80,8 @@ const config: Config = {
       {
         hashed: true,
         indexBlog: false,
+        // The Markdown lives in the repository-level docs/ folder, not website/docs.
+        docsDir: '../docs',
         docsRouteBasePath: '/',
         language: ['en'],
         highlightSearchTermsOnTargetPage: true,
