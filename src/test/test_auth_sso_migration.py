@@ -977,7 +977,11 @@ async def test_local_account_never_pending_nor_linked(env, monkeypatch):
     assert await lm.pending_users_count("default", "google") == 0
     assert not await lm.user_needs_link("default", uid)
     await env["prov"].link_identity_to_user(
-        "default", uid, _claims("sx", "ext@x.io"), {}, PROVIDER,
+        "default",
+        uid,
+        _claims("sx", "ext@x.io"),
+        {},
+        PROVIDER,
         finalize_migration=True,
     )
     await lm.finalize_linked_users("default", "google")

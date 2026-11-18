@@ -237,9 +237,10 @@ async def test_create_local_account_allowed_when_sso_active(monkeypatch, tmp_pat
     assert row["local_account"] is True
     assert row["migration_pending"] is False
     # Ordinary users are not local accounts.
-    assert next(r for r in listing["users"] if r["identifier"] == "u1")[
-        "local_account"
-    ] is False
+    assert (
+        next(r for r in listing["users"] if r["identifier"] == "u1")["local_account"]
+        is False
+    )
 
 
 @pytest.mark.anyio
