@@ -385,7 +385,9 @@ def test_jail_env_points_tls_to_mounted_bundle():
 # ───────────────────────── CodeQL hardening ─────────────────────────
 
 
-@pytest.mark.parametrize("raw", ["[" + "[\\" * 5000, "[fd00::1", "[fd00::1]x443", "[]:443", "a" * 301])
+@pytest.mark.parametrize(
+    "raw", ["[" + "[\\" * 5000, "[fd00::1", "[fd00::1]x443", "[]:443", "a" * 301]
+)
 def test_parse_rejects_malformed_or_oversized_entries(raw: str):
     """Unclosed brackets, junk after ']' and over-long entries are refused (no regex on them)."""
     with pytest.raises(AllowlistError):

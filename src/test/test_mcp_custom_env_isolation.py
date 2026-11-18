@@ -154,9 +154,13 @@ def test_admin_edit_with_reserved_name_is_refused(monkeypatch: pytest.MonkeyPatc
     assert err.value.status_code == 422
 
 
-def test_env_file_name_ignores_the_slug(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+def test_env_file_name_ignores_the_slug(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+):
     """A slug like '../x' cannot place the env file outside its private folder."""
     monkeypatch.setattr(cr, "_env_file_dir", lambda: tmp_path)
     monkeypatch.setattr(cr, "_remove_later", lambda *_a, **_k: None)
     path, _ = cr.write_jail_env_file("../../escape", {"A": "1"})
-    assert path is not None and path.parent == tmp_path and path.name.startswith("jail-")
+    assert (
+        path is not None and path.parent == tmp_path and path.name.startswith("jail-")
+    )
