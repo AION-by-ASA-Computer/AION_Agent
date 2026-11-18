@@ -157,6 +157,15 @@ async def sso_link_start(
     if auth.via != "chat_token" or not auth.user_row_id:
         raise HTTPException(401, detail="Token utente richiesto")
 
+    # A local account (third party without SSO) must never be converted by a
+    # link: linking would clear its password and lock the person out.
+    from src.data.models import User
+
+    async with get_async_session_maker()() as _session:
+        _u = await _session.get(User, auth.user_row_id)
+    if _u is not None and bool(getattr(_u, "local_account", False)):
+        raise HTTPException(409, detail={"code": "local_account_no_sso"})
+
     # Recupera il provider attivo
     from src.auth.sso.config_service import get_active_provider
 

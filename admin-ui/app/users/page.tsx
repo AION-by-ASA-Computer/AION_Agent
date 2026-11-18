@@ -12,7 +12,7 @@ import { PageToast, type ToastState } from "@/components/PageToast";
 import { Dialog } from "@/components/profiles/Dialog";
 import { dangerBtn, ghostBtn, inputCls, outlineBtn, solidBtn } from "@/components/ui/classes";
 import { SearchField } from "@/components/ui/SearchField";
-import { Switch } from "@/components/settings/ui";
+import { Note, Switch } from "@/components/settings/ui";
 import { ColumnFilter, type ColumnFilterLabels } from "@/components/ui/ColumnFilter";
 import { DeleteDialog } from "@/components/ui/ConfirmDialogs";
 import { SsoMigrationPanel } from "@/components/sso/SsoMigrationPanel";
@@ -48,6 +48,8 @@ interface UserRow {
   login_method?: string | null;
   sso_providers?: string[];
   sso_migration_exempt?: boolean;
+  /** Username+password account created on purpose while SSO is active (third party without SSO). Always user role, never migrated. */
+  local_account?: boolean;
   migration_pending?: boolean;
   roles?: string[];
   can_create_api_keys?: boolean;
@@ -69,9 +71,9 @@ const isSsoUser = (u: UserRow) => !!u.login_method && u.login_method !== "passwo
 /** The single method the account signs in with right now (computed by the backend; stale identities from previous providers are ignored). */
 const methodsOf = (u: UserRow) => (u.login_method ? [u.login_method] : []);
 
-type MigrationState = "pending" | "exempt" | "migrated" | "";
+type MigrationState = "pending" | "exempt" | "migrated" | "local" | "";
 const migrationOf = (u: UserRow): MigrationState =>
-  u.migration_pending ? "pending" : u.sso_migration_exempt ? "exempt" : u.login_method && u.login_method !== "password" ? "migrated" : "";
+  u.local_account ? "local" : u.migration_pending ? "pending" : u.sso_migration_exempt ? "exempt" : u.login_method && u.login_method !== "password" ? "migrated" : "";
 
 type T = (key: string, vars?: Record<string, string | number>) => string;
 
@@ -80,6 +82,8 @@ type FormValues = {
   displayName: string;
   email: string;
   admin: boolean;
+  /** True when the account is created as a local (non-SSO) account; only sent for new users. */
+  local_account: boolean;
   can_create_api_keys: boolean;
   max_api_keys: number;
   api_key_max_ttl_days: number;
@@ -262,10 +266,16 @@ function ApiKeyPolicy({
   );
 }
 
-function RolePicker({ admin, onChange, t }: { admin: boolean; onChange: (v: boolean) => void; t: T }) {
+/** `adminLocked` disables the admin choice (local accounts are always plain users) and explains why. */
+function RolePicker({ admin, onChange, t, adminLocked = false }: { admin: boolean; onChange: (v: boolean) => void; t: T; adminLocked?: boolean }) {
   const options = [
     { value: false, label: t(`${k}.form.role_user`), hint: t(`${k}.form.role_user_hint`), Icon: UserRound },
-    { value: true, label: t(`${k}.form.admin`), hint: t(`${k}.form.admin_hint`), Icon: ShieldCheck },
+    {
+      value: true,
+      label: t(`${k}.form.admin`),
+      hint: adminLocked ? t(`${k}.form.local_admin_disabled`) : t(`${k}.form.admin_hint`),
+      Icon: ShieldCheck,
+    },
   ];
   return (
     <fieldset className="flex flex-col gap-1.5">
@@ -273,15 +283,18 @@ function RolePicker({ admin, onChange, t }: { admin: boolean; onChange: (v: bool
       <div className="grid gap-2 sm:grid-cols-2">
         {options.map(({ value, label, hint, Icon }) => {
           const on = admin === value;
+          const locked = adminLocked && value === true;
           return (
             <label
               key={label}
               className={cn(
-                "flex cursor-pointer items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/50 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background",
-                on ? "border-foreground/50 bg-secondary/70" : "border-border hover:border-foreground/25 hover:bg-secondary/40",
+                "flex items-start gap-3 rounded-xl border px-3 py-2.5 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring/50 has-[:focus-visible]:ring-offset-2 has-[:focus-visible]:ring-offset-background",
+                locked ? "cursor-not-allowed opacity-50" : "cursor-pointer",
+                on ? "border-foreground/50 bg-secondary/70" : "border-border",
+                !on && !locked && "hover:border-foreground/25 hover:bg-secondary/40",
               )}
             >
-              <input type="radio" name="user-form-role" checked={on} onChange={() => onChange(value)} className="sr-only" />
+              <input type="radio" name="user-form-role" checked={on} disabled={locked} onChange={() => onChange(value)} className="sr-only" />
               <Icon className={cn("mt-0.5 h-4 w-4 shrink-0", on ? "text-foreground" : "text-muted-foreground")} aria-hidden />
               <span className="min-w-0">
                 <span className="block text-sm font-medium">{label}</span>
@@ -338,6 +351,7 @@ function UserFormDialog({
   busy,
   linkBusy,
   smtpMissing,
+  ssoMode,
   t,
   onSubmit,
   onSendLink,
@@ -347,6 +361,8 @@ function UserFormDialog({
   busy: boolean;
   linkBusy: boolean;
   smtpMissing: boolean;
+  /** An SSO login mode is active: new accounts created here are local (username + password) accounts. */
+  ssoMode: boolean;
   t: T;
   onSubmit: (v: FormValues) => Promise<boolean>;
   onSendLink: (u: UserRow) => void;
@@ -359,6 +375,10 @@ function UserFormDialog({
   const [identifier, setIdentifier] = useState(user?.identifier ?? "");
   // Until the admin types a username, keep suggesting one from the name.
   const [identifierTouched, setIdentifierTouched] = useState(editing);
+  // With SSO active an account created here is a local one: the admin must acknowledge the risk and the role is locked to "user".
+  const creatingLocal = !editing && ssoMode;
+  const adminLocked = creatingLocal || !!user?.local_account;
+  const [localAck, setLocalAck] = useState(false);
   const [admin, setAdmin] = useState(!!user && isAdmin(user));
   const initialMaxKeys = user?.max_api_keys ?? API_KEYS_LIMIT.default;
   const initialMaxDays = user?.api_key_max_ttl_days ?? API_KEY_DAYS.default;
@@ -374,7 +394,7 @@ function UserFormDialog({
   // The limits only matter while the switch is on; when off, unparseable edits fall back to the stored values.
   const apiKeysOk = !apiKeysEnabled || (maxKeysValue !== null && maxDaysValue !== null);
   const revokingKeys = editing && !!user.can_create_api_keys && !apiKeysEnabled;
-  const canSubmit = !busy && !!ident.trim() && emailOk && apiKeysOk;
+  const canSubmit = !busy && !!ident.trim() && emailOk && apiKeysOk && (!creatingLocal || localAck);
 
   return (
     <Dialog title={t(`${k}.form.${editing ? "title_edit" : "title_new"}`)} closeLabel={t(`${k}.form.cancel`)} onClose={onClose} className="max-w-xl">
@@ -387,7 +407,8 @@ function UserFormDialog({
             identifier: ident.trim(),
             displayName: displayName.trim(),
             email: email.trim(),
-            admin,
+            admin: adminLocked ? false : admin,
+            local_account: creatingLocal,
             can_create_api_keys: apiKeysEnabled,
             max_api_keys: maxKeysValue ?? initialMaxKeys,
             api_key_max_ttl_days: maxDaysValue ?? initialMaxDays,
@@ -395,6 +416,21 @@ function UserFormDialog({
           await onSubmit(v);
         }}
       >
+        {creatingLocal && (
+          <div className="mb-5 flex flex-col gap-3">
+            <Note tone="warn">{t(`${k}.form.local_warning`)}</Note>
+            <label className="flex cursor-pointer items-start gap-2.5 text-sm">
+              <input
+                type="checkbox"
+                checked={localAck}
+                onChange={(e) => setLocalAck(e.target.checked)}
+                className="mt-0.5 h-4 w-4 shrink-0 accent-foreground"
+              />
+              <span>{t(`${k}.form.local_ack`)}</span>
+            </label>
+          </div>
+        )}
+
         {editing && (
           <div className="mb-5 flex items-center gap-3">
             <Avatar user={user} />
@@ -469,7 +505,7 @@ function UserFormDialog({
         </div>
 
         <div className="mt-6 border-t border-border/60 pt-5">
-          <RolePicker admin={admin} onChange={setAdmin} t={t} />
+          <RolePicker admin={adminLocked ? false : admin} onChange={setAdmin} t={t} adminLocked={adminLocked} />
         </div>
 
         <div className="mt-6 border-t border-border/60 pt-5">
@@ -603,8 +639,8 @@ export default function UsersPage() {
   const showMigration = loginMode !== "password" || users.some((u) => migrationOf(u) !== "");
   // TOTP is a classic-login feature: with SSO the provider's own 2FA applies.
   const showSecurity = loginMode === "password";
-  // With SSO, accounts are created at first sign-in (see the new-account policy), never here.
-  const canCreate = loginMode === "password";
+  // With SSO, regular accounts are still created at first sign-in (see the new-account policy); what admins can add here are local accounts (username + password) for third parties without SSO.
+  const ssoMode = loginMode !== "password";
   // Without SMTP accounts get a temporary password the admin hands over, changed at first sign-in.
   const smtpMissing = smtpConfigured === false;
   const grid = GRIDS[`${showMigration ? 1 : 0}${showSecurity ? 1 : 0}`];
@@ -658,7 +694,11 @@ export default function UsersPage() {
         max_api_keys: v.max_api_keys,
         api_key_max_ttl_days: v.api_key_max_ttl_days,
       };
-      if (!editing) payload.identifier = v.identifier;
+      if (!editing) {
+        payload.identifier = v.identifier;
+        // Tells the backend this is a deliberate non-SSO account (allowed while SSO is active).
+        if (v.local_account) payload.local_account = true;
+      }
       const res = await apiFetch(editing ? `${apiBase()}/admin/users/${(formUser as UserRow).id}` : `${apiBase()}/admin/users`, {
         method: editing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
@@ -675,7 +715,15 @@ export default function UsersPage() {
         }
         throw new Error(code || "409");
       }
-      if (!res.ok) throw new Error(await errorDetail(res, String(res.status)));
+      if (!res.ok) {
+        const code = await errorDetail(res, String(res.status));
+        // Local accounts can never be admins: surface the rule instead of a raw code.
+        if (code === "local_account_admin_forbidden") {
+          setToast({ message: t(`${k}.toast.local_account_admin_forbidden`), variant: "error" });
+          return false;
+        }
+        throw new Error(code);
+      }
       setFormUser(null);
       if (editing) {
         setToast({ message: t(`${k}.toast.updated`), variant: "success" });
@@ -815,21 +863,20 @@ export default function UsersPage() {
           <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] sm:text-[28px]">{t(`${k}.title`)}</h1>
           <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">{t(`${k}.subtitle`)}</p>
         </div>
-        {canCreate ? (
+        <div className="flex flex-col items-start gap-2 sm:items-end">
           <button type="button" className={solidBtn} onClick={() => setFormUser("new")}>
             <Plus className="h-4 w-4" aria-hidden />
             {t(`${k}.add`)}
           </button>
-        ) : (
-          listState === "ready" && (
+          {ssoMode && listState === "ready" && (
             <p className="max-w-[34ch] text-sm text-muted-foreground sm:text-right">
               {t(`${k}.sso_add_hint`)}{" "}
               <button type="button" className="focus-ring rounded font-medium text-foreground underline underline-offset-4" onClick={() => setTab("signin")}>
                 {t(`${k}.sso_add_manage`)}
               </button>
             </p>
-          )
-        )}
+          )}
+        </div>
       </header>
 
       {smtpMissing && (
@@ -900,13 +947,11 @@ export default function UsersPage() {
             {listState === "ready" && users.length === 0 && (
               <div className="flex flex-col items-center rounded-3xl border border-dashed border-border px-6 py-20 text-center">
                 <h2 className="text-lg font-semibold tracking-[-0.015em]">{t(`${k}.empty.title`)}</h2>
-                <p className="mt-1.5 max-w-[46ch] text-sm text-muted-foreground">{t(canCreate ? `${k}.empty.body` : `${k}.empty.sso_body`)}</p>
-                {canCreate && (
-                  <button type="button" className={cn(solidBtn, "mt-6")} onClick={() => setFormUser("new")}>
-                    <Plus className="h-4 w-4" aria-hidden />
-                    {t(`${k}.add`)}
-                  </button>
-                )}
+                <p className="mt-1.5 max-w-[46ch] text-sm text-muted-foreground">{t(ssoMode ? `${k}.empty.sso_body` : `${k}.empty.body`)}</p>
+                <button type="button" className={cn(solidBtn, "mt-6")} onClick={() => setFormUser("new")}>
+                  <Plus className="h-4 w-4" aria-hidden />
+                  {t(`${k}.add`)}
+                </button>
               </div>
             )}
 
@@ -954,6 +999,14 @@ export default function UsersPage() {
                                   <div className="flex min-w-0 items-center gap-2">
                                     <span className="truncate text-sm font-medium">{name}</span>
                                     {isAdmin(u) && <span className="shrink-0 rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-muted-foreground">{t(`${k}.badge.admin`)}</span>}
+                                    {u.local_account && (
+                                      <span
+                                        title={t(`${k}.badge.local_title`)}
+                                        className="shrink-0 rounded-full bg-warning/15 px-2 py-0.5 text-xs font-medium text-warning"
+                                      >
+                                        {t(`${k}.badge.local`)}
+                                      </span>
+                                    )}
                                     {u.can_create_api_keys && (
                                       <span
                                         title={t(`${k}.form.api_keys.badge_title`, { active: u.api_keys_active ?? 0, max: u.max_api_keys ?? API_KEYS_LIMIT.default })}
@@ -1118,12 +1171,13 @@ export default function UsersPage() {
         )}
       </div>
 
-      {formUser && (formUser !== "new" || canCreate) && (
+      {formUser && (
         <UserFormDialog
           user={formUser === "new" ? null : (users.find((u) => u.id === formUser.id) ?? formUser)}
           busy={saving}
           linkBusy={formUser !== "new" && linkBusy === formUser.id}
           smtpMissing={smtpMissing}
+          ssoMode={ssoMode}
           t={t}
           onSubmit={saveUser}
           onSendLink={(u) => void sendLink(u)}

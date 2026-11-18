@@ -1297,7 +1297,9 @@
       "link_expires": "Scade il {{date}}",
       "link_invite": "Invito in attesa",
       "link_reset": "Reset in corso",
-      "temp_password": "Password temporanea"
+      "temp_password": "Password temporanea",
+      "local": "Account locale",
+      "local_title": "Accede con nome utente e password, senza SSO"
     },
     "row": {
       "profiles": "Accesso ai profili di {{name}}",
@@ -1362,7 +1364,10 @@
       "issue_temp": "Genera password temporanea",
       "temp_hint": "Senza SMTP viene generata una password temporanea, mostrata una sola volta, che sostituisce subito quella attuale. L'utente deve cambiarla al primo accesso.",
       "temp_note": "Il server email non è configurato: verrà generata una password temporanea, mostrata una sola volta, da comunicare all'utente. Al primo accesso dovrà sceglierne una nuova.",
-      "create_with_temp": "Crea e genera password"
+      "create_with_temp": "Crea e genera password",
+      "local_warning": "Account locale senza SSO: la persona accede con nome utente e password, senza l'autenticazione (e l'MFA) aziendale. Da usare solo per terzi che non possono usare l'SSO; la responsabilità di questo accesso è dell'azienda. Avrà sempre il ruolo utente.",
+      "local_ack": "Ho capito i rischi e creo l'account sotto la mia responsabilità.",
+      "local_admin_disabled": "Non disponibile per gli account locali."
     },
     "profiles": {
       "title": "Accesso ai profili",
@@ -1415,7 +1420,8 @@
       "invite_failed": "Utente creato, ma l'invito a {{email}} non è partito: {{error}}. Puoi reinviarlo dalla lista.",
       "link_failed": "Invio del link non riuscito: {{error}}",
       "link_sent_reset": "Link di reimpostazione inviato a {{email}}.",
-      "link_sent_invite": "Invito inviato a {{email}}."
+      "link_sent_invite": "Invito inviato a {{email}}.",
+      "local_account_admin_forbidden": "Un account locale non può essere amministratore."
     },
     "filter": {
       "aria": "Filtra per {{col}}",
@@ -1483,7 +1489,8 @@
       "links_sent_one": "Email inviata a {{email}}.",
       "links_sent": "Email inviate: {{count}}.",
       "links_failed": "Invio non riuscito per {{names}} ({{error}}).",
-      "links_missing_email": "Senza email, nessun link inviato: {{names}}."
+      "links_missing_email": "Senza email, nessun link inviato: {{names}}.",
+      "local": "Locale"
     },
     "sso_guide": {
       "title": "Come configurare Microsoft Entra ID",

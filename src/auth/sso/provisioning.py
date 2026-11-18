@@ -138,6 +138,10 @@ async def resolve_user(
 
         auto_provision = provider_config.get("auto_provision", True)
 
+        # NB: an SSO identity is never auto-linked to an existing account by
+        # email, local accounts included (third parties created on purpose
+        # without SSO): a matching email ends in ``sso_not_linked`` (migration)
+        # or ``sso_provisioning_conflict``, never in a silent link.
         # In migrazione chi ha gia' un account con questa email (es. appena
         # scollegato) deve collegarsi con la password: la policy dei nuovi
         # account non lo riguarda. Serve solo a scegliere il messaggio, non

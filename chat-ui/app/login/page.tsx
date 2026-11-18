@@ -30,7 +30,6 @@ export default function LoginPage() {
   const [authRequired, setAuthRequired] = useState<boolean | null>(null);
   const [ssoEnabled, setSsoEnabled] = useState<boolean>(false);
   const [ssoProvider, setSsoProvider] = useState<"microsoft" | "google" | null>(null);
-  const [passwordVisible, setPasswordVisible] = useState<boolean>(true);
   const [resetAvailable, setResetAvailable] = useState<boolean>(false);
   const [mfa, setMfa] = useState<MfaChallenge | null>(null);
 
@@ -50,7 +49,6 @@ export default function LoginPage() {
         setAuthRequired(s.password_auth_enabled);
         setSsoEnabled(s.sso_enabled || false);
         setSsoProvider(s.sso_provider || null);
-        setPasswordVisible(s.password_login_visible ?? true);
         setResetAvailable(Boolean(s.password_reset_available));
         // Prefill dopo /set-password (?username=...).
         const prefill = new URLSearchParams(window.location.search).get("username");
@@ -134,7 +132,8 @@ export default function LoginPage() {
   }
 
   const showSso = ssoEnabled && !!ssoProvider && !mfa;
-  const showPasswordForm = passwordVisible && !mfa;
+  // The username/password form is always shown next to the SSO button, so local accounts (third parties without SSO) can sign in without extra clicks. Non-local users are still routed to SSO by the backend (sso_required / password_login_disabled).
+  const showPasswordForm = !mfa;
 
   return (
     <AuthShell

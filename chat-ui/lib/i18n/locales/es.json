@@ -1010,7 +1010,8 @@
       "session_invalid": "Sesión caducada, inicia sesión de nuevo.",
       "user_not_found": "Usuario no encontrado.",
       "sso_signup_closed": "Ahora mismo no se aceptan cuentas nuevas. Contacta con tu administrador para solicitar acceso.",
-      "sso_signup_not_allowed": "Tu cuenta aún no está habilitada para esta plataforma. Contacta con tu administrador para solicitar acceso."
+      "sso_signup_not_allowed": "Tu cuenta aún no está habilitada para esta plataforma. Contacta con tu administrador para solicitar acceso.",
+      "local_account_no_sso": "Esta cuenta es local y no se puede vincular al inicio de sesión único."
     },
     "forgot_password": "¿Has olvidado tu contraseña?"
   },

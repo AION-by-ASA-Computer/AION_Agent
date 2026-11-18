@@ -103,6 +103,15 @@ class User(Base):
     account_type: Mapped[str] = mapped_column(
         String(16), default="human", server_default="human", nullable=False, index=True
     )
+    # Local (username + password) account created on purpose by an admin while an
+    # SSO login mode is active, e.g. for third parties who cannot use the company
+    # IdP (migration i7l8c9a037). A local account is ALWAYS also
+    # ``sso_migration_exempt`` (so every migration count/list/mode-switch filter
+    # already skips it); this flag only unlocks password login under SSO, which
+    # a plain "exempt" user does not get. Never combined with the admin role.
+    local_account: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="0", nullable=False
+    )
     # Reversible deactivation: while set, every API key of the account is
     # rejected (``api_key_owner_disabled``) but the keys are kept, so
     # re-enabling the account restores the integration without rotating keys.

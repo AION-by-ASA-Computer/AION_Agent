@@ -163,8 +163,12 @@ async def login(body: LoginBody):
     import datetime as _dt
 
     user_id_raw = str(row["id"])
+    is_local_account = False
     async with _gsm()() as _sess:
         _u = await _sess.get(_User, user_id_raw)
+        # Local accounts (third parties without SSO) sign in with the password
+        # even while an SSO mode is active: they skip the SSO gates below.
+        is_local_account = bool(_u and getattr(_u, "local_account", False))
         if _u and _u.temp_password_expires_at:
             _now = _dt.datetime.now(_tz.utc)
             _exp = _u.temp_password_expires_at
@@ -193,6 +197,7 @@ async def login(body: LoginBody):
         effective_client == "chat"
         and password_auth_enabled()
         and not sso_force_password()
+        and not is_local_account
     ):
         try:
             from src.auth.sso.login_mode import (
@@ -308,6 +313,11 @@ async def me(authorization: Optional[str] = Header(None)):
 
     async with get_async_session_maker()() as session:
         u = await session.get(User, user_row_id)
+        # A local account is never "SSO linked": otherwise the exemption would
+        # report sso_linked=True and hide its must_change_password banner.
+        is_local = bool(u and getattr(u, "local_account", False))
+        if is_local:
+            sso_linked = False
         if not u:
             return {
                 "user_id": uid,
@@ -351,6 +361,7 @@ async def me(authorization: Optional[str] = Header(None)):
             "sso_link_required": sso_link_required,
             "sso_linked": sso_linked,
             "sso_provider": sso_provider_name,
+            "local_account": is_local,
             "mfa_enrollment_required": mfa_enrollment_required,
             "totp_enabled": u.totp_enabled_at is not None,
         }
@@ -459,10 +470,12 @@ async def auth_status():
     password_login_vis = True
     sso_enabled = False
     sso_provider = None
+    local_login_avail = False
 
     try:
         from src.auth.sso.login_mode import (
             get_login_settings,
+            local_login_available,
             password_login_visible,
         )
 
@@ -476,6 +489,9 @@ async def auth_status():
         if login_mode != "password":
             sso_enabled = True
             sso_provider = login_mode
+            # Tells chat-ui to offer "Sign in with a local account" even when
+            # the tenant-wide password form is hidden.
+            local_login_avail = await local_login_available(tenant)
     except Exception as _e:
         logger.warning("auth_status SSO check failed: %s", _e)
         # Fallback al comportamento precedente
@@ -522,6 +538,7 @@ async def auth_status():
         sso_migration_active = False
         password_login_vis = True
         two_factor_required = False
+        local_login_avail = False
 
     return {
         "password_auth_enabled": password_auth_enabled(),
@@ -530,6 +547,7 @@ async def auth_status():
         "sso_origin": sso_origin,
         "sso_migration_active": sso_migration_active,
         "password_login_visible": password_login_vis,
+        "local_login_available": local_login_avail,
         "admin_password_login": admin_password_login,
         "sso_enabled": sso_enabled,
         "sso_provider": sso_provider,

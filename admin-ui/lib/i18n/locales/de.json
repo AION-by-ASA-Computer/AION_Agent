@@ -1296,7 +1296,9 @@
       "link_expires": "Läuft ab am {{date}}",
       "link_invite": "Einladung ausstehend",
       "link_reset": "Zurücksetzen ausstehend",
-      "temp_password": "Temporäres Passwort"
+      "temp_password": "Temporäres Passwort",
+      "local": "Lokales Konto",
+      "local_title": "Meldet sich mit Benutzername und Passwort an, ohne SSO"
     },
     "row": {
       "profiles": "Profilzugriff für {{name}}",
@@ -1361,7 +1363,10 @@
       "issue_temp": "Temporäres Passwort erzeugen",
       "temp_hint": "Ohne SMTP wird ein temporäres Passwort erzeugt, nur einmal angezeigt, das das aktuelle sofort ersetzt. Die Person muss es bei der ersten Anmeldung ändern.",
       "temp_note": "Der E-Mail-Server ist nicht konfiguriert: Es wird ein temporäres Passwort erzeugt und nur einmal angezeigt, das du der Person mitteilst. Bei der ersten Anmeldung muss sie ein neues wählen.",
-      "create_with_temp": "Erstellen und Passwort erzeugen"
+      "create_with_temp": "Erstellen und Passwort erzeugen",
+      "local_warning": "Lokales Konto ohne SSO: Die Person meldet sich mit Benutzername und Passwort an, ohne die Authentifizierung (und MFA) des Unternehmens. Nur für Dritte verwenden, die kein SSO nutzen können; das Unternehmen trägt die Verantwortung für diesen Zugang. Das Konto hat immer die Benutzerrolle.",
+      "local_ack": "Ich verstehe die Risiken und lege dieses Konto auf eigene Verantwortung an.",
+      "local_admin_disabled": "Für lokale Konten nicht verfügbar."
     },
     "profiles": {
       "title": "Profilzugriff",
@@ -1414,7 +1419,8 @@
       "invite_failed": "Benutzer erstellt, aber die Einladung an {{email}} wurde nicht gesendet: {{error}}. Sie können sie in der Liste erneut senden.",
       "link_failed": "Link konnte nicht gesendet werden: {{error}}",
       "link_sent_reset": "Link zum Zurücksetzen an {{email}} gesendet.",
-      "link_sent_invite": "Einladung an {{email}} gesendet."
+      "link_sent_invite": "Einladung an {{email}} gesendet.",
+      "local_account_admin_forbidden": "Ein lokales Konto kann kein Administrator sein."
     },
     "filter": {
       "aria": "Nach {{col}} filtern",
@@ -1482,7 +1488,8 @@
       "links_sent_one": "E-Mail an {{email}} gesendet.",
       "links_sent": "E-Mails gesendet: {{count}}.",
       "links_failed": "Versand an {{names}} fehlgeschlagen ({{error}}).",
-      "links_missing_email": "Keine E-Mail-Adresse, kein Link gesendet: {{names}}."
+      "links_missing_email": "Keine E-Mail-Adresse, kein Link gesendet: {{names}}.",
+      "local": "Lokal"
     },
     "sso_guide": {
       "title": "So richten Sie Microsoft Entra ID ein",

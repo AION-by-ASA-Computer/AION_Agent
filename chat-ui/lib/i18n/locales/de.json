@@ -1010,7 +1010,8 @@
       "session_invalid": "Sitzung abgelaufen, bitte erneut anmelden.",
       "user_not_found": "Benutzer nicht gefunden.",
       "sso_signup_closed": "Derzeit werden keine neuen Konten angenommen. Wenden Sie sich an Ihren Administrator, um Zugriff anzufordern.",
-      "sso_signup_not_allowed": "Ihr Konto ist für diese Plattform noch nicht freigeschaltet. Wenden Sie sich an Ihren Administrator, um Zugriff anzufordern."
+      "sso_signup_not_allowed": "Ihr Konto ist für diese Plattform noch nicht freigeschaltet. Wenden Sie sich an Ihren Administrator, um Zugriff anzufordern.",
+      "local_account_no_sso": "Dieses Konto ist lokal und kann nicht mit Single Sign-on verknüpft werden."
     },
     "forgot_password": "Passwort vergessen?"
   },

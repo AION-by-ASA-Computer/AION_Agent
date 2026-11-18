@@ -41,6 +41,12 @@ const nextConfig: NextConfig = {
     NEXT_PUBLIC_AION_VERSION: version,
     NEXT_PUBLIC_BASE_PATH: basePath || "",
   },
+  experimental: {
+    // Marks this app as tracking security-only Next.js upgrades (set by the
+    // Next.js agent upgrade flow), so future security advisories are handled
+    // as patch bumps rather than feature upgrades.
+    agentUpgrade: "security",
+  },
 };
 
 export default nextConfig;

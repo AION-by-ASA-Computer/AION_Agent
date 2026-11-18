@@ -1010,7 +1010,8 @@
       "session_invalid": "Session expired, please sign in again.",
       "user_not_found": "User not found.",
       "sso_signup_closed": "New accounts aren't being accepted right now. Contact your administrator to request access.",
-      "sso_signup_not_allowed": "Your account isn't enabled for this platform yet. Contact your administrator to request access."
+      "sso_signup_not_allowed": "Your account isn't enabled for this platform yet. Contact your administrator to request access.",
+      "local_account_no_sso": "This account is local and cannot be linked to single sign-on."
     },
     "forgot_password": "Forgot password?"
   },

@@ -4001,6 +4001,10 @@ class UserCreate(BaseModel):
     can_create_api_keys: bool = False
     max_api_keys: int = Field(5, ge=1, le=100)
     api_key_max_ttl_days: int = Field(90, ge=1, le=3650)
+    # Local (username + password) account for third parties who cannot use the
+    # company SSO. Needed to create a user while an SSO mode is active; the
+    # account is exempt from the SSO migration and can never be an admin.
+    local_account: bool = False
 
 
 class UserUpdate(BaseModel):
@@ -4103,6 +4107,7 @@ async def list_users(include_service: bool = False):
                 "setup_link_send_error": link["send_error"] if link else None,
                 "sso_providers": sorted({i.provider for i in idents}),
                 "sso_migration_exempt": exempt,
+                "local_account": bool(getattr(r, "local_account", False)),
                 # Da migrare: SSO attivo, ha ancora la password (o un link per
                 # impostarla), non esonerato e non ha confermato l'identita'
                 # sul provider attivo.
@@ -4165,10 +4170,18 @@ async def create_user(
     # always tells which kind of account it is (and LTM gating can rely on it).
     if is_reserved_identifier(body.identifier):
         raise HTTPException(status_code=422, detail={"code": "identifier_reserved"})
+    # A local account is a password-only account for people who cannot use the
+    # company IdP: it must never carry the admin role (a permanent bypass of the
+    # IdP and its MFA).
+    if body.local_account and "admin" in (body.roles or []):
+        raise HTTPException(
+            status_code=422, detail={"code": "local_account_admin_forbidden"}
+        )
     # Con SSO attivo gli account nascono solo al primo login SSO
-    # (vedi signup policy): niente nuovi utenti con password.
+    # (vedi signup policy): niente nuovi utenti con password, salvo che l'admin
+    # chieda esplicitamente un account locale (terzi senza SSO).
     settings = await get_login_settings(body.tenant_id or "default")
-    if settings.get("login_mode", "password") != "password":
+    if settings.get("login_mode", "password") != "password" and not body.local_account:
         raise HTTPException(
             status_code=409,
             detail={"code": "sso_active_user_creation_disabled"},
@@ -4197,6 +4210,12 @@ async def create_user(
             u.can_create_api_keys = body.can_create_api_keys
             u.max_api_keys = body.max_api_keys
             u.api_key_max_ttl_days = body.api_key_max_ttl_days
+            if body.local_account:
+                # Local accounts are always exempt from the SSO migration, so
+                # pending counts, lists and mode switches skip them (see
+                # ``User.local_account``).
+                u.local_account = True
+                u.sso_migration_exempt = True
             await session.commit()
 
     delivered = await deliver_password_setup(
@@ -4213,7 +4232,12 @@ async def create_user(
         operation="user.create",
         resource_type="user",
         resource_id=uid,
-        payload={"identifier": body.identifier, "roles": body.roles, **audit},
+        payload={
+            "identifier": body.identifier,
+            "roles": body.roles,
+            "local_account": body.local_account,
+            **audit,
+        },
     )
     return {"status": "success", "id": uid, **out}
 
@@ -4287,10 +4311,13 @@ async def send_password_link(
         raise HTTPException(status_code=409, detail={"code": blocked})
 
     sso_mode = (await get_login_settings(tenant_id)).get("login_mode") != "password"
+    # A local account never links SSO: it gets plain invite/reset links and must
+    # not reopen the migration (that would block new SSO sign-ups).
+    is_local = bool(getattr(u, "local_account", False))
     if u.password_hash:
         purpose = "reset"
     else:
-        purpose = "migration" if sso_mode else "invite"
+        purpose = "migration" if sso_mode and not is_local else "invite"
     delivered = await deliver_password_setup(
         tenant_id,
         [user_id],
@@ -4300,7 +4327,11 @@ async def send_password_link(
     )
     out, audit = _delivery_outcome(delivered, key=None)
     # Con SSO attivo l'utente dovra' collegarsi: serve il form password.
-    if sso_mode and (out.get("sent") or delivered["delivery"] == "temp_password"):
+    if (
+        sso_mode
+        and not is_local
+        and (out.get("sent") or delivered["delivery"] == "temp_password")
+    ):
         await reopen_migration(tenant_id)
     await record_admin_action(
         tenant_id=tenant_id,
@@ -4333,6 +4364,16 @@ async def update_user(
             raise HTTPException(
                 status_code=409,
                 detail={"code": "service_account_use_dedicated_endpoint"},
+            )
+
+        # Local accounts (third parties without SSO) can never become admins.
+        if (
+            body.roles is not None
+            and bool(getattr(u, "local_account", False))
+            and "admin" in body.roles
+        ):
+            raise HTTPException(
+                status_code=422, detail={"code": "local_account_admin_forbidden"}
             )
 
         if (

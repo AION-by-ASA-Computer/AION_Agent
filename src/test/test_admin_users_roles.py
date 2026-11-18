@@ -209,6 +209,76 @@ async def test_create_user_blocked_when_sso_active(monkeypatch, tmp_path):
 
 
 @pytest.mark.anyio
+async def test_create_local_account_allowed_when_sso_active(monkeypatch, tmp_path):
+    """Scenario: with SSO active an admin can still create a local account for a
+    third party; it is flagged local + exempt and gets an invite (no password
+    chosen by the admin)."""
+    sm = await _setup(monkeypatch, tmp_path)
+    from src.api.admin import UserCreate, create_user, list_users
+    from src.data.models import User
+    from sqlalchemy import select
+
+    await _set_login_mode(sm, "microsoft")
+    out = await create_user(
+        UserCreate(identifier="ext", email="ext@partner.io", local_account=True),
+        request=None,
+        auth=_auth(),
+    )
+    assert out["status"] == "success"
+    async with sm() as session:
+        u = (
+            await session.execute(select(User).where(User.identifier == "ext"))
+        ).scalar_one()
+        assert u.local_account is True
+        assert u.sso_migration_exempt is True
+
+    listing = await list_users()
+    row = next(r for r in listing["users"] if r["identifier"] == "ext")
+    assert row["local_account"] is True
+    assert row["migration_pending"] is False
+    # Ordinary users are not local accounts.
+    assert (
+        next(r for r in listing["users"] if r["identifier"] == "u1")["local_account"]
+        is False
+    )
+
+
+@pytest.mark.anyio
+async def test_local_account_cannot_be_admin(monkeypatch, tmp_path):
+    """Scenario: a local account is never an admin, neither at creation nor by a
+    later promotion (it would be a permanent bypass of the IdP)."""
+    sm = await _setup(monkeypatch, tmp_path)
+    from src.api.admin import UserCreate, UserUpdate, create_user, update_user
+    from src.data.models import User
+    from sqlalchemy import select
+
+    await _set_login_mode(sm, "microsoft")
+    with pytest.raises(HTTPException) as e:
+        await create_user(
+            UserCreate(
+                identifier="ext", email="e@p.io", roles=["admin"], local_account=True
+            ),
+            request=None,
+            auth=_auth(),
+        )
+    assert e.value.status_code == 422
+    assert e.value.detail == {"code": "local_account_admin_forbidden"}
+
+    await create_user(
+        UserCreate(identifier="ext2", email="e2@p.io", local_account=True),
+        request=None,
+        auth=_auth(),
+    )
+    async with sm() as session:
+        uid = (
+            await session.execute(select(User.id).where(User.identifier == "ext2"))
+        ).scalar_one()
+    with pytest.raises(HTTPException) as e:
+        await update_user(uid, UserUpdate(roles=["admin"]), auth=_auth())
+    assert e.value.detail == {"code": "local_account_admin_forbidden"}
+
+
+@pytest.mark.anyio
 async def test_signup_policy_endpoints(monkeypatch, tmp_path):
     sm = await _setup(monkeypatch, tmp_path)
     monkeypatch.delenv("AION_DEFAULT_TENANT_ID", raising=False)

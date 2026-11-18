@@ -1010,7 +1010,8 @@
       "session_invalid": "Session expirée, reconnectez-vous.",
       "user_not_found": "Utilisateur introuvable.",
       "sso_signup_closed": "Les nouveaux comptes ne sont pas acceptés pour le moment. Contactez votre administrateur pour demander l'accès.",
-      "sso_signup_not_allowed": "Votre compte n'est pas encore activé pour cette plateforme. Contactez votre administrateur pour demander l'accès."
+      "sso_signup_not_allowed": "Votre compte n'est pas encore activé pour cette plateforme. Contactez votre administrateur pour demander l'accès.",
+      "local_account_no_sso": "Ce compte est local et ne peut pas être lié à l'authentification unique."
     },
     "forgot_password": "Mot de passe oublié ?"
   },

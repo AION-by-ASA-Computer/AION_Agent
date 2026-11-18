@@ -199,6 +199,12 @@ flowchart TD
 - Delete existing accounts (the user's API keys are deleted too).
 - Set the per-user **API key policy** (see below).
 
+**Local accounts with SSO:** while an SSO login mode is active, *Add user* creates a
+**local account** (username + password, for third parties who cannot use SSO). The
+dialog shows a risk warning with a mandatory acknowledgement and locks the role to
+`user`; the list shows a "Local account" badge. See
+[SSO migration](../security/sso-migration.md#local-accounts-third-parties-without-sso).
+
 **Passwords:** admins never see, choose or receive user passwords.
 `POST /admin/users` requires an email and sends an **invite** link; the response
 only says whether it was sent (`invite: {sent, expires_at}` or `{sent: false, error}`).

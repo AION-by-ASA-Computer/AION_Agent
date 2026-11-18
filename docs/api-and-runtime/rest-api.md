@@ -463,7 +463,7 @@ Personal keys are managed by the user with a chat token (`Authorization: Bearer 
 
 The per-user policy (`can_create_api_keys`, `max_api_keys`, `api_key_max_ttl_days`) is set by the admin via `POST /admin/users` / `PUT /admin/users/{id}`. There are no `/admin/api-keys` endpoints.
 
-`POST /admin/users` creates password accounts only: with an SSO login mode active it returns `409 {"code": "sso_active_user_creation_disabled"}`. Who can get an account at first SSO sign-in is set with `GET`/`PUT /admin/auth/signup-policy` (see [SSO migration](../security/sso-migration.md#3-new-accounts-in-sso-mode)).
+`POST /admin/users` creates password accounts only: with an SSO login mode active it returns `409 {"code": "sso_active_user_creation_disabled"}` unless the body sets `local_account: true`, which creates a deliberate username + password account (user role only: `422 {"code": "local_account_admin_forbidden"}` with `admin`). `GET /admin/users` returns `local_account` per user and `GET /auth/status` returns `local_login_available`. See [Local accounts](../security/sso-migration.md#local-accounts-third-parties-without-sso). Who can get an account at first SSO sign-in is set with `GET`/`PUT /admin/auth/signup-policy` (see [SSO migration](../security/sso-migration.md#3-new-accounts-in-sso-mode)).
 
 ---
 
