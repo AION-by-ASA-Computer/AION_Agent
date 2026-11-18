@@ -128,6 +128,8 @@ async def _patch_sqlite_columns(engine: AsyncEngine, conn) -> None:
         for col, ddl in (
             ("account_type", "account_type VARCHAR(16) NOT NULL DEFAULT 'human'"),
             ("disabled_at", "disabled_at DATETIME"),
+            # Local accounts under SSO (i7l8c9a037).
+            ("local_account", "local_account BOOLEAN NOT NULL DEFAULT 0"),
         ):
             await _sqlite_add_column_if_missing(conn, "users", col, ddl)
         await _sqlite_create_index_if_missing(

@@ -101,7 +101,7 @@ async def setup_password(body: SetupBody, request: Request) -> Dict[str, Any]:
 async def password_reset_available(tenant_id: str) -> bool:
     """Il link "Password dimenticata?" ha senso solo con SMTP configurato e
     form password visibile."""
-    from src.auth.sso.login_mode import password_login_visible
+    from src.auth.sso.login_mode import local_login_available, password_login_visible
     from src.chat_auth import password_auth_enabled
     from src.notifications.smtp_settings import smtp_configured
 
@@ -109,7 +109,10 @@ async def password_reset_available(tenant_id: str) -> bool:
         return False
     if not await smtp_configured(tenant_id):
         return False
-    return await password_login_visible(tenant_id)
+    # Local accounts (third parties without SSO) keep a password form under SSO.
+    return await password_login_visible(tenant_id) or await local_login_available(
+        tenant_id
+    )
 
 
 async def _send_reset(tenant_id: str, identifier: str, base_url: str) -> None:
@@ -126,7 +129,11 @@ async def _send_reset(tenant_id: str, identifier: str, base_url: str) -> None:
             return
         if user.password_hash:
             purpose = "reset"
-        elif (await get_login_settings(tenant_id))["login_mode"] == "password":
+        elif (
+            bool(getattr(user, "local_account", False))
+            or (await get_login_settings(tenant_id))["login_mode"] == "password"
+        ):
+            # Local accounts never link SSO: plain invite, no migration link.
             purpose = "invite"
         else:
             purpose = "migration"

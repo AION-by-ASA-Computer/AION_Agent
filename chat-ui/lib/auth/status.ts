@@ -12,6 +12,8 @@ export type AuthStatus = {
   password_login_visible?: boolean;
   two_factor_required?: boolean;
   password_reset_available?: boolean;
+  /** SSO is active and at least one local (username + password) account exists: show the "local account" link. */
+  local_login_available?: boolean;
 };
 
 const DEFAULT_STATUS: AuthStatus = {
@@ -25,6 +27,7 @@ const DEFAULT_STATUS: AuthStatus = {
   sso_migration_active: false,
   password_login_visible: true,
   password_reset_available: false,
+  local_login_available: false,
 };
 
 /** Una sola richiesta per pagina: cache module-level. */
@@ -48,6 +51,7 @@ export function fetchAuthStatus(force = false): Promise<AuthStatus> {
         sso_migration_active: Boolean(j.sso_migration_active),
         password_login_visible: j.password_login_visible !== undefined ? Boolean(j.password_login_visible) : true,
         password_reset_available: Boolean(j.password_reset_available),
+        local_login_available: Boolean(j.local_login_available),
       };
     } catch {
       return DEFAULT_STATUS;

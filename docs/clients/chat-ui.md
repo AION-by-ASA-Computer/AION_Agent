@@ -54,7 +54,7 @@ Backend (`.env`): `AION_CORS_ORIGINS` can list `http://localhost:8003`; default 
 - `GET /sessions/{id}/events/stream` — session Redis events (plan approval)
 - `POST /chat/stop` — stream interruption
 - `GET /profiles`
-- `POST /auth/login`, `GET /auth/me` — password login (requires `AION_CHAT_PASSWORD_AUTH=1`)
+- `POST /auth/login`, `GET /auth/me` — password login (requires `AION_CHAT_PASSWORD_AUTH=1`). With SSO active the login page always shows the SSO button together with the username/password form (local accounts sign in with the latter; other users are redirected to SSO by the backend)
 - `GET|POST /chat-ui/conversations` — list/create conversations on the unified DB
 - `GET|POST /chat-ui/conversations/{id}/threads` — side threads of a conversation ([Side threads](./side-threads.md))
 - `GET /chat-ui/conversations/{id}/stream-status` — `/chat` turn still executing (reconnection after navigation)

@@ -1296,7 +1296,9 @@
       "link_expires": "Caduca el {{date}}",
       "link_invite": "Invitación pendiente",
       "link_reset": "Restablecimiento pendiente",
-      "temp_password": "Contraseña temporal"
+      "temp_password": "Contraseña temporal",
+      "local": "Cuenta local",
+      "local_title": "Inicia sesión con usuario y contraseña, sin SSO"
     },
     "row": {
       "profiles": "Acceso a perfiles de {{name}}",
@@ -1361,7 +1363,10 @@
       "issue_temp": "Generar contraseña temporal",
       "temp_hint": "Sin SMTP se genera una contraseña temporal, que se muestra una sola vez y sustituye de inmediato a la actual. El usuario debe cambiarla en el primer inicio de sesión.",
       "temp_note": "El servidor de correo no está configurado: se generará una contraseña temporal, que se muestra una sola vez, para que se la comuniques al usuario. En el primer inicio de sesión deberá elegir una nueva.",
-      "create_with_temp": "Crear y generar contraseña"
+      "create_with_temp": "Crear y generar contraseña",
+      "local_warning": "Cuenta local sin SSO: la persona inicia sesión con usuario y contraseña, sin la autenticación (ni el MFA) de la empresa. Úsala solo para terceros que no pueden usar SSO; la responsabilidad de este acceso es de la empresa. La cuenta siempre tendrá el rol de usuario.",
+      "local_ack": "Entiendo los riesgos y creo esta cuenta bajo mi responsabilidad.",
+      "local_admin_disabled": "No disponible para cuentas locales."
     },
     "profiles": {
       "title": "Acceso a perfiles",
@@ -1414,7 +1419,8 @@
       "invite_failed": "Usuario creado, pero la invitación a {{email}} no se envió: {{error}}. Puedes reenviarla desde la lista.",
       "link_failed": "No se pudo enviar el enlace: {{error}}",
       "link_sent_reset": "Enlace de restablecimiento enviado a {{email}}.",
-      "link_sent_invite": "Invitación enviada a {{email}}."
+      "link_sent_invite": "Invitación enviada a {{email}}.",
+      "local_account_admin_forbidden": "Una cuenta local no puede ser administradora."
     },
     "filter": {
       "aria": "Filtrar por {{col}}",
@@ -1482,7 +1488,8 @@
       "links_sent_one": "Correo enviado a {{email}}.",
       "links_sent": "Correos enviados: {{count}}.",
       "links_failed": "No se pudo enviar a {{names}} ({{error}}).",
-      "links_missing_email": "Sin correo, no se envió ningún enlace: {{names}}."
+      "links_missing_email": "Sin correo, no se envió ningún enlace: {{names}}.",
+      "local": "Local"
     },
     "sso_guide": {
       "title": "Cómo configurar Microsoft Entra ID",

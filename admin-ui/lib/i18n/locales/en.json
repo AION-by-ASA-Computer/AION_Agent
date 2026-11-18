@@ -1297,7 +1297,9 @@
       "link_expires": "Expires {{date}}",
       "link_invite": "Invite pending",
       "link_reset": "Reset pending",
-      "temp_password": "Temporary password"
+      "temp_password": "Temporary password",
+      "local": "Local account",
+      "local_title": "Signs in with a username and password, without SSO"
     },
     "row": {
       "profiles": "Profile access for {{name}}",
@@ -1362,7 +1364,10 @@
       "issue_temp": "Generate temporary password",
       "temp_hint": "Without SMTP a temporary password is generated, shown only once, and replaces the current one right away. The user must change it at first sign-in.",
       "temp_note": "The email server isn't configured: a temporary password will be generated, shown only once, for you to give the user. At first sign-in they must choose a new one.",
-      "create_with_temp": "Create and generate password"
+      "create_with_temp": "Create and generate password",
+      "local_warning": "Local account without SSO: this person signs in with a username and password, bypassing your company's sign-in (and its MFA). Use it only for third parties who cannot use SSO; the company is responsible for this access. The account always has the user role.",
+      "local_ack": "I understand the risks and create this account on my own responsibility.",
+      "local_admin_disabled": "Not available for local accounts."
     },
     "profiles": {
       "title": "Profile access",
@@ -1415,7 +1420,8 @@
       "invite_failed": "User created, but the invite to {{email}} wasn't sent: {{error}}. You can resend it from the list.",
       "link_failed": "Couldn't send the link: {{error}}",
       "link_sent_reset": "Reset link sent to {{email}}.",
-      "link_sent_invite": "Invite sent to {{email}}."
+      "link_sent_invite": "Invite sent to {{email}}.",
+      "local_account_admin_forbidden": "A local account cannot be an administrator."
     },
     "filter": {
       "aria": "Filter by {{col}}",
@@ -1483,7 +1489,8 @@
       "links_sent_one": "Email sent to {{email}}.",
       "links_sent": "Emails sent: {{count}}.",
       "links_failed": "Couldn't send to {{names}} ({{error}}).",
-      "links_missing_email": "No email address, no link sent: {{names}}."
+      "links_missing_email": "No email address, no link sent: {{names}}.",
+      "local": "Local"
     },
     "sso_guide": {
       "title": "How to set up Microsoft Entra ID",

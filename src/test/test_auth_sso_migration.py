@@ -880,3 +880,229 @@ async def test_back_to_password_sends_links_not_passwords(env, monkeypatch):
     assert sorted(m["To"] for m in env["smtp"].sent) == ["bob@x.io", "root@x.io"]
     for uid in (adm, bob):
         assert (await env["get_user"](uid)).password_hash is None
+
+
+# --- Local accounts (third parties without SSO) -----------------------------
+
+
+async def _make_local(env, uid: str) -> None:
+    """Mark ``uid`` as a local account (always exempt too, like the API does)."""
+    from src.data.models import User
+
+    async with env["sm"]() as s:
+        u = await s.get(User, uid)
+        u.local_account = True
+        u.sso_migration_exempt = True
+        await s.commit()
+    env["lm"]._invalidate_cache("default")
+
+
+async def _login(username: str, password: str):
+    from src.api.auth_login import LoginBody, login
+
+    return await login(LoginBody(username=username, password=password))
+
+
+@with_env
+async def test_local_account_logs_in_after_migration_completes(env, monkeypatch):
+    """Scenario: SSO active, migration finished (password form hidden for
+    everybody). A local account still signs in with its password and is not
+    asked to link SSO; a plain exempt user is still refused."""
+    from fastapi import HTTPException
+
+    await env["set"](login_mode="google", sso_origin="first_setup")
+    local = await env["mkuser"]("ext")
+    await _make_local(env, local)
+    plain_exempt = await env["mkuser"]("old")
+    async with env["sm"]() as s:
+        from src.data.models import User
+
+        (await s.get(User, plain_exempt)).sso_migration_exempt = True
+        await s.commit()
+    env["lm"]._invalidate_cache("default")
+
+    assert not await env["lm"].password_login_visible("default")
+    res = await _login("ext", "pw-ext")
+    assert res["access_token"]
+    assert res["sso_link_required"] is False
+
+    # No regression: an exempt user that is NOT local keeps being refused.
+    with pytest.raises(HTTPException) as e:
+        await _login("old", "pw-old")
+    assert e.value.status_code == 403
+    assert e.value.detail["code"] == "password_login_disabled"
+
+
+@with_env
+async def test_exempt_non_local_still_sso_required_during_migration(env, monkeypatch):
+    """Scenario: migration in progress (form visible). An exempt non-local user
+    gets sso_required, exactly as before this feature."""
+    from fastapi import HTTPException
+
+    await env["set"](login_mode="google", sso_origin="migration")
+    await env["mkuser"]("pending")  # keeps the migration open
+    uid = await env["mkuser"]("old")
+    async with env["sm"]() as s:
+        from src.data.models import User
+
+        (await s.get(User, uid)).sso_migration_exempt = True
+        await s.commit()
+    env["lm"]._invalidate_cache("default")
+    with pytest.raises(HTTPException) as e:
+        await _login("old", "pw-old")
+    assert e.value.detail["code"] == "sso_required"
+
+
+@with_env
+async def test_local_login_available_flag(env, monkeypatch):
+    """Scenario: local_login_available is true only when an active local
+    account exists (password or live setup link)."""
+    lm = env["lm"]
+    await env["set"](login_mode="google", sso_origin="first_setup")
+    assert not await lm.local_login_available("default")
+    uid = await env["mkuser"]("ext")
+    assert not await lm.local_login_available("default")  # not local yet
+    await _make_local(env, uid)
+    assert await lm.local_login_available("default")
+
+
+@with_env
+async def test_local_account_never_pending_nor_linked(env, monkeypatch):
+    """Scenario: local accounts are not counted as pending, never need to link,
+    and keep their password even if an identity is attached by hand."""
+    lm = env["lm"]
+    await env["set"](login_mode="google", sso_origin="migration")
+    uid = await env["mkuser"]("ext")
+    await _make_local(env, uid)
+    assert await lm.pending_users_count("default", "google") == 0
+    assert not await lm.user_needs_link("default", uid)
+    await env["prov"].link_identity_to_user(
+        "default", uid, _claims("sx", "ext@x.io"), {}, PROVIDER,
+        finalize_migration=True,
+    )
+    await lm.finalize_linked_users("default", "google")
+    assert (await env["get_user"](uid)).password_hash is not None
+
+
+@with_env
+async def test_setup_links_refused_for_local_account(env, monkeypatch):
+    """Scenario: migration links are never sent to a local account (they would
+    reopen the migration)."""
+    await env["set"](login_mode="google", sso_origin="first_setup")
+    uid = await env["mkuser"]("ext")
+    await _make_local(env, uid)
+    with pytest.raises(ValueError, match="local_account_no_sso"):
+        await env["lm"].send_migration_links(
+            "default", [uid], "google", actor_user_id=None
+        )
+    assert not await env["lm"].is_migration_active("default")
+
+
+@with_env
+async def test_exempt_endpoint_refuses_local_account(env, monkeypatch):
+    """Scenario: the exempt toggle cannot un-exempt a local account."""
+    from fastapi import HTTPException
+
+    import src.api.admin_auth_mode as aam
+    from src.api.admin_auth_mode import ExemptBody, set_user_exempt
+    from src.api.auth_login import ChatAuthIdentity
+
+    # admin_auth_mode binds the session maker at import time: point it at the
+    # test DB too.
+    monkeypatch.setattr(aam, "get_async_session_maker", lambda: env["sm"])
+    await env["set"](login_mode="google", sso_origin="first_setup")
+    uid = await env["mkuser"]("ext")
+    await _make_local(env, uid)
+    with pytest.raises(HTTPException) as e:
+        await set_user_exempt(
+            uid,
+            ExemptBody(exempt=False),
+            auth=ChatAuthIdentity(user_row_id="a", via="chat_token", roles=["admin"]),
+        )
+    assert e.value.detail == {"code": "local_account_always_exempt"}
+
+
+@with_env
+async def test_auth_status_exposes_local_login_available(env, monkeypatch):
+    """Scenario: /auth/status tells chat-ui whether to offer the "local account"
+    link: false in password mode and without locals, true only in SSO mode
+    with at least one active local account."""
+    from src.api.auth_login import auth_status
+
+    uid = await env["mkuser"]("ext")
+    await _make_local(env, uid)
+    # Password mode: the main form is already visible, no extra link needed.
+    assert (await auth_status())["local_login_available"] is False
+    # SSO mode and a local account exists: the link must be offered.
+    await env["set"](login_mode="google", sso_origin="first_setup")
+    assert (await auth_status())["local_login_available"] is True
+    # Break-glass restores the password form for everyone: no extra link.
+    monkeypatch.setenv("AION_SSO_FORCE_PASSWORD", "1")
+    env["lm"]._invalidate_cache("default")
+    assert (await auth_status())["local_login_available"] is False
+
+
+@with_env
+async def test_sso_link_start_refused_for_local_account(env, monkeypatch):
+    """Scenario: a local account cannot start the SSO link flow (it would clear
+    its password and lock the third party out)."""
+    from fastapi import HTTPException
+
+    import src.api.auth_sso as asso
+    from src.api.auth_login import ChatAuthIdentity
+
+    monkeypatch.setattr(asso, "get_async_session_maker", lambda: env["sm"])
+    await env["set"](login_mode="google", sso_origin="first_setup")
+    uid = await env["mkuser"]("ext")
+    await _make_local(env, uid)
+    with pytest.raises(HTTPException) as e:
+        await asso.sso_link_start(
+            None,
+            asso.LinkStartBody(return_to="/"),
+            auth=ChatAuthIdentity(user_row_id=uid, via="chat_token"),
+        )
+    assert e.value.status_code == 409
+    assert e.value.detail == {"code": "local_account_no_sso"}
+
+
+@with_env
+async def test_password_link_for_local_account_does_not_reopen_migration(
+    env, monkeypatch
+):
+    """Scenario: an admin re-sends a password link to a local account while SSO
+    is active. The link is an invite (not a migration link) and the completed
+    migration stays closed, so new SSO sign-ups are not blocked."""
+    import src.api.admin as admin_mod
+    from src.api.admin import send_password_link
+    from src.data.models import User
+
+    # admin.py binds the session maker at import time: point it at the test DB.
+    monkeypatch.setattr(admin_mod, "get_async_session_maker", lambda: env["sm"])
+    lm = env["lm"]
+    await env["set"](login_mode="google", sso_origin="first_setup")
+    uid = await env["mkuser"]("ext")
+    async with env["sm"]() as s:
+        u = await s.get(User, uid)
+        u.email = "ext@partner.io"
+        u.password_hash = None  # invited but not yet activated
+        await s.commit()
+    await _make_local(env, uid)
+
+    out = await send_password_link(uid, request=None, auth=_admin())
+
+    assert out["purpose"] == "invite"
+    assert not await lm.is_migration_active("default")
+
+
+@with_env
+async def test_forgot_password_available_for_local_account_under_sso(env, monkeypatch):
+    """Scenario: after the migration the tenant-wide password form is hidden,
+    but "forgot password" must stay available once a local account exists
+    (it is the only way such an account can recover access)."""
+    from src.api.auth_password_setup import password_reset_available
+
+    await env["set"](login_mode="google", sso_origin="first_setup")
+    assert await password_reset_available("default") is False
+    uid = await env["mkuser"]("ext")
+    await _make_local(env, uid)
+    assert await password_reset_available("default") is True

@@ -22,6 +22,8 @@ logger = logging.getLogger("aion.sso.login_mode")
 # Cache semplice in memoria (tenant_id → (expiry, settings_dict))
 _SETTINGS_CACHE: Dict[str, tuple] = {}
 _PENDING_CACHE: Dict[str, tuple] = {}
+# tenant_id -> (expiry, bool): is there an active local (password-only) account?
+_LOCAL_CACHE: Dict[str, tuple] = {}
 CACHE_TTL = 15.0  # secondi
 
 
@@ -32,6 +34,7 @@ def _force_password() -> bool:
 
 def _invalidate_cache(tenant_id: str) -> None:
     _SETTINGS_CACHE.pop(tenant_id, None)
+    _LOCAL_CACHE.pop(tenant_id, None)
     # La cache dei pendenti e' indicizzata "tenant:provider": rimuovi tutte le chiavi del tenant.
     prefix = f"{tenant_id}:"
     for key in [k for k in _PENDING_CACHE if k.startswith(prefix)]:
@@ -250,6 +253,40 @@ async def password_login_visible(tenant_id: str) -> bool:
     return count > 0
 
 
+async def local_login_available(tenant_id: str) -> bool:
+    """True se esiste almeno un account locale (``users.local_account``) che
+    puo' accedere con la password mentre e' attivo l'SSO: ha una password o un
+    link di impostazione ancora valido.
+
+    Serve a chat-ui per mostrare il link "Accedi con un account locale" quando
+    il form password tenant-wide e' nascosto (migrazione conclusa) e a
+    "Password dimenticata?". Cache di 15s, invalidata da ``_invalidate_cache``.
+    """
+    from src.auth.password_setup import active_setup_link_exists
+
+    now = time.time()
+    cached = _LOCAL_CACHE.get(tenant_id)
+    if cached and now < cached[0]:
+        return cached[1]
+    async with get_async_session_maker()() as session:
+        count = (
+            await session.execute(
+                select(func.count())
+                .select_from(User)
+                .where(
+                    User.tenant_id == tenant_id,
+                    User.local_account == True,  # noqa: E712
+                    User.account_type != "service",
+                    User.disabled_at.is_(None),
+                    or_(User.password_hash.is_not(None), active_setup_link_exists()),
+                )
+            )
+        ).scalar_one()
+    result = count > 0
+    _LOCAL_CACHE[tenant_id] = (now + CACHE_TTL, result)
+    return result
+
+
 async def user_needs_link(tenant_id: str, user_row_id: str) -> bool:
     """Restituisce True se l'utente deve ancora collegarsi al provider SSO attivo."""
     settings = await get_login_settings(tenant_id)
@@ -264,6 +301,10 @@ async def user_needs_link(tenant_id: str, user_row_id: str) -> bool:
     async with get_async_session_maker()() as session:
         user = await session.get(User, user_row_id)
         if not user:
+            return False
+        # Local accounts (third parties without SSO) never link an identity.
+        # Redundant with the exemption below, but keeps the intent explicit.
+        if bool(getattr(user, "local_account", False)):
             return False
         if bool(getattr(user, "sso_migration_exempt", False)):
             return False
@@ -302,7 +343,13 @@ def finalize_user(user: User, clear_password: bool) -> bool:
     """Applica a un utente appena migrato: via TOTP e scadenza della password
     temporanea; con ``clear_password`` rimuove la password locale, admin
     compresi (accesso di emergenza: ``python -m src.auth.recover``).
-    Ritorna True se ha modificato qualcosa."""
+    Ritorna True se ha modificato qualcosa.
+
+    Un account locale (terzi senza SSO) non viene mai toccato: password e TOTP
+    sono il suo unico modo di accedere, anche se gli e' stata agganciata a mano
+    un'identita' SSO."""
+    if bool(getattr(user, "local_account", False)):
+        return False
     touched = False
     if user.totp_secret_encrypted or user.totp_enabled_at:
         _wipe_totp(user)
@@ -339,6 +386,9 @@ async def finalize_linked_users(tenant_id: str, provider: str) -> int:
                 await session.execute(
                     select(User).where(
                         User.tenant_id == tenant_id,
+                        # A local account must keep its password even if an
+                        # identity was attached to it by hand.
+                        User.local_account == False,  # noqa: E712
                         confirmed_identity_exists(tenant_id, provider, since),
                     )
                 )
@@ -689,6 +739,12 @@ async def send_migration_links(
     ``ValueError("user_already_linked:<id>")`` per chi e' gia' collegato.
     """
     async with get_async_session_maker()() as session:
+        # Local accounts never join the SSO migration: refuse instead of
+        # emailing them a link that would reopen it.
+        for uid in user_ids:
+            u = await session.get(User, uid)
+            if u is not None and bool(getattr(u, "local_account", False)):
+                raise ValueError(f"local_account_no_sso:{uid}")
         for uid in user_ids:
             already_linked = (
                 (

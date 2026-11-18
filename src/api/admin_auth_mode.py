@@ -88,8 +88,10 @@ async def get_login_mode(
                     User.tenant_id == tenant,
                     User.sso_migration_exempt == True,  # noqa: E712
                     # Service accounts are exempt by construction: not people
-                    # the admin chose to exclude, so not counted here.
+                    # the admin chose to exclude, so not counted here. The same
+                    # goes for local accounts (created on purpose without SSO).
                     User.account_type != "service",
+                    User.local_account.is_(False),  # noqa: E712
                 )
             )
             exempt = (await session.execute(exempt_q)).scalar_one()
@@ -299,6 +301,7 @@ async def list_migration_users(
                 User.tenant_id == tenant,
                 User.sso_migration_exempt == True,  # noqa: E712
                 User.account_type != "service",
+                User.local_account.is_(False),  # noqa: E712
             )
         elif status == "migrated" and provider:
             stmt = select(User).where(
@@ -435,6 +438,10 @@ async def set_user_exempt(
         # Service accounts stay exempt: they have nothing to link to SSO.
         if getattr(user, "account_type", "human") == "service":
             raise HTTPException(409, detail={"code": "service_account_always_exempt"})
+        # Local accounts must stay exempt: un-exempting one would push it into
+        # the SSO migration it was created to avoid.
+        if bool(getattr(user, "local_account", False)):
+            raise HTTPException(409, detail={"code": "local_account_always_exempt"})
         user.sso_migration_exempt = body.exempt
         await session.commit()
 

@@ -74,7 +74,7 @@ The admin login page then shows the password form again (an admin has a password
 
 With an SSO mode active, accounts are created **only** by single sign-on, at each person's first login (auto-provisioning, after the migration has completed or with `origin = first_setup`):
 
-- `POST /admin/users` returns `409 {"code": "sso_active_user_creation_disabled"}`: no new password accounts. The admin-ui hides the "Add user" button and points to the new-account policy instead.
+- `POST /admin/users` returns `409 {"code": "sso_active_user_creation_disabled"}` unless the request sets `local_account: true` (see [Local accounts](#local-accounts-third-parties-without-sso)). The admin-ui keeps the "Add user" button and creates local accounts, with a risk warning.
 - The default-admin bootstrap (`AION_SETUP_ADMIN_BOOTSTRAP`, backend startup and `setup_aion_env.py`) and the setup wizard's chat user are skipped. Emergency access still goes through the recovery CLI (see Break-glass).
 
 ### New-account policy
@@ -92,6 +92,18 @@ Since every account of the company tenant/domain could sign in, the administrato
 - It can be configured while still in password mode (e.g. before switching), and is enforced only in SSO mode. The list is kept when switching to `closed`, so a gradual rollout can be paused and resumed.
 - Entries are case-insensitive and deduplicated; at most 2000.
 - chat-ui shows a translated message for both error codes (`login.sso_error.*`).
+
+### Local accounts (third parties without SSO)
+
+An administrator can deliberately create a **username + password** account while an SSO mode is active, for people who cannot use the company identity provider (consultants, suppliers). The company accepts the risk: these accounts bypass the IdP's own policies and MFA.
+
+- **Creation**: admin-ui → Users → *Add user* shows a risk warning and a mandatory acknowledgement, and sends `POST /admin/users {"local_account": true}`. There is no global switch: the choice is per user. The password is delivered like any other new account (email invite, or a temporary password without SMTP); the admin never sees or chooses it.
+- **Role**: always `user`. `local_account` together with the `admin` role is rejected at creation and on `PUT /admin/users/{id}` with `422 {"code": "local_account_admin_forbidden"}`.
+- **Storage**: `users.local_account = true` (migration `i7l8c9a037`). The API also sets `sso_migration_exempt = true`, so every existing migration filter (pending count, lists, simulate, SSO→SSO and SSO→password links) already ignores local accounts. The flag only unlocks password login; ordinary exempt users still get `sso_required`.
+- **Login**: `POST /auth/login` skips the `password_login_disabled`, `sso_required` and `sso_link_required` gates for local accounts, during and after a migration. `GET /auth/status` returns `local_login_available` (SSO mode, at least one active local account); chat-ui's login page always shows the SSO button together with the username/password form, so no extra click is needed (non-local users who try the form still get `sso_required` / `password_login_disabled`). "Forgot password?" is available once a local account exists.
+- **Never linked to SSO**: `POST /auth/sso/link/start` answers `409 {"code": "local_account_no_sso"}` (linking would clear the password); migration links are refused; `POST /admin/auth/sso-migration/users/{id}/exempt` answers `409 {"code": "local_account_always_exempt"}`; auto-provisioning never links an identity to a local account by email. Re-sending a password link to a local account sends an `invite`/`reset` and does not reopen a completed migration.
+- **2FA**: TOTP applies only while `login_mode=password`, so local accounts have no second factor under SSO (follow-up).
+- **Break-glass**: unchanged. Admins are never local accounts.
 
 ## 4. The `handoff` State
 
