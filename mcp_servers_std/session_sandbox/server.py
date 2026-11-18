@@ -674,7 +674,8 @@ def sandbox_install_npm_packages(
     """
     Install npm packages into the session workspace (``workspace/node_modules``).
     Does **not** use ``sandbox_exec_allowlisted`` (exec policy may be disabled by default).
-    Example: packages=["docx"] then ``sandbox_run_node_file(relative_path="workspace/create_doc.js")``.
+    ``docx`` and ``pptxgenjs`` are preinstalled on the server: do not install them, just ``require()``.
+    Packages already preinstalled or installed earlier in this session are skipped.
     Requires ``AION_SANDBOX_ALLOW_NPM_INSTALL=1`` (default on).
     """
     from src.tools.session_npm import install_npm_packages
@@ -693,7 +694,8 @@ def sandbox_run_node_file(
 ) -> str:
     """
     Run ``node <relative_path>`` with cwd = session root. Accepts only ``workspace/*.js`` (.mjs / .cjs).
-    Use for **docx-js** skill. Install deps first with ``sandbox_install_npm_packages(packages=["docx"])``.
+    Use for **docx-js** skill (default for new .docx). ``docx`` is preinstalled: use CommonJS
+    ``require("docx")``, not ESM ``import``. On "Cannot find module" follow the returned HINT.
     **Do not** use ``sandbox_exec_allowlisted`` to run Node scripts â€” use this tool.
     For Python use ``sandbox_run_python_file``.
     """

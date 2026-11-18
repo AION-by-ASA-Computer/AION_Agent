@@ -1,10 +1,12 @@
 ---
 title: Service accounts
 sidebar_position: 6
-description: Non-human accounts managed by administrators for integrations that call AION with API keys, without login, SSO or personal data.
+description: Accounts for integrations and scripts (not people), managed by administrators.
 ---
 
 # Service accounts
+
+Use a service account when a tool or script, rather than a person, needs to call AION, for example an n8n workflow or a nightly report job. This page is for **administrators** who create these accounts and their API keys, and for **integrators** who use the keys.
 
 A service account is a **non-human identity** for an integration (n8n, a nightly script, another backend). It uses AION only through [API keys](./api-keys.md). Unlike a personal key, which acts as a person, a service-account key has:
 

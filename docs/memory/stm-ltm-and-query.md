@@ -1,15 +1,15 @@
 ---
 sidebar_position: 1
-title: STM, LTM and QueryMemory (PromQL Cache) - Conceptual Model
-description: Why three separate memory systems, data flows, and architectural trade-offs.
+title: Memory systems overview
+description: The three kinds of memory in AION (STM, LTM, QueryMemory), what each is for and how they work together.
 ---
 
 # Memory: STM, LTM and QueryMemory
 
-This document explains **why** the system has three separate memory systems and how they interact with each other.
+An AI agent needs to remember different things for different amounts of time: the last few messages of the current chat, durable facts about the user or a project, and proven queries it can reuse. AION keeps these in three separate systems: **STM** (short-term memory, the recent conversation), **LTM** (long-term memory, facts kept across conversations) and **QueryMemory** (a cache of validated PromQL and SQL queries). This page explains **why** they are separate, what each one stores and how they interact during a turn. Read it first if you are new to the memory subsystem; the pages linked below go into the details.
 
 :::info Mnemos (LTM v2)
-Standard profiles use **Mnemos** — an in-process LTM backend on `data/aion.db` with hybrid FTS + embedding recall, bi-temporal notes, and a nightly dream cycle. See [Mnemos Long-Term Memory](./mnemos.md) and the [architectural hardening report](./mnemos-hardening.md). MemPalace MCP remains for ERP navigation wings on metadata profiles.
+Standard profiles use **Mnemos** — an in-process LTM backend on `data/aion.db` with hybrid FTS (full-text search) + embedding recall, bi-temporal notes, and a nightly dream cycle. See [Mnemos Long-Term Memory](./mnemos.md) and the [architectural hardening report](./mnemos-hardening.md). The former external MemPalace MCP (Model Context Protocol) server has been removed; database navigation knowledge is now stored as Mnemos project notes.
 :::
 
 ## Why three separate memory systems?
@@ -19,7 +19,7 @@ The system implements **three memory levels** with distinct responsibilities:
 ```mermaid
 flowchart LR
     subgraph Memory Systems
-        STM[STM\nSQLite] --> LTM[LTM\nMnemos + MemPalace nav]
+        STM[STM\nSQLite] --> LTM[LTM\nMnemos]
         STM --> QM[QueryMemory\nPromQL Cache\nSQLite Embeddings]
     end
 
@@ -29,7 +29,7 @@ flowchart LR
     QM -->|PromQL Agent only| Pipeline
 ```
 
-### STM (Short-Term Memory) - Short-term memory
+### STM (short-term memory)
 
 **File:** `src/api/history.py` (and `src/data/history_bridge.py` for unified DB)  
 **Database:** `data/aion.db` (SQLite, default with `AION_UNIFIED_DB=1` via `messages` and `messages_fts` tables) or `data/chat_memory.db` (legacy / fallback if `AION_UNIFIED_DB=0`)
@@ -57,20 +57,19 @@ When the environment variable `AION_UNIFIED_DB=1` (active by default), the histo
 This "Bridge" component is instantiated by the global manager `ChatHistoryManager` (`src/api/history.py`) and is actively used by:
 - **`src/agent_pipeline.py`**: at the beginning of the turn to read the historical session messages (`get_window`) and during/at the end of the turn to record user/assistant messages (`add_message`/`upsert_message_content`) and individual steps executed by tools (`add_step`).
 - **`src/memory/stm_consolidator.py`**: to periodically retrieve messages not yet promoted to LTM (`fetch_unpromoted_rows`) and mark them as promoted (`mark_promoted`) after semantic extraction.
-- **MCP Server `memory` (`session_search`)**: to query the FTS5 index managed by the bridge and perform quick searches in the conversation history (`fts_search_blocking`).
+- **MCP server `query_memory` (`session_search`)**: to query the FTS5 index managed by the bridge and perform quick searches in the conversation history (`fts_search_blocking`).
 
-### LTM (Long-Term Memory) - Long-term memory
+### LTM (long-term memory)
 
 **File:** `src/memory/ltm_orchestrator.py`  
-**Backend:** MCP server `mempalace` (external)  
+**Backend:** Mnemos, in-process (`src/memory/mnemos/`), see [Mnemos Long-Term Memory](./mnemos.md)  
 **Extraction:** `src/memory/llm_extract.py`  
 **Consolidation:** `src/memory/stm_consolidator.py` and `src/memory/context_compressor.py`
 
-**First boot / Docker:** Chroma downloads the default ONNX model (~80MB) at the first semantic query.
-The backend performs a background warmup (`AION_MEMPALACE_WARMUP=1`, cache in
-`data/chroma_embedding_cache/`) and sends SSE keepalives during long tools
-(`AION_SSE_KEEPALIVE_SEC`). See also `scripts/warmup_chroma_embeddings.py` and
-`docker/Dockerfile.backend`.
+**SSE keepalives:** the backend sends SSE (Server-Sent Events) keepalives during long tools
+(`AION_SSE_KEEPALIVE_SEC`). The former Chroma/MemPalace embedding warmup
+(`AION_MEMPALACE_WARMUP`, `scripts/warmup_chroma_embeddings.py`) no longer applies:
+Mnemos embeddings are described in [Mnemos Long-Term Memory](./mnemos.md).
 
 **Responsibilities:**
 - Store semantic information extracted from turns
@@ -85,7 +84,7 @@ The backend performs a background warmup (`AION_MEMPALACE_WARMUP=1`, cache in
 
 **Trade-off:** LTM sacrifices speed to achieve semantic persistence. LTM retrieval is slower because:
 1. It requires LLM extraction (can take seconds)
-2. JSON parsing from mempalace
+2. JSON parsing of the extraction output
 3. It is not necessary for every turn, only for relevant context
 
 ### QueryMemory — PromQL Cache
@@ -111,7 +110,7 @@ The backend performs a background warmup (`AION_MEMPALACE_WARMUP=1`, cache in
 **Trade-off:** QueryMemory sacrifices generality for domain-specific precision. Optimized
 exclusively for the Prometheus/PromQL domain. Average latency of 100–300ms for embedding calculation.
 
-**Exposed MCP tools (`memory` server):**
+**Exposed MCP tools (`query_memory` server):**
 | Tool | Scope |
 |------|-------|
 | `search_known_query` | Search for similar PromQL queries before generating a new one |
@@ -133,7 +132,7 @@ exclusively for the Prometheus/PromQL domain. Average latency of 100–300ms for
 - Tenant scope: **shared** vs **per user** (admin settings + override per drawer)
 
 **Tools for SQL QueryMemory:**
-SQL QueryMemory management offers two integration channels depending on the agent profile: **Native in-process Tools** (recommended for lower latency) or **MCP Tools** provided by the `memory` server.
+SQL QueryMemory management offers two integration channels depending on the agent profile: **Native in-process Tools** (recommended for lower latency) or **MCP Tools** provided by the `query_memory` server.
 
 | MCP Tool | Native Tool | Type / Use |
 |----------|-------------|------------|
@@ -151,7 +150,25 @@ SQL QueryMemory management offers two integration channels depending on the agen
 
 Variables: `AION_SQL_QM_*` in `.env.example`.
 
-### MemPalace ERP navigation — two layers, same project
+### Database navigation — two layers, same project {#mempalace-erp-navigation--two-layers-same-project}
+
+For SQL metadata profiles (Postgres/MySQL), **SQL QueryMemory** and **Mnemos** share the same **project slug** (UI drawer / `sql_query_project`):
+
+| Layer | Tools | Stores |
+|-------|-------|--------|
+| SQL QueryMemory | `sql_memory_search`, `sql_memory_save`, … | Validated SELECT templates (`cached_sql_queries` by `project_id`) |
+| Mnemos LTM | `memory_recall`, `memory_note` | Navigation lessons: JOIN paths, entry points, pitfalls, conventions (`scope=project`) |
+
+The `PROJECT_SCOPE` text in the turn context comes from **`sql_query_projects.description`** (and `display_name`), not from hardcoded slugs in Python. Set the description when you create/rename a project in chat-ui or admin.
+
+The agent protocol is defined in the `datasource_memory_protocol` skill: search QueryMemory first, recall Mnemos navigation notes, run and verify the SQL, then save the SELECT in QueryMemory and the lesson with `memory_note` (without duplicating the SQL text in Mnemos).
+
+<details>
+<summary>Legacy design: MemPalace navigation wings (removed)</summary>
+
+:::warning
+MemPalace and the files below (`db_navigation_mempalace_hooks.py`, `navigation_memory_service.py`, the `scripts/*mempalace*` helpers) have been removed from the code base. This text is kept only as historical reference for installations migrating from MemPalace; see `scripts/migration/migrate_mempalace_to_mnemos_env.py`.
+:::
 
 For SQL metadata profiles (Postgres/MySQL), **SQL QueryMemory** and **MemPalace** share the same **project slug** (UI drawer / `sql_query_project`):
 
@@ -205,6 +222,8 @@ flowchart LR
     PG --> MP
 ```
 
+</details>
+
 ---
 
 ## Cognitive routing — which system to use?
@@ -214,8 +233,8 @@ flowchart LR
 | Question / Request | Correct system | Tool |
 |---------------------|-----------------|------|
 | "What did we say yesterday?" | STM / FTS (session_search) | `session_search` |
-| "Remember my preference X?" / "remember it" (fact) | LTM post-turn + in-turn tool | `mempalace_kg_add` + `wing_user_*` (agent); `extract_and_persist` after the turn |
-| "How do I connect table A and B?" (Postgres) | MemPalace nav `wing_proj_{project}` | `mempalace_search` + wing |
+| "Remember my preference X?" / "remember it" (fact) | LTM post-turn + in-turn tool | `memory_note` (agent, `scope=user`); `extract_and_persist` after the turn |
+| "How do I connect table A and B?" (Postgres) | Mnemos project notes | `memory_recall` (`scope=project`) |
 | "What is the SELECT for X?" (Postgres) | SQL QueryMemory | `sql_memory_search` |
 | "What is the PromQL query for X?" | QueryMemory (PromQL Cache) | `search_known_query` |
 | "Save this working PromQL query" | QueryMemory (PromQL Cache) | `save_successful_query` |
@@ -228,7 +247,7 @@ sequenceDiagram
     participant User as User
     participant API as FastAPI
     participant STM as STM (SQLite)
-    participant LTM as LTM (MemPalace)
+    participant LTM as LTM (Mnemos)
     participant QM as QueryMemory
     participant LLM as LLM
 
@@ -303,7 +322,7 @@ sequenceDiagram
 
 **Do NOT use QueryMemory when:**
 - You are looking for past conversations → use `session_search` (STM/FTS)
-- You are looking for user facts or preferences → use `mempalace_search` (LTM)
+- You are looking for user facts or preferences → use `memory_recall` (LTM)
 - You are looking for anything other than a Prometheus/PromQL query
 
 ---
@@ -361,12 +380,10 @@ A single SQLite database cannot satisfy all requirements:
 | `AION_CONTEXT_COMPRESS_ENABLED` | `1` | Enables automatic Claude-style context compression (compaction) if the token budget is exceeded | Requires a synchronous LLM call to compact the context before the turn |
 | `AION_LTM_RETRIEVAL` | `1` | Enables LTM retrieval | Disable = faster but less context |
 | `AION_LTM_SEARCH_LIMIT` | `5` | Number of LTM results | More results = more context but more tokens |
-| `AION_LTM_MIN_IMPORTANCE` | `2` | Minimum importance (1-5) to save an extracted drawer in LTM | Higher = saves only very important facts and avoids memory clutter |
+| `AION_LTM_MIN_IMPORTANCE` | `2` | Minimum importance (1-5) to save an extracted note in LTM | Higher = saves only very important facts and avoids memory clutter |
 | `AION_SQL_QM_ENABLED` | `1` | Master switch to enable SQL QueryMemory | Completely disables the SQL query cache system |
 | `AION_SQL_QM_AUTO_LEARN` | `0` | Auto-saving of successful PostgreSQL SELECTs in cache (post-tool hook) | Disabled by default to avoid cache pollution; explicit use of tools by the agent is recommended |
-| `AION_MEMPALACE_NAV_ENABLED` | `1` | Enables the database navigation layer of MemPalace | Disables retrieval/persistence of DB joins and entry points |
-| `AION_MEMPALACE_NAV_PRE_TURN_INJECT` | `0` | Pre-turn inject of MemPalace navigation suggestions | Disabled by default (0), the agent uses `mempalace_search` when necessary |
-| `AION_MEMPALACE_NAV_AUTO_LEARN` | `0` | Auto-saving of join logic and pitfalls in the MemPalace navigation drawer | Disabled by default to avoid pollution; preferably managed via the agent protocol |
+| `AION_MEMPALACE_NAV_*` | — | **Legacy, no longer read.** Former MemPalace navigation switches (`_ENABLED`, `_PRE_TURN_INJECT`, `_AUTO_LEARN`) | Removed with MemPalace; navigation lessons now go to Mnemos |
 
 ---
 
@@ -414,19 +431,19 @@ A single SQLite database cannot satisfy all requirements:
 | `src/query_memory.py` | QueryMemory PromQL operations |
 | `src/memory/sql_query_memory/` | QueryMemory SQL (Postgres) |
 | `src/runtime/sql_query_memory_tools.py` | Native in-process tools for SQL QueryMemory |
-| `mcp_servers/query_memory/server.py` | MCP server for PromQL and SQL QueryMemory |
+| `mcp_servers_std/query_memory/server.py` | MCP server for PromQL and SQL QueryMemory, plus `session_search` |
 | `src/runtime/query_memory_hooks.py` | Pre-turn and post-tool hooks for SQL QueryMemory |
-| `src/runtime/db_navigation_mempalace_hooks.py` | Pre-turn and post-tool hooks for MemPalace navigation |
+| `src/memory/mnemos/` | Mnemos LTM backend (notes, recall, dream cycle) |
+| `src/runtime/mnemos_tools.py` | Native `memory_recall` / `memory_note` / `memory_forget` tools |
 | `src/api/v1/query_memory.py` | User REST for drawers/SQL queries |
 | `src/api/admin_query_memory.py` | Admin REST scope and settings |
 
 ## Related skills
 
-- `ltm_extraction.md` - Schema for LTM extraction
-- `session_search.md` - Tool for session search
+- `ltm_extraction.md` / `ltm_note_extraction.md` - Schema for LTM extraction
+- `memory_protocol.md` - Protocol for using Mnemos LTM
 - `sql_query_memory_protocol.md` - SQL QueryMemory protocol (Postgres)
-- `datasource_memory_protocol.md` - Extended protocol for SQL QueryMemory and MemPalace navigation
-- `mempalace_protocol.md` - Protocol for using LTM wings
+- `datasource_memory_protocol.md` - Two-layer protocol for SQL QueryMemory and Mnemos navigation notes
 
 ---
 

@@ -1,10 +1,12 @@
 ---
 title: Password setup by email
 sidebar_position: 3
-description: How users choose their own password through one-time email links (invite, reset, SSO migration), the temporary-password fallback without SMTP, and how admins configure SMTP.
+description: Users set their own password from an email link; how invites, resets and SMTP work.
 ---
 
 # Password setup by email
+
+This page explains how new users get their first password and how anyone can reset a forgotten one: AION emails a one-time link and the user picks the password. It is for **administrators** (who send invites and configure the outgoing mail server, SMTP) and for **users** who received an invite or forgot their password.
 
 Administrators **never see, choose or receive a user's password**. That holds when an account is created, when a password is recovered and during an SSO migration. Instead, the platform emails the user a one-time link. The user opens it in chat-ui (`/set-password`) and picks a password that satisfies the policy.
 

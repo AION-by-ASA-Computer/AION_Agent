@@ -1,16 +1,18 @@
 ---
 sidebar_position: 7
-title: PDF evidence images for Word reports
-description: MCP pdf_evidence_crop, QA gate, and report template for high-quality Word deliverables with PDF screenshots.
+title: PDF evidence images in Word reports
+description: How the agent puts clean, cropped PDF excerpts into Word reports instead of full-page screenshots.
 ---
 
 # PDF evidence images for Word reports
+
+When the agent writes a Word report based on PDF documents, it often needs to show the original passage as an image ("evidence"). This page explains how AION crops just the relevant part of the PDF page, checks the image quality and assembles a professional report. It is for **administrators** who enable the feature on profiles and **developers** who maintain the report scripts.
 
 ## Problem
 
 Agents often embed **full-page PDF screenshots** (`pdftoppm`, `convert_pdf_to_images.py`) in Word
 reports. The result looks unprofessional compared to targeted crops with captions and document
-chrome (headers, scadenziario, figure appendix).
+chrome (headers, deadline schedule, figure appendix).
 
 The fix is **orchestration**, not a different LLM: deterministic crop via MCP, protocol rules,
 and optional proprietary report scripts.
@@ -72,7 +74,7 @@ After `skill_view("docx")`, when proprietary config is synced:
 
 | Script | Purpose |
 |--------|---------|
-| `scripts/report/build_evidence_report.py` | Client-ready relazione: cover, sintesi esecutiva, quadro obblighi, prescrizioni numerate, figure, scadenziario |
+| `scripts/report/build_evidence_report.py` | Client-ready report: cover, executive summary, obligations overview, numbered requirements, figures, deadline schedule |
 | `scripts/report/report_style.py` | Navy theme, styled tables, header/footer |
 | `scripts/report/qa_evidence_images.py` | Fail on high white-ratio, full-page aspect, or natural display height ≥6.5″ |
 | `scripts/report/evidence_layout.py` | Shared max-width/max-height picture sizing for python-docx |

@@ -1,12 +1,12 @@
 ---
 sidebar_position: 3
-title: Long-Term Memory (LTM) and Projects
-description: Long-term semantic memory architecture based on Projects, Mnemos notes, and SQL QueryMemory.
+title: Projects and long-term memory
+description: How projects group long-term memory notes and saved SQL queries under one shared identifier.
 ---
 
 # Long-Term Memory (LTM) and Projects
 
-This document describes how the structured **Long-Term Memory (LTM)** works in AION Agents, how it integrates with the concept of **Project**, and how data is stored and extracted using **Mnemos**.
+A **Project** in AION is a named workspace (for example "sales" or a specific database) that the user selects in chat-ui. Everything the agent learns while working in that project — validated SQL queries and long-term notes — is filed under the same project identifier, so knowledge from one project does not leak into another. This document describes how the structured **Long-Term Memory (LTM)** works in AION Agents, how it integrates with the concept of **Project**, and how data is stored and extracted using **Mnemos**. It is for developers and administrators working with data-oriented profiles.
 
 ---
 

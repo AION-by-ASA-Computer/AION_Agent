@@ -1,10 +1,12 @@
 ---
-title: Promo Render MCP
+title: Promo graphics to PNG
 sidebar_position: 12
-description: React/HTML promotional graphics exported to PNG with chat-ui styling.
+description: Have the agent design social and ad graphics and export them as PNG images.
 ---
 
 # Promo Render MCP
+
+With this feature the agent can design promotional graphics (social posts, ads, banners) and export them as ready-to-use PNG images in the AION visual style. Users simply ask for a graphic, ideally with the `graphic_designer` profile. This page is for **administrators** who install the export tool (Playwright, a headless browser) and enable the profile, and for **developers** who maintain the templates. MCP (Model Context Protocol) servers are the plug-in tool providers the agent calls.
 
 Server `promo_render` turns session **React/HTML canvases** into **PNG** files for social and ads, using Playwright and design tokens aligned with **chat-ui**.
 
@@ -14,18 +16,18 @@ Server `promo_render` turns session **React/HTML canvases** into **PNG** files f
 
 ### Automatic (recommended)
 
-`./scripts/setup-aion-env.sh` and `./scripts/upgrade-aion.sh` (with `--prepare-runtime` on upgrade locale) invoke [`runtime_extras_setup.py`](../../scripts/runtime_extras_setup.py), which:
+`./scripts/setup-aion-env.sh` and `./scripts/upgrade-aion.sh` (with `--prepare-runtime` on a local upgrade) invoke [`runtime_extras_setup.py`](../../scripts/runtime_extras_setup.py), which:
 
 - Appends `AION_PROMO_CAPTURE_ENABLED=1` to `.env` if missing
 - Runs `./scripts/setup_promo_playwright.sh` unless `--skip-promo-playwright`
 
 ```bash
 ./scripts/setup-aion-env.sh
-# oppure dopo un pull
+# or, after a git pull
 ./scripts/upgrade-aion.sh
 ```
 
-Dettagli policy filesystem + flag: [Policy filesystem ed export promo PNG](../configuration/filesystem-policy-and-promo.md).
+Filesystem policy details and flags: [Filesystem policy and PNG promo export](../configuration/filesystem-policy-and-promo.md).
 
 ### Manual
 

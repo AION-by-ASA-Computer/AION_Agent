@@ -1,27 +1,34 @@
 ---
-title: Integrazioni MCP
+title: MCP integrations
 sidebar_position: 2
-description: Guida completa all'architettura, installazione, modalità di esecuzione e configurazione dei server MCP in AION.
+description: How AION connects the agent to external tools through MCP servers - architecture, installation, runtime modes, credentials and troubleshooting.
 ---
 
-# Integrazioni MCP (Model Context Protocol)
+# MCP integrations (Model Context Protocol)
 
-**Model Context Protocol (MCP)** è lo standard aperto adottato da AION per connettere l'agente a strumenti esterni, API, database, workspace di codice e servizi SaaS (GitHub, Google Workspace, Microsoft 365, Postgres, ClickUp, e molti altri).
+**MCP (Model Context Protocol)** is the open standard AION uses to plug tools and connectors into
+the agent: external APIs, databases, code workspaces and SaaS services (GitHub, Google Workspace,
+Microsoft 365, Postgres, ClickUp and many more). Each connector is an "MCP server" that gives the
+agent a set of tools it can call. This page is an overview for **administrators** and
+**developers/operators** who install, configure or troubleshoot connectors; end users usually only
+need to sign in to a connector from chat-ui.
 
-Grazie all'architettura modulare di AION, i server MCP operano come processi esterni isolati dal runtime principale dell'agente, garantendo **sicurezza**, **sandboxing**, **scalabilità** e **interoperabilità** immediata con l'ecosistema MCP (compatibilità con Claude Desktop, Cursor e VS Code).
+MCP servers run as external processes, isolated from the agent's main runtime. This brings
+**security**, **sandboxing**, **scalability** and immediate **interoperability** with the MCP
+ecosystem (the same servers work with Claude Desktop, Cursor and VS Code).
 
 ---
 
-## 1. Architettura e Registry System
+## 1. Architecture and registry
 
-AION adotta un pattern **Base + Local Overlay** con gestione a doppio registro (`YAML` e `JSON`).
+AION uses a **base + local overlay** pattern, with registries in two formats (`YAML` and `JSON`).
 
 ```mermaid
 graph TD
     subgraph Config & Catalogs
-        BASE[config/mcp_registry.yaml<br/>Standard / Predefiniti]
-        LOCAL[config/mcp_registry.local.yaml<br/>Overlay locale deployment]
-        CATALOG[config_std/mcp_connector_catalog.yaml<br/>Catalogo Connettori Curati]
+        BASE[config/mcp_registry.yaml<br/>Standard / built-in]
+        LOCAL[config/mcp_registry.local.yaml<br/>Local deployment overlay]
+        CATALOG[config_std/mcp_connector_catalog.yaml<br/>Curated connector catalog]
     end
     
     subgraph Runtime Core
@@ -46,61 +53,60 @@ graph TD
     MERGE --> REMOTE_CLIENT
 ```
 
-### Struttura dei File di Configurazione
+### Configuration files
 
-1. **`config/mcp_registry.yaml` (Base)**:
-   - Contiene i server MCP built-in e standard (es. `session_sandbox`, `ocr`, `stt`, `skills_hub`, `prometheus`, `grafana`, `query_memory`).
-   - Il template di riferimento committed risiede in `config_std/mcp_registry.yaml`.
-
-2. **`config/mcp_registry.local.yaml` (Local Overlay Flat)**:
-   - Configurazione specifica dell'installazione locale (non committata in git).
-   - Le voci definite qui sovrascrivono o arricchiscono il registry base.
-
-3. **`config/mcp_registry.local.json` (Local Overlay Standard)**:
-   - Supporta il formato nativo `{"mcpServers": { ... }}` compatibile al 100% con Claude Desktop, Cursor e Smithery.
-
-4. **`config_std/mcp_connector_catalog.yaml` (Catalogo Connettori)**:
-   - Fonte di verità per connettori pronti all'uso con metadata di autenticazione, descrizioni, categorie e template di configurazione.
+| File | Role |
+|------|------|
+| `config/mcp_registry.yaml` (base) | Built-in and standard MCP servers (e.g. `session_sandbox`, `ocr`, `stt`, `skills_hub`, `prometheus`, `grafana`, `query_memory`). The committed reference template is `config_std/mcp_registry.yaml`. |
+| `config/mcp_registry.local.yaml` (flat local overlay) | Settings specific to this installation (not committed to git). Entries here override or extend the base registry. |
+| `config/mcp_registry.local.json` (standard local overlay) | Supports the native `{"mcpServers": { ... }}` format, fully compatible with Claude Desktop, Cursor and Smithery. |
+| `config_std/mcp_connector_catalog.yaml` (connector catalog) | Source of truth for ready-to-use connectors, with authentication metadata, descriptions, categories and configuration templates. |
 
 ---
 
-## 2. Modalità di Installazione degli MCP
+## 2. Installing MCP servers
 
-AION offre diverse modalità di installazione per soddisfare qualsiasi scenario, dalla UI grafica all'inclusione manuale in codice.
+:::tip Your own MCP servers
+Besides public and catalog servers, your developers can build their own MCP server and an administrator can upload it from the MCP Hub. It runs in an isolated container with the network closed by default. See [Custom MCP servers](../mcp/custom-mcp-servers.md) and [Develop a custom MCP server](../mcp/custom-mcp-development.md).
+:::
 
-### A. Installazione da MCP Hub (Admin UI)
+AION offers several ways to install a server, from the graphical UI to manual configuration.
 
-All'interno dell'interfaccia **Admin Dashboard → MCP Hub**:
+### A. From the MCP Hub (admin-ui)
 
-1. **Catalogo Curato**: Sfoglia l'elenco dei connettori certificati (GitHub, Slack, PostgreSQL, Notion, ecc.) e clicca su **Install**.
-2. **Marketplace Search**: Cerca pacchetti pubblici su npm, PyPI o Smithery. Il backend clona o scarica il pacchetto e ne normalizza automaticamente l'entrypoint.
-3. **Remote Endpoint**: Aggiungi un server MCP remoto ospitato via URL (HTTP o SSE).
+In **Admin Dashboard → MCP Hub**:
+
+1. **Curated catalog**: browse the certified connectors (GitHub, Slack, PostgreSQL, Notion, etc.) and click **Install**.
+2. **Marketplace search**: search public MCP marketplaces (Smithery, Glama, GitHub, …). The backend fetches the package and normalises its entrypoint automatically.
+3. **Remote endpoint**: add a remote MCP server hosted at a URL (HTTP or SSE).
 
 ```http
 POST /admin/mcp/install-from-catalog?connector_id=github
-POST /admin/market/install
+GET  /admin/market/search?q=...
+POST /admin/market/install-zero
 POST /admin/market/install-remote
 ```
 
-### B. Normalizzazione Automatica degli Entrypoint
+### B. Automatic entrypoint normalisation
 
-Quando si installa un pacchetto dal marketplace (`src/mcp_registry_normalize.py`), AION rileva automaticamente come eseguire il processo:
+When you install a package from the marketplace (`src/mcp_registry_normalize.py`), AION works out
+automatically how to run the process:
 
 - **Python**:
-  - Se è presente `pyproject.toml`, usa `uv run --directory <dir> <script> stdio` o cerca l'eseguibile compilato in `.venv/Scripts/` o `.venv/bin/`.
-  - Se è un pacchetto PyPI puro, usa `uvx <package>@latest stdio`.
-  - Se è presente `requirements.txt`, esegue con l'interprete Python configurato (`python3 server.py`).
+  - If there is a `pyproject.toml`, it uses `uv run --directory <dir> <script> stdio` or looks for the built executable in `.venv/Scripts/` or `.venv/bin/`.
+  - If it is a plain PyPI package, it uses `uvx <package>@latest stdio`.
+  - If there is a `requirements.txt`, it runs with the configured Python interpreter (`python3 server.py`).
 - **Node.js / TypeScript**:
-  - Compila o esegue file `build/index.js`, `index.ts` (con `tsx` o `bun`), o `package.json` scripts.
+  - Builds or runs `build/index.js`, `index.ts` (with `tsx` or `bun`), or `package.json` scripts.
 - **Docker**:
-  - Può eseguire container MCP isolati tramite `docker run -i --rm ...`.
+  - Can run isolated MCP containers with `docker run -i --rm ...`.
 
-### C. Configurazione Manuale in `mcp_registry.local.yaml`
+### C. Manual configuration in `mcp_registry.local.yaml`
 
-È possibile aggiungere o personalizzare manualmente qualsiasi server MCP inserendolo in `config/mcp_registry.local.yaml`:
+You can add or customise any MCP server by hand in `config/mcp_registry.local.yaml`:
 
 ```yaml
-# Esempio: Server locale via uvx (Python)
+# Example: local server via uvx (Python)
 mcp_postgres:
   command: "uvx"
   args:
@@ -108,9 +114,9 @@ mcp_postgres:
     - "stdio"
   env:
     POSTGRES_URL: "${POSTGRES_CONNECTION_STRING}"
-  description: "Connettore database PostgreSQL"
+  description: "PostgreSQL database connector"
 
-# Esempio: Server Node.js via npx
+# Example: Node.js server via npx
 mcp_github:
   command: "npx"
   args:
@@ -118,52 +124,57 @@ mcp_github:
     - "@modelcontextprotocol/server-github"
   env:
     GITHUB_PERSONAL_ACCESS_TOKEN: "${AION_USER_GITHUB_TOKEN}"
-  description: "Gestione issue, PR e repository GitHub"
+  description: "Manage GitHub issues, PRs and repositories"
 
-# Esempio: Server Remoto SSE / HTTP
+# Example: remote SSE / HTTP server
 mcp_remote_saas:
   command: "remote"
   url: "https://mcp.internal.company.com/sse"
   auth_type: "bearer"
   env:
     BEARER_TOKEN: "${INTERNAL_MCP_TOKEN}"
-  description: "Microservizi interni aziendali"
+  description: "Internal company microservices"
 ```
 
 ---
 
-## 3. Modalità di Esecuzione e Ciclo di Vita (Runtime Modes)
+## 3. Runtime modes and lifecycle
 
-AION include un runtime avanzato per garantire latenze sub-millisecondo ed evitare l'overhead di avvio continuo dei processi per ogni richiesta.
+AION keeps MCP processes running between requests, so it avoids the cost of starting a process for
+every tool call.
 
-### 1. Persistent stdio Pool (`AION_MCP_POOL=1`)
-- **Default attivo**. I processi MCP stdio vengono avviati e mantenuti attivi in un pool persistente a livello di processo.
-- **Auto-Recovery**: In caso di crash o interruzione del sottoprocesso, il pool effettua un riavvio automatico trasparente al successivo utilizzo.
-- **Multi-Worker Safety**: Il backend AION opera in modalità `workers: 1` per preservare lo stato in-memory del pool.
+### Persistent stdio pool (`AION_MCP_POOL=1`)
 
-### 2. Ambito dei Processi (Process Scoping)
+- **On by default.** MCP stdio processes are started and kept alive in a persistent, process-level pool.
+- **Auto-recovery**: if a subprocess crashes or stops, the pool restarts it transparently on next use.
+- **Single worker**: the AION backend runs with `workers: 1` to preserve the pool's in-memory state.
 
-| Ambito | Configurazione / Trigger | Descrizione |
+### Process scoping
+
+| Scope | Configuration / trigger | Description |
 |---|---|---|
-| **Global / Shared Pool** | Standard per tool stateless o a credenziale condivisa | I tool sono condivisi tra le sessioni per massimizzare il riuso della memoria |
-| **Session-Scoped** | `AION_MCP_SESSION_SCOPED_SERVERS` (es. `session_sandbox`, `ocr`, `stt`, `promo_render`, `skills_hub`) | Un processo isolato viene istanziato specificamente per ciascun `session_id`. Ha accesso alla sandbox filesystem della sessione |
-| **User-Scoped Pool** | `AION_MCP_USER_POOL=1` | Pool indicizzato per `(user_id, tenant_id)`. Consente l'isolamento sicuro in ambienti multi-tenant quando gli utenti utilizzano proprie credenziali personali |
+| **Global / shared pool** | Default for stateless tools or tools with a shared credential | Tools are shared across sessions to maximise memory reuse |
+| **Session-scoped** | `AION_MCP_SESSION_SCOPED_SERVERS` (e.g. `session_sandbox`, `ocr`, `stt`, `promo_render`, `skills_hub`) | A separate process is started for each `session_id`. It has access to the session's sandbox filesystem |
+| **User-scoped pool** | `AION_MCP_USER_POOL=1` | Pool keyed by `(user_id, tenant_id)`. Gives safe isolation in multi-tenant setups when users connect with their own personal credentials |
 
-### 3. Rilevamento Compatibilità SDK MCP (`mcp<2` vs `mcp>=2`)
-AION analizza a runtime i metadata `requires-dist` dei pacchetti PyPI per stabilire se il pacchetto richiede il nuovo SDK `mcp>=2` o la versione precedente `mcp<2` (FastMCP legacy), iniettando automaticamente i flag di compatibilità corretti in `uvx`.
+### MCP SDK compatibility detection (`mcp<2` vs `mcp>=2`)
+
+At runtime, AION reads the `requires-dist` metadata of PyPI packages to tell whether a package needs
+the new `mcp>=2` SDK or the older `mcp<2` (legacy FastMCP), and automatically adds the right
+compatibility flags to `uvx`.
 
 ---
 
-## 4. Gestione Credenziali e Autenticazione
+## 4. Credentials and authentication
 
-AION supporta tre modelli di gestione credenziali configurabili per ciascun server MCP (`src/mcp_integration_sync.py`):
+AION supports three credential models, configurable for each MCP server (`src/mcp_integration_sync.py`):
 
 ```mermaid
 graph LR
     subgraph Credential Modes
-        NONE["1. none<br/>(Nessuna credenziale)"]
-        ORG["2. org_shared<br/>(Aziendale / Condivisa)"]
-        USER["3. per_user<br/>(Personale / Per-Utente)"]
+        NONE["1. none<br/>(No credentials)"]
+        ORG["2. org_shared<br/>(Company / shared)"]
+        USER["3. per_user<br/>(Personal / per user)"]
     end
     
     NONE --> EXEC[MCP Process Execution]
@@ -171,28 +182,30 @@ graph LR
     USER --> VAULT[Encrypted DB Vault / OAuth] --> EXEC
 ```
 
-### Modalità Credenziali (`credential_mode`)
+### Credential modes (`credential_mode`)
 
-1. **`none`**:
-   - Nessuna chiave o credenziale richiesta (es. server di utilità locali, calcolo, documentazione).
-2. **`org_shared`**:
-   - Una sola credenziale a livello di istanza o tenant (es. database condiviso, account bot Slack aziendale, token Grafana/Prometheus).
-   - Viene fornita tramite variabili d'ambiente globali (`.env`) o configurata dall'Admin nel pannello.
-3. **`per_user`**:
-   - Ciascun utente della chat deve autenticarsi o inserire la propria API Key / Personal Access Token (PAT).
-   - I dati vengono memorizzati cifrati nel database unificato (`data/aion.db`).
+| Mode | When to use it | Where the credential comes from |
+|------|----------------|---------------------------------|
+| **`none`** | No key or credential needed (e.g. local utility, calculation or documentation servers) | - |
+| **`org_shared`** | One credential for the whole instance or tenant (e.g. a shared database, the company Slack bot account, a Grafana/Prometheus token) | Global environment variables (`.env`) or set by the admin in the panel |
+| **`per_user`** | Each chat user must sign in or enter their own API key / Personal Access Token (PAT) | Stored encrypted in the unified database (`data/aion.db`) |
 
-### Autenticazione OAuth 2.0 per Server Remoti
-Per servizi come **Google Workspace**, **Microsoft 365 / SharePoint** e **GitHub Copilot**, AION supporta flussi OAuth 2.0 completi:
-- L'utente esegue il login direttamente dalla Chat UI cliccando su «Accedi con [Servizio]».
-- I refresh token vengono rinnovati automaticamente in background.
-- Non è richiesto all'utente finale di generare o copiare token manuali.
+### OAuth 2.0 sign-in
 
-### Runtime Env Aliases e Placeholder Substitution
-AION supporta la sintassi `${VAR_NAME}` in tutti i file YAML. Inoltre, tramite `runtime_env_aliases`, il sistema mappa automaticamente nomi alternativi di variabili richiesti da pacchetti MCP eterogenei:
+For services such as **Google Workspace**, **Microsoft 365 / SharePoint** and **GitHub**, AION
+supports full OAuth 2.0 flows:
+
+- The user signs in directly from chat-ui by clicking "Sign in with `[Service]`".
+- Refresh tokens are renewed automatically in the background.
+- End users never have to generate or copy tokens by hand.
+
+### Runtime env aliases and placeholder substitution
+
+AION supports the `${VAR_NAME}` syntax in all YAML files. In addition, `runtime_env_aliases` lets the
+system automatically map alternative variable names expected by different MCP packages:
 
 ```yaml
-# Mappa automatica se il pacchetto richiede GITHUB_PERSONAL_ACCESS_TOKEN ma l'utente ha configurato GITHUB_TOKEN
+# Maps automatically if the package expects GITHUB_PERSONAL_ACCESS_TOKEN but the user configured GITHUB_TOKEN
 runtime_env_aliases:
   GITHUB_PERSONAL_ACCESS_TOKEN:
     - GITHUB_TOKEN
@@ -201,21 +214,22 @@ runtime_env_aliases:
 
 ---
 
-## 5. Assegnazione dei Tool ai Profili Agente
+## 5. Assigning tools to agent profiles
 
-Gli MCP registrati possono essere associati selettivamente ai diversi **Profili Agente** (`config/profiles/*.yaml`):
+Registered MCP servers can be attached selectively to the different **agent profiles**
+(`config/profiles/*.yaml`):
 
 ```yaml
 name: DevOps Assistant
-description: Agente specializzato in infrastruttura e monitoring
-model: gpt-4o
+description: Agent specialised in infrastructure and monitoring
+instructions: |
+  You help the team operate and monitor the infrastructure.
 
-# Tool built-in Haystack
-tools:
-  - web_search
-  - execute_command
+# Built-in native tool groups
+native_tool_groups:
+  - web_research
 
-# Server MCP attivi per questo profilo
+# MCP servers active for this profile
 mcp_servers:
   - session_sandbox
   - mcp_postgres
@@ -223,35 +237,37 @@ mcp_servers:
   - grafana
 ```
 
-Quando l'utente seleziona il profilo nella Chat UI, l'agente carica solo il set di tool associato, riducendo l'ingombro del context window del modello e prevenendo chiamate a strumenti non pertinenti.
+When the user picks the profile in chat-ui, the agent loads only the tools attached to it. This
+keeps the model's context window smaller and prevents calls to tools that are not relevant.
 
 ---
 
-## 6. Diagnostica e Troubleshooting
+## 6. Diagnostics and troubleshooting
 
-### Strumento di Diagnosi CLI
-Per verificare lo stato di tutti i server MCP configurati, è disponibile uno script dedicato:
+### CLI diagnostic tool
+
+A dedicated script checks the status of all configured MCP servers:
 
 ```bash
-# Esegui la diagnosi di tutti i server MCP
+# Run diagnostics on all MCP servers
 python -m src.diagnose_mcp
 ```
 
-### Checklist Risoluzione Problemi
+### Troubleshooting checklist
 
-| Sintomo | Causa Probabile | Soluzione |
+| Symptom | Likely cause | Fix |
 |---|---|---|
-| `Tool not found` o non listato | Server non abilitato nel profilo attivo | Verificare la lista `mcp_servers` nel profilo in `config/profiles/<profilo>.yaml` |
-| Errore `spawn ENOENT` o `command not found` | `uv`, `uvx`, `node` o `npx` non presenti nel PATH | Assicurarsi che Node.js e `uv` siano installati nel sistema / container |
-| Errore credenziali mancanti | Variabile d'ambiente non valorizzata o credenziale utente assente | Verificare le variabili nel file `.env` o richiedere all'utente di inserire la chiave in Chat UI |
-| Timeout di avvio processo | Download o compilazione pacchetto lenta al primo avvio | Il primo avvio di pacchetti via `npx` o `uvx` può richiedere alcuni secondi per il download |
-| Errore connessione server remoto | Endpoint SSE/HTTP non raggiungibile o certificato non valido | Utilizzare l'endpoint di test `POST /admin/mcp/probe-remote` per verificare la connettività |
+| `Tool not found` or tool not listed | Server not enabled in the active profile | Check the `mcp_servers` list in `config/profiles/<profile>.yaml` |
+| `spawn ENOENT` or `command not found` error | `uv`, `uvx`, `node` or `npx` not on the PATH | Make sure Node.js and `uv` are installed on the system / in the container |
+| Missing credentials error | Environment variable not set, or user credential missing | Check the variables in `.env`, or ask the user to enter the key in chat-ui |
+| Process start timeout | Slow package download or build on first start | The first start of packages via `npx` or `uvx` can take a few seconds to download |
+| Remote server connection error | SSE/HTTP endpoint unreachable or invalid certificate | Use the test endpoint `POST /admin/mcp/probe-remote` to check connectivity |
 
 ---
 
-## Documentazione Correlata
+## Related documentation
 
-- [Registry MCP - Filosofia e Design](../mcp/registry.md)
-- [Catalogo Connettori Curati](../mcp/connector-catalog.md)
-- [Isolamento Utente e Credenziali](../mcp/user-isolation-and-credentials.md)
-- [Orchestrazione e Ciclo di Vita](../mcp/orchestration.md)
+- [MCP registry - philosophy and design](../mcp/registry.md)
+- [Curated connector catalog](../mcp/connector-catalog.md)
+- [User isolation and credentials](../mcp/user-isolation-and-credentials.md)
+- [Orchestration and lifecycle](../mcp/orchestration.md)

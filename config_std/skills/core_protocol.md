@@ -32,14 +32,14 @@ The system prompt includes only skill names and short descriptions. Use
 - Tools that already have a schema in your tool list: call them directly.
 - If a skill names a tool that is not in the list, call `tool_search` once with that exact name. The next step can call it. Do not conclude that the tool does not exist, and do not invent a substitute (HTML app, hand-built zip, browser download).
 - `aion_artifact`, `artifact`, `create_file`, and `invalid` are error sinks. Never call them. Write files with `sandbox_write_workspace_file`.
-- Office files: write a `workspace/*.py` or `workspace/*.js` script, then `sandbox_run_python_file` or `sandbox_run_node_file`. `openpyxl` and `pandas` are already installed. Node packages go through `sandbox_install_npm_packages`, not `sandbox_exec_allowlisted`.
+- Office files: write a `workspace/*.py` or `workspace/*.js` script, then `sandbox_run_python_file` or `sandbox_run_node_file`. `openpyxl` and `pandas` are already installed; so are the Node packages `docx` and `pptxgenjs` (load them with `require`). Other Node packages go through `sandbox_install_npm_packages`, not `sandbox_exec_allowlisted`.
 - These names need `tool_search` before the call: `render_chart`, `web_search`, `web_fetch_page`, `session_search`, `sandbox_apply_patch`, `sandbox_exec_allowlisted`.
 
 ## Filesystem workflow (e.g. Word .docx)
 
-1. `sandbox_install_npm_packages(["docx"])` — if not already installed.
-2. **`sandbox_write_workspace_file`** with complete `workspace/create_doc.js` script.
-3. **`sandbox_run_node_file(relative_path="workspace/create_doc.js")`** — file must exist and be non-empty.
+1. **`sandbox_write_workspace_file`** with complete `workspace/create_doc.js` script (docx-js, CommonJS `require("docx")`; `docx` is preinstalled, no install step).
+2. **`sandbox_run_node_file(relative_path="workspace/create_doc.js")`** — file must exist and be non-empty.
+3. On failure follow the run's `HINT`; python-docx is only a fallback.
 
 | Yes | No |
 |-----|-----|
@@ -81,7 +81,7 @@ For non-trivial requests, **name 3–6 macro-steps in thinking** (one line each)
 |------|------|--------|
 | Create/update workspace files | **`sandbox_write_workspace_file`** / **`sandbox_edit_workspace_file`** / **`sandbox_apply_patch`** | Primary path for code and scripts |
 | Run `workspace/*.js` (docx-js) | **`sandbox_run_node_file`** | After write tool creates the script |
-| Install npm deps (`docx`, …) | **`sandbox_install_npm_packages`** | Works when exec policy is disabled (default) |
+| Install npm deps (not `docx`/`pptxgenjs`: preinstalled) | **`sandbox_install_npm_packages`** | Works when exec policy is disabled (default); skips packages already available |
 | Allowlisted shell (`grep`, …) | `tool_search("sandbox_exec_allowlisted")` then the tool | Only if `AION_FS_POLICY_PATH` has `exec.enabled: true`. Not for Python, Node, or npm |
 | Run `workspace/*.py` | `sandbox_run_python_file` | Already loaded. `openpyxl` and `pandas` are preinstalled |
 

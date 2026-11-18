@@ -1,13 +1,16 @@
 ---
 sidebar_position: 3
-title: SDK and Web Widget
-description: How to integrate AION Agents into external applications using the official SDKs or the JS widget.
+title: SDKs and web widget
+description: Use AION from your own apps (Python/TypeScript SDKs) or embed a chat widget in a website.
 ---
 
 # SDK and Web Widget
 
-> [!WARNING]
-> The SDKs (Python and TypeScript) and the Web Widget are currently under active development. Some features may not be stable, undergo substantial interface changes, or not function correctly under all conditions. Use them with caution.
+Use this page when you want AION outside the Chat UI: from your own code, or as a chat bubble on a website. The SDKs (software development kits) are client libraries that wrap the AION API; the widget is a ready-made script you paste into a web page. This page is for **developers** and for the **web team** that embeds the widget.
+
+:::warning
+The SDKs (Python and TypeScript) and the Web Widget are currently under active development. Some features may not be stable, undergo substantial interface changes, or not function correctly under all conditions. Use them with caution.
+:::
 
 To facilitate the adoption of AION Agents in different ecosystems, official SDKs are available for Python and TypeScript, in addition to a "drop-in" widget for websites.
 

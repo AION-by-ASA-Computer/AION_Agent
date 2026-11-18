@@ -1,10 +1,12 @@
 ---
 sidebar_position: 2
-title: Source Tree - Architectural Principles
-description: Directory map with separation principles, dependencies, and architectural rationale.
+title: Source tree
+description: Map of the repository folders and why the code is split the way it is.
 ---
 
-# Source Tree - Architectural Principles
+# Source tree
+
+This page is a guided map of the AION Agents repository: which folder holds what, and why the code is split that way. It is meant for developers who need to find where a feature lives before changing it, and for IT staff who want to know which folders are configuration and which are code. For the runtime flow (what happens when a message arrives) start from the [architectural overview](overview.md).
 
 ## Separation principles
 
@@ -61,12 +63,11 @@ The APIs represent the "boundary" that separates the agent's business logic from
 | [history.py](src/api/history.py) | STM & FTS data layer | Provides services to retrieve chat history and full-text searches on old messages. |
 | [session_uploads.py](src/api/session_uploads.py) | File upload management | Upload attachments to `uploads/`; triggers PDF auto-ingest and legacy `.doc` → `.docx` conversion on the API host. |
 | [admin.py](src/api/admin.py) | Administrative CRUD dashboard | Endpoints for centralized management of profiles, users, sessions, and installed skills. |
-| [admin_agent_db.py](src/api/admin_agent_db.py) | Personal Agents Database CRUD | Administration and export of the isolated SQLite databases of each user. |
 | [admin_profile_memory.py](src/api/admin_profile_memory.py) | SOUL/MEMORY/USER CRUD | Management of persistent profile files for agents (legacy endpoints). |
 | [admin_query_memory.py](src/api/admin_query_memory.py) & [ltm_admin.py](src/api/ltm_admin.py) | Long-term memory search and debug | Allows administrators to inspect information extracted in LTM and semantic metadata. |
 | **`src/api/v1/`** | REST v1 routers and controllers | Collection of endpoints for version 1 of the APIs, including: `chat.py` (streaming), `conversations.py` (sessions), `files.py` (file management), `mcp_integrations.py` (credentials and per-user integrations), `navigation_memory.py`, `query_memory.py` and `steps.py` (intermediate steps of tools). |
 
-#### `src/runtime/` — The agent engine (Agent Engine)
+#### `src/runtime/` — The agent engine
 
 The package [src/runtime/](src/runtime/) contains the internal logic of the agent's execution cycle. It resolves alignment with language models, coordinates execution plans, and implements background daemons.
 
@@ -81,7 +82,7 @@ The package [src/runtime/](src/runtime/) contains the internal logic of the agen
   - [cron_runner.py](src/runtime/cron_runner.py), [cron_scheduler.py](src/runtime/cron_scheduler.py) and [cron_db.py](src/runtime/cron_db.py): The dynamic in-process scheduler for the periodic startup of user prompts or scripts.
 - **Workspace & Sandbox Controls**:
   - [agent_fs_policy.py](src/runtime/agent_fs_policy.py): Applies and validates the declared filesystem rules depending on the agent.
-  - [mcp_installer.py](src/runtime/mcp_installer.py) and [mcp_health.py](src/runtime/mcp_health.py): Control the installation and health of external MCP connectors.
+  - [mcp_health.py](src/runtime/mcp_health.py) and [mcp_tool_catalog.py](src/runtime/mcp_tool_catalog.py): Track the health of external MCP connectors and the catalog of the tools they expose.
 - **Turn, Prompts & Context Budgets**:
   - [turn_compaction.py](src/runtime/turn_compaction.py) and [turn_budget.py](src/runtime/turn_budget.py): Dynamically reduce the context of intermediate messages and reasonings within a single turn if the model's capacity is exceeded.
 - **Tool-first agent loop (OpenCode-style)**:
@@ -96,25 +97,30 @@ The package [src/runtime/](src/runtime/) contains the internal logic of the agen
 - **Sub-agents Delegation**:
   - [delegate_subagent.py](src/runtime/delegate_subagent.py), [subagent_orchestrator.py](src/runtime/subagent_orchestrator.py) and [subagent_tools.py](src/runtime/subagent_tools.py): Protocol to spawn isolated hierarchical sub-agents with a dedicated file workspace.
 - **Database & Query Memory Integration**:
-  - [sql_query_memory_tools.py](src/runtime/sql_query_memory_tools.py), [query_memory_hooks.py](src/runtime/query_memory_hooks.py) and [db_navigation_mempalace_hooks.py](src/runtime/db_navigation_mempalace_hooks.py): Automatically register and optimize SQL queries that returned correct data in order to reuse them semantically.
+  - [sql_query_memory_tools.py](src/runtime/sql_query_memory_tools.py) and [query_memory_hooks.py](src/runtime/query_memory_hooks.py): Automatically register and optimize SQL queries that returned correct data in order to reuse them semantically.
+- **Mnemos tools**:
+  - [mnemos_tools.py](src/runtime/mnemos_tools.py) and [mnemos_context.py](src/runtime/mnemos_context.py): Expose the native long-term memory (Mnemos) to the agent as tools and per-turn context.
 - **Slash Commands**:
   - [slash.py](src/runtime/slash.py): Dispatches commands typed by the user (e.g., `/goal`, `/schedule`).
 
 #### `src/memory/` — Data Persistence Patterns
 
-The memory runtime coordinates data persistence, both semantic (LTM) and short-term (STM).
+The memory runtime coordinates data persistence, both long-term memory (LTM, facts kept across conversations) and short-term memory (STM, the recent turns of the current conversation).
 
 | File | Pattern | Description |
 |------|---------|-------------|
-| [ltm_orchestrator.py](src/memory/ltm_orchestrator.py) | Long-term memory orchestrator | Post-turn extraction into Mnemos notes; bridges wake/recall and legacy MemPalace navigation hooks. |
+| [ltm_orchestrator.py](src/memory/ltm_orchestrator.py) | Long-term memory orchestrator | Post-turn extraction into Mnemos notes; bridges wake/recall. |
 | [stm_consolidator.py](src/memory/stm_consolidator.py) | Short-term memory consolidation | Cleans up and compacts recent conversation turns. |
 | [context_compressor.py](src/memory/context_compressor.py) | Context compression | Manages the compression of overall tokens to be sent to the LLM. |
 | [llm_extract.py](src/memory/llm_extract.py) | Entity structuring via LLM | Performs targeted HTTP calls to the LLM to extract semantic keys in JSON format. |
-| [navigation_memory_service.py](src/memory/navigation_memory_service.py) | Database navigation tracking | Stores information related to tables, joins, and entities explored by the agent. |
-| [project_memory_scope.py](src/memory/project_memory_scope.py) | Memory scope isolation | Isolates semantic memory data per tenant/project. |
 | [project_memory_service.py](src/memory/project_memory_service.py) | Project-scoped Mnemos CRUD | REST-backed project notes with membership checks. |
+| [user_memory_service.py](src/memory/user_memory_service.py) | User-scoped Mnemos CRUD | REST-backed personal notes of the calling user. |
+| **`src/memory/sql_query_memory/`** | SQL QueryMemory | Cache of validated SQL queries reused across sessions. |
 | **`src/memory/mnemos/`** | Native LTM backend | Store, FTS, hybrid recall (RRF), compress/digest, dream cycle, entity index (optional). See [Mnemos docs](../memory/mnemos-hardening.md). |
-| [mempalace_manager.py](src/memory/mempalace_manager.py) | MemPalace MCP Bridge | Legacy LTM archive and ERP navigation wings (`wing_proj_*`). |
+
+:::note
+MemPalace, the external MCP server previously used for long-term memory and ERP navigation (`mempalace_manager.py`, `navigation_memory_service.py`, `project_memory_scope.py`, `db_navigation_mempalace_hooks.py`), has been removed and replaced by Mnemos. Legacy `.env` keys are migrated by `scripts/migration/migrate_mempalace_to_mnemos_env.py`.
+:::
 
 #### `src/learning/` — Evolutionary Features (Experimental)
 
@@ -165,25 +171,31 @@ MCP (Model Context Protocol) servers are executed as stdio processes external to
 
 The AION runtime does not start the servers directly from `mcp_servers_std/` but executes the binaries and scripts inside the local `mcp_servers/` folder (populated via [sync_mcp_servers.py](scripts/sync_mcp_servers.py)).
 
-#### The 14 Standard MCP Servers (`mcp_servers_std/`)
+#### Standard MCP servers (`mcp_servers_std/`) {#the-14-standard-mcp-servers-mcp_servers_std}
 
 Below is the list of standard submodules ready for use:
 
-1. **`agent_db/`**: Manages personal SQLite instances of users (table creation, conditional queries, exports).
-2. **`aion_subagents/`**: Performs spawning and communication with per-session hierarchical sub-agents.
-3. **`charts/`**: Calculates and returns structured data formats to display area, line, or bar charts in the chat UI.
-4. **`code_executor/`**: Provides an isolated sandbox for script execution.
+1. **`aion_subagents/`**: Performs spawning and communication with per-session hierarchical sub-agents.
+2. **`charts/`**: Calculates and returns structured data formats to display area, line, or bar charts in the chat UI.
+3. **`code_executor/`**: Provides an isolated sandbox for script execution.
+4. **`geocoding/`**: Forward geocoding via OpenStreetMap Nominatim.
 5. **`grafana/`**: Allows querying Grafana monitoring dashboards.
 6. **`legacy_rag/`**: Bridge for backward compatibility with RAG components from previous versions.
-7. **`memory/`**: Manages advanced semantic integration of the database via [mem0_server.py](mcp_servers_std/memory/mem0_server.py).
+7. **`mcp_toolbox_for_databases/`**: Git submodule with Google's MCP Toolbox for Databases (`googleapis/genai-toolbox`).
 8. **`ocr_mcp/`**: Processes PDF files or images, extracting structured text blocks (GPU/CPU heavy).
-9. **`orchestration/`**: Allows third-party agents or sub-agents to interface with the task scheduler.
-10. **`prometheus/`**: Query interface for system monitoring metrics.
-11. **`promo_render/`**: Generates graphic previews in PNG format starting from HTML or React templates (dashboards and promos).
-12. **`query_memory/`**: Maintains the semantic index of successful queries and enables their inter-session retrieval.
-13. **`session_sandbox/`**: Controls secure access and filesystem isolation for each chat.
-14. **`skills_hub/`**: Manages the alignment of loaded skills in the agent's active profile.
-15. **`stt_mcp/`**: Transcribes session audio files (speech-to-text) via a remote OpenAI-compatible Whisper service or local faster-whisper; logic in `src/tools/audio_transcribe.py`.
+9. **`odoo_mcp_server/`**: Connector to the Odoo ERP.
+10. **`orchestration/`**: Allows third-party agents or sub-agents to interface with the task scheduler.
+11. **`prometheus/`**: Query interface for system monitoring metrics.
+12. **`promo_render/`**: Generates graphic previews in PNG format starting from HTML or React templates (dashboards and promos).
+13. **`query_memory/`**: Maintains the semantic index of successful queries and enables their inter-session retrieval.
+14. **`session_sandbox/`**: Controls secure access and filesystem isolation for each chat.
+15. **`skills_hub/`**: Manages the alignment of loaded skills in the agent's active profile.
+16. **`smb_files/`**: Reads and writes files on company Windows shares with the user's own credentials (see [SMB files](../mcp/smb-files.md)).
+17. **`stt_mcp/`**: Transcribes session audio files (speech-to-text) via a remote OpenAI-compatible Whisper service or local faster-whisper; logic in `src/tools/audio_transcribe.py`.
+
+:::note
+The former `agent_db/` (per-user SQLite databases) and `memory/` (`mem0_server.py`) servers have been removed from `mcp_servers_std/`.
+:::
 
 ---
 
@@ -202,8 +214,9 @@ Below is the list of standard submodules ready for use:
 - **`profiles/`**: YAML files containing the system prompt instructions, enabled skills, and tool groups for specific profiles (e.g., `data_agent.yaml`, `infra_sre.yaml`, `orchestrator.yaml`).
 - **`skills/`**: Markdown files with YAML frontmatter (e.g., `core_protocol.md`, `db_navigation_map.md`) detailing specific procedures read at runtime by [skill_registry.py](src/skill_registry.py).
 
-> [!NOTE]
-> The `config/default.yaml` file mentioned in various log and configuration files is not committed to git. Runtime configuration loaders ([config.py](src/config.py) and [llm_router.py](src/runtime/llm_router.py)) read it only if present, otherwise they fail silently inheriting defaults from code or environment variables.
+:::note
+The `config/default.yaml` file mentioned in various log and configuration files is not committed to git. Runtime configuration loaders ([config.py](src/config.py) and [llm_router.py](src/runtime/llm_router.py)) read it only if present, otherwise they fail silently inheriting defaults from code or environment variables.
+:::
 
 ---
 

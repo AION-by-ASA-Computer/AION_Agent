@@ -1,10 +1,12 @@
 ---
 title: Repository model
 sidebar_position: 1
-description: Single public repository for development, releases, and contributions.
+description: Where AION's code lives and how contributions flow into it.
 ---
 
 # Repository model
+
+AION is developed in a single public GitHub repository, which is the one place for code, issues, pull requests and releases. This page tells contributors where to clone from and how a change goes from a branch to a release.
 
 ## Active repository
 
@@ -28,4 +30,4 @@ git checkout main
 2. Open PR → review → merge to `main`
 3. Tag releases on `main` when ready (automated via [release-please](https://github.com/googleapis/release-please); see [releases.md](releases.md))
 
-Branch ruleset on `main`: [`.github/BRANCH_PROTECTION.md`](../../.github/BRANCH_PROTECTION.md).
+Branch ruleset on `main`: [`.github/BRANCH_PROTECTION.md`](https://github.com/AION-by-ASA-Computer/AION_Agent/blob/main/.github/BRANCH_PROTECTION.md).

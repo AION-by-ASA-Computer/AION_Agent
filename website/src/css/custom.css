@@ -1,5 +1,6 @@
 /**
- * Allineamento a theme.json (Chainlit) e admin-ui: primario rosso/corallo, sfondo scuro, Inter.
+ * Theme of the documentation site, aligned with chat-ui and admin-ui:
+ * red/coral primary colour, dark background by default, Inter font.
  */
 
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
@@ -9,6 +10,9 @@
   --aion-text: #171717;
   --aion-card: #f5f5f5;
   --aion-border: #e0e0e0;
+  --aion-muted: #6b6b6b;
+  --aion-hover: rgba(0, 0, 0, 0.045);
+  --aion-active-bg: rgba(201, 52, 52, 0.09);
   /* theme.json light --primary ~ hsl(0, 72%, 46%) */
   --ifm-color-primary: #c93434;
   --ifm-color-primary-dark: #b32d2d;
@@ -33,6 +37,9 @@
   --aion-text: #ededed;
   --aion-card: #141414;
   --aion-border: #262626;
+  --aion-muted: #a3a3a3;
+  --aion-hover: rgba(255, 255, 255, 0.05);
+  --aion-active-bg: rgba(224, 69, 69, 0.13);
   /* theme.json dark --primary ~ hsl(0, 72%, 51%) */
   --ifm-color-primary: #e04545;
   --ifm-color-primary-dark: #dc3a3a;
@@ -55,21 +62,189 @@ html {
   font-family: var(--ifm-font-family-base);
 }
 
-/* Navbar: bordo sottile come le card admin */
+/* ---------------------------------------------------------------------------
+ * Navbar: logo only (no text title), thin bottom border like the admin cards.
+ * ------------------------------------------------------------------------- */
 .navbar {
   border-bottom: 1px solid var(--aion-border);
   box-shadow: none;
 }
 
-.footer--dark {
-  --ifm-footer-link-color: #a3a3a3;
+.navbar__brand {
+  margin-right: 1.5rem;
+}
+
+.navbar__link {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+/* ---------------------------------------------------------------------------
+ * Footer: same background as the page in both themes (no grey block), a thin
+ * separator, compact link columns and a single bottom row (logo + copyright).
+ * ------------------------------------------------------------------------- */
+.footer {
+  --ifm-footer-background-color: var(--ifm-background-color);
+  --ifm-footer-link-color: var(--aion-muted);
+  --ifm-footer-link-hover-color: var(--ifm-color-primary);
+  --ifm-footer-title-color: var(--aion-text);
+  border-top: 1px solid var(--aion-border);
+  padding: 2.5rem 1rem 1.5rem;
 }
 
 .footer__title {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--aion-text);
+  margin-bottom: 0.75rem;
+}
+
+.footer__link-item {
+  font-size: 0.875rem;
+  line-height: 1.9;
+  text-decoration: none;
+  transition: color 0.15s ease;
+}
+
+.footer__link-item:hover {
+  text-decoration: none;
+}
+
+/* External-link arrows add noise in a small footer. */
+.footer__link-item svg {
+  display: none;
+}
+
+.footer__bottom {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 2rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--aion-border);
+}
+
+.footer__bottom > div {
+  margin: 0 !important;
+}
+
+.footer__logo {
+  display: block;
+  opacity: 0.85;
+}
+
+.footer__copyright {
+  font-size: 0.8rem;
+  color: var(--aion-muted);
+}
+
+@media (max-width: 996px) {
+  .footer__bottom {
+    flex-direction: column;
+    text-align: center;
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Left sidebar: top-level categories read as small section labels, items are
+ * rounded "pills", the current page is tinted with the primary colour and a
+ * left accent, nested levels hang from a thin guide line.
+ * ------------------------------------------------------------------------- */
+.theme-doc-sidebar-container {
+  border-right: 1px solid var(--aion-border) !important;
+}
+
+.theme-doc-sidebar-menu {
+  padding: 1.25rem 0.75rem 2rem;
+  font-size: 0.875rem;
+}
+
+.theme-doc-sidebar-menu .menu__list-item {
+  margin-top: 1px;
+}
+
+.theme-doc-sidebar-menu .menu__link {
+  border-radius: 8px;
+  padding: 0.38rem 0.7rem;
+  color: var(--aion-muted);
+  font-weight: 450;
+  line-height: 1.35;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.theme-doc-sidebar-menu .menu__link:hover {
+  background: var(--aion-hover);
   color: var(--aion-text);
 }
 
-/* Diagrammi Mermaid: leggibilità e scroll orizzontale su flowchart LR */
+.theme-doc-sidebar-menu .menu__link--active:not(.menu__link--sublist) {
+  background: var(--aion-active-bg);
+  color: var(--ifm-color-primary);
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--ifm-color-primary);
+}
+
+/* Top-level categories: section labels instead of clickable rows. */
+.theme-doc-sidebar-item-category-level-1 {
+  margin-top: 1.1rem;
+}
+
+.theme-doc-sidebar-item-category-level-1 > .menu__list-item-collapsible > .menu__link {
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--aion-text);
+  padding-top: 0.3rem;
+  padding-bottom: 0.3rem;
+}
+
+.theme-doc-sidebar-item-category-level-1 > .menu__list-item-collapsible:hover,
+.theme-doc-sidebar-item-category-level-1 > .menu__list-item-collapsible > .menu__link:hover {
+  background: transparent;
+}
+
+.theme-doc-sidebar-item-category-level-1 > .menu__list {
+  margin-top: 0.25rem;
+}
+
+/* Nested categories (level 2+): indented under a thin guide line. */
+.theme-doc-sidebar-item-category-level-2 > .menu__list,
+.theme-doc-sidebar-item-category-level-3 > .menu__list {
+  margin-left: 0.85rem;
+  padding-left: 0.5rem;
+  border-left: 1px solid var(--aion-border);
+}
+
+.menu__list-item-collapsible {
+  border-radius: 8px;
+}
+
+/* Smaller, muted expand/collapse arrows. */
+.theme-doc-sidebar-menu .menu__caret:before,
+.theme-doc-sidebar-menu .menu__link--sublist-caret:after {
+  background-size: 1.1rem 1.1rem;
+  opacity: 0.55;
+}
+
+/* "Collapse sidebar" button at the bottom: blend into the sidebar. */
+.theme-doc-sidebar-container button[title='Collapse sidebar'],
+.theme-doc-sidebar-container [class*='collapseSidebarButton'] {
+  background: transparent;
+  border: none;
+  border-top: 1px solid var(--aion-border);
+  border-radius: 0;
+  color: var(--aion-muted);
+}
+
+.theme-doc-sidebar-container [class*='collapseSidebarButton']:hover {
+  background: var(--aion-hover);
+}
+
+/* Mermaid diagrams: readable, centered, horizontal scroll on wide flowcharts. */
 .mermaid {
   margin: 1.25rem 0;
   display: flex;
@@ -84,4 +259,23 @@ html {
 
 [data-theme='dark'] .mermaid {
   filter: brightness(1.05) contrast(1.02);
+}
+
+/* Readability: tables are the main way the docs present options and errors,
+   so let them use the full content width and keep cells compact. */
+.markdown table {
+  display: table;
+  width: 100%;
+}
+.markdown table th,
+.markdown table td {
+  padding: 0.5rem 0.75rem;
+  vertical-align: top;
+}
+
+/* Keep long lines of prose at a comfortable reading length. */
+.markdown > p,
+.markdown > ul,
+.markdown > ol {
+  max-width: 52rem;
 }

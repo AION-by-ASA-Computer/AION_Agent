@@ -1,18 +1,20 @@
 ---
 sidebar_position: 4
 title: SOUL, MEMORY and USER
-description: Optional files to enrich the system prompt. SOUL and MEMORY are deprecated (replaced by YAML profiles and MemPalace); USER remains active.
+description: Optional Markdown files added to the agent prompt. Only USER (per-user preferences) is still recommended.
 ---
 
 # SOUL, MEMORY and USER -- optional context layer (legacy)
 
-> :::caution SOUL and MEMORY are deprecated
-> The content of **SOUL.md** has been replaced by the **YAML profiles** system (`config/profiles/*.yaml`) with the fields `instructions`, `skills`, `mcp_servers`. The content of **MEMORY.md** has been replaced by **MemPalace** (LTM with knowledge graph, semantic search) and **SQL QueryMemory**.
->
-> **USER.md** remains the only layer still active and recommended.
->
-> The code for SOUL and MEMORY still exists and is backward-compatible (by setting `AION_SOUL_MEMORY_USER_SPLIT=1`), but it is no longer the recommended path.
-> :::
+SOUL, MEMORY and USER are three optional Markdown files whose text can be added to the agent's system prompt (the hidden instructions it receives). Today only **USER** matters in practice: it holds a user's personal preferences ("answer in Italian", "I work in finance"), which users edit from Chat UI settings. This page is for **administrators** maintaining older installations and **developers**; new setups should use [YAML profiles](./profiles.md) and [Mnemos](../memory/mnemos.md) memory instead of SOUL and MEMORY.
+
+:::caution SOUL and MEMORY are deprecated
+The content of **SOUL.md** has been replaced by the **YAML profiles** system (`config/profiles/*.yaml`) with the fields `instructions`, `skills`, `mcp_servers`. The content of **MEMORY.md** has been replaced by **Mnemos** (native long-term memory, LTM) and **SQL QueryMemory**.
+
+**USER.md** remains the only layer still active and recommended.
+
+The code for SOUL and MEMORY still exists and is backward-compatible (by setting `AION_SOUL_MEMORY_USER_SPLIT=1`), but it is no longer the recommended path.
+:::
 
 This page describes the **additional layer** of text that can be concatenated to the **system prompt**, in addition to what is defined in the **`config/profiles/*.yaml`** profiles. It does not replace the YAML: it enriches the prompt with **Markdown** content stored on the filesystem.
 
@@ -22,7 +24,7 @@ This page describes the **additional layer** of text that can be concatenated to
 |------|------|-------|-------|
 | **Agent profile** | `config/profiles/<slug>.yaml` | **Main** | Name, description, **`instructions`**, **skill** list, **MCP**. It remains the main configuration and versionable in git. |
 | **SOUL** | `SOUL.md` | **Deprecated** | Identity and guidelines. Replaced by `instructions` in the YAML profile. |
-| **MEMORY** | `MEMORY.md` | **Deprecated** | Operational memory. Replaced by MemPalace (LTM) + SQL QueryMemory. |
+| **MEMORY** | `MEMORY.md` | **Deprecated** | Operational memory. Replaced by Mnemos (LTM) + SQL QueryMemory. |
 | **USER** | `USER.md` | **Active** | Preferences for a single user. The only file layer still recommended. |
 
 The profile **slug** coincides with the YAML file name without extension (e.g. `generic_assistant` from `generic_assistant.yaml`). It is the same value used in `AgentProfile.slug` and in `ProfileMemoryBundle`.
@@ -42,13 +44,13 @@ Other useful parameters (see also `.env.example` in the root of the repository):
 - **`AION_ADMIN_MEMORY_TOKEN`** — if set, the HTTP routes **`/admin/profile-memory/*`** can require `Authorization: Bearer <token>` (see `src/api/admin_profile_memory.py`).
 
 :::note
-Enabling the split is a **backward-compatibility** feature. For new projects, use YAML profiles (`instructions`) and MemPalace (LTM) instead of SOUL and MEMORY.
+Enabling the split is a **backward-compatibility** feature. For new projects, use YAML profiles (`instructions`) and Mnemos (LTM) instead of SOUL and MEMORY.
 :::
 
 ## Semantics of the three files
 
 - **SOUL** (`SOUL.md`) — **Deprecated.** Identity and long guidelines. The `instructions` field in the YAML profile does exactly the same thing, with significant advantages (versionable in git, validated by the schema, composable with skills and MCP). See [Agent Profiles](./profiles.md).
-- **MEMORY** (`MEMORY.md`) — **Deprecated.** Profile-level shared memory. Replaced by MemPalace (LTM with knowledge graph, semantic search, structure in wings/drawers/rooms) and SQL QueryMemory (cache of validated SQL queries). See [STM, LTM and QueryMemory Memory](../memory/stm-ltm-and-query.md).
+- **MEMORY** (`MEMORY.md`) — **Deprecated.** Profile-level shared memory. Replaced by [Mnemos](../memory/mnemos.md) (LTM with notes, digests and hybrid full-text + semantic recall) and SQL QueryMemory (cache of validated SQL queries). See [STM, LTM and QueryMemory Memory](../memory/stm-ltm-and-query.md).
 - **USER** (`USER.md`) — **Active.** Preferences and notes **for a single user** (same concept of `user_id` used by API/Chat UI). A separate file for each `(profile_slug, user_id)` pair.
 
 Implementation of reading and paths: **`src/memory/memory_files.py`**. Prompt construction: **`AgentProfile.generate_system_prompt()`** in **`src/agent_profile.py`**.
@@ -129,14 +131,16 @@ instructions: |
 
 See [Agent Profiles](./profiles.md) for full details.
 
-### MEMORY.md → MemPalace + QueryMemory
+### MEMORY.md → Mnemos + QueryMemory
 
-MemPalace offers a much richer long-term memory:
+Mnemos (which replaced the earlier MemPalace MCP server) offers a much richer long-term memory:
 
-- **Knowledge graph** (nodes and relations between entities)
-- **Semantic search** (Chroma embeddings)
-- **Structure organized** in wings, drawers, rooms
-- **Automatic extraction** LLM post-turn
+- **Notes** (short durable facts) per user, project or global scope
+- **Digests** (LLM-compressed summaries over blocks of notes)
+- **Hybrid recall** (full-text search plus embeddings)
+- **Automatic extraction** LLM post-turn, plus a nightly "dream" cycle that compresses and cleans up notes
+
+See [Mnemos](../memory/mnemos.md).
 
 SQL QueryMemory adds a cache for validated SQL/SELECT queries, separate from the PromQL system.
 
@@ -161,14 +165,14 @@ For **direct APIs**: `POST /chat` accepts `user_id` in the JSON and/or the **`X-
 
 If **`AION_ADMIN_MEMORY_TOKEN`** is set, administrative requests can include the expected bearer token.
 
-Memory Hub (**`/memory`** in the admin UI) instead concerns **PromQL query cache** and **MemPalace (LTM)** — a separate concept from SOUL/MEMORY/USER; see [STM, LTM and QueryMemory Memory](../memory/stm-ltm-and-query.md).
+Memory Hub (**`/memory`** in the admin UI) instead concerns **memory projects** (SQL QueryMemory and Mnemos notes) — a separate concept from SOUL/MEMORY/USER; see [STM, LTM and QueryMemory Memory](../memory/stm-ltm-and-query.md).
 
 ## What changes compared to "YAML only"
 
 | Scenario | Effect |
 |----------|---------|
 | Split **off** (default) | None of the three files is read. The prompt is constructed only from role + YAML instructions + skill. |
-| Split **on** | SOUL/MEMORY/USER are read and inserted into the prompt. **Not recommended**: use YAML profiles and MemPalace instead of SOUL and MEMORY. |
+| Split **on** | SOUL/MEMORY/USER are read and inserted into the prompt. **Not recommended**: use YAML profiles and Mnemos instead of SOUL and MEMORY. |
 | Only USER active | Set `AION_SOUL_MEMORY_USER_SPLIT=1` but leave SOUL.md and MEMORY.md empty/absent. |
 
 ## References in the code
@@ -182,7 +186,7 @@ Memory Hub (**`/memory`** in the admin UI) instead concerns **PromQL query cache
 ## Related documents
 
 - [Agent Profiles](./profiles.md) — **Replace SOUL.md** with `instructions` in the YAML profile.
-- [STM, LTM and QueryMemory Memory](../memory/stm-ltm-and-query.md) — **Replace MEMORY.md** with MemPalace (LTM) and SQL QueryMemory.
+- [STM, LTM and QueryMemory Memory](../memory/stm-ltm-and-query.md) — **Replace MEMORY.md** with Mnemos (LTM) and SQL QueryMemory.
 - [Skills and system prompt](./skills-and-prompts.md) — skill mode `index` / `full` in the same prompt.
 - [Identity and Chat Auth](../security/identity-and-chat-auth.md) — `user_id`, login, alignment with `USER.md`.
 - [REST API](../api-and-runtime/rest-api.md) — `POST /chat` and system prompt construction.

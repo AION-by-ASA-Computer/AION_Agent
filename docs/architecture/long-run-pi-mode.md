@@ -1,33 +1,38 @@
 ---
-title: Long Run mode & Consolidamento Nativo
+title: Long Run mode & native consolidation
 sidebar_position: 13
-description: "Consolidamento della modalità Long Run: transizione dall'architettura con worker esterno Pi Agent all'esecuzione nativa unificata in AION."
+description: "Consolidation of Long Run mode: transition from the architecture with the external Pi Agent worker to unified native execution in AION."
 ---
 
-# Long Run Mode & Consolidamento Nativo
+# Long Run Mode & Native Consolidation
 
-> [!NOTE]
-> **Consolidamento Completato**: La modalità di esecuzione per task lunghi e multi-step è ora **completamente gestita dal runtime nativo di AION** (Harness V2 / Haystack).
->
-> Il worker esterno Node.js (`services/pi-long-run`) è stato dismesso in favore di un'architettura unificata in Python che offre prestazioni superiori, minore latenza e persistenza integrata.
+:::info Design note
+Historical note on how long-running, multi-step execution moved from an external Node.js worker into the native AION runtime. Status: implemented — the external worker has been removed and the listed modules exist under `src/runtime/` and `src/memory/`.
+:::
 
----
+:::note
+**Consolidation completed**: the execution mode for long, multi-step tasks is now **fully handled by the native AION runtime** (Harness V2 / Haystack).
 
-## Architettura Unificata
-
-Tutti i requisiti per sessioni complesse e di lunga durata sono integrati nel backend nativo:
-
-- **Esecuzione In-Process:** Nessun round-trip di rete extra verso processi Node.js intermedi.
-- **Context Offloading (L1):** Output di tool voluminosi salvati automaticamente su file (`src/runtime/tool_offload.py`).
-- **Tool Ledger (L2):** Storico sintetico delle azioni iniettato nel contesto (`src/runtime/tool_ledger.py`).
-- **Circuit Breaker:** Protezione nativa anti-loop su errori ripetuti (`src/runtime/tool_circuit.py`).
-- **Compattazione Dinamica:** Sintesi automatica del contesto con preservazione dei cut-point (`src/memory/context_compressor.py`).
+The external Node.js worker (`services/pi-long-run`) has been retired in favour of a unified Python architecture that offers better performance, lower latency and built-in persistence.
+:::
 
 ---
 
-## Documenti Correlati
+## Unified architecture
 
-- [Valutazione Tecnica e Consolidamento](./aion-vs-longrun-assessment.md)
+All the requirements for complex, long-running sessions are built into the native backend:
+
+- **In-process execution:** no extra network round-trips to intermediate Node.js processes.
+- **Context offloading (L1):** large tool outputs are automatically saved to files (`src/runtime/tool_offload.py`).
+- **Tool ledger (L2):** a concise history of actions injected into the context (`src/runtime/tool_ledger.py`).
+- **Circuit breaker:** native anti-loop protection against repeated errors (`src/runtime/tool_circuit.py`).
+- **Dynamic compaction:** automatic context summarization that preserves cut points (`src/memory/context_compressor.py`).
+
+---
+
+## Related documents
+
+- [Technical assessment and consolidation](./aion-vs-longrun-assessment.md)
 - [AION Harness v2](./aion-harness-v2.md)
 - [Context Compaction](../memory/context-compaction.md)
 - [Context Offloading](./context-offloading.md)

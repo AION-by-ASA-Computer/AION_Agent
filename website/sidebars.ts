@@ -1,18 +1,165 @@
+/**
+ * Sidebars of the AION documentation site.
+ *
+ * The docs are split by AUDIENCE, one sidebar per navbar tab, so each reader
+ * only sees the pages meant for them:
+ *   - startSidebar:     newcomers and chat users (what AION is, quickstart, user guide)
+ *   - apiSidebar:       developers integrating AION through the REST API
+ *   - adminSidebar:     administrators and operators (install, configure, secure, connect)
+ *   - internalsSidebar: people who develop AION itself (architecture, memory, design notes)
+ *
+ * The sidebar is intentionally decoupled from the folder layout of `docs/`:
+ * file paths are referenced by source code and CLAUDE.md, so pages are moved
+ * between sections here instead of on disk. Every page in `docs/` should appear
+ * in exactly one sidebar (check with `npm run build`: orphan pages still build
+ * but are not reachable from the navigation).
+ */
 import type {SidebarsConfig} from '@docusaurus/plugin-content-docs';
 
-/**
- * Sidebar ordinata per dominio (allineata alle cartelle in docs/).
- * L’indice principale è docs/index.md (slug /).
- */
 const sidebars: SidebarsConfig = {
-  tutorialSidebar: [
+  startSidebar: [
     'index',
     {
       type: 'category',
-      label: 'Introduction',
+      label: 'Get started',
       collapsed: false,
-      items: ['introduction/overview'],
+      items: [
+        'getting-started/what-is-aion',
+        'getting-started/key-concepts',
+        'getting-started/quickstart',
+        'getting-started/faq',
+      ],
     },
+    {
+      type: 'category',
+      label: 'User guide',
+      collapsed: false,
+      items: [
+        'user-guide/using-the-chat',
+        'clients/side-threads',
+      ],
+    },
+  ],
+
+  apiSidebar: [
+    {
+      type: 'category',
+      label: 'API guide',
+      collapsed: false,
+      items: [
+        'api-guide/overview',
+        'api-guide/get-an-api-key',
+        'api-guide/first-api-call',
+        'api-guide/streaming',
+        'api-guide/conversations-and-files',
+        'api-guide/openai-compatible',
+        'api-guide/errors-and-troubleshooting',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Integrations',
+      collapsed: false,
+      items: ['clients/n8n', 'clients/sdk-and-widget', 'security/service-accounts'],
+    },
+    {
+      type: 'category',
+      label: 'Reference',
+      collapsed: false,
+      items: [
+        'api-and-runtime/rest-api',
+        'api-and-runtime/sse-events',
+        'security/api-keys',
+        'api-and-runtime/session-charts',
+        'api-and-runtime/mcp-integrations-api',
+      ],
+    },
+  ],
+
+  adminSidebar: [
+    'admin-guide/checklist',
+    'clients/admin-ui',
+    {
+      type: 'category',
+      label: 'Install and update',
+      collapsed: false,
+      items: [
+        'deployment/docker',
+        'deployment/migrate-compose-to-ghcr',
+        'deployment/self-update',
+        'deployment/podman-sandbox',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Configuration',
+      collapsed: true,
+      items: [
+        'configuration/environment',
+        'configuration/llm-provider-precedence',
+        'configuration/profiles',
+        'configuration/skills-and-prompts',
+        'configuration/soul-memory-user',
+        'configuration/web-search-and-fetch',
+        'configuration/filesystem-policy-and-promo',
+        'configuration/office-and-legacy-word',
+        'configuration/document-evidence',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Users and security',
+      collapsed: true,
+      items: [
+        'security/identity-and-chat-auth',
+        'security/password-setup-email',
+        'security/sso-migration',
+        'security/two-factor-auth',
+        'security/session-isolation',
+        'security/pii-review-token',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Connectors (MCP)',
+      collapsed: true,
+      items: [
+        'integrations/mcp',
+        {
+          type: 'category',
+          label: 'Custom MCP servers',
+          collapsed: false,
+          link: {type: 'doc', id: 'mcp/custom-mcp-servers'},
+          items: ['mcp/custom-mcp-development'],
+        },
+        'mcp/registry',
+        'mcp/connector-catalog',
+        'mcp/hub-wizard',
+        'mcp/user-isolation-and-credentials',
+        'mcp/smb-files',
+        'mcp/microsoft-365',
+        'mcp/speech-to-text',
+        'mcp/remote-bridge',
+        'mcp/promo-render',
+        'mcp/orchestration',
+        'integrations/deep-research',
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Messaging channels',
+      collapsed: true,
+      items: ['integrations/whatsapp', 'telegram/RUNBOOK'],
+    },
+    {
+      type: 'category',
+      label: 'Monitoring',
+      collapsed: true,
+      items: ['architecture/observability', 'benchmarks/agent-smoke-tests'],
+    },
+  ],
+
+  internalsSidebar: [
     {
       type: 'category',
       label: 'Architecture',
@@ -20,48 +167,12 @@ const sidebars: SidebarsConfig = {
       items: [
         'architecture/overview',
         'architecture/source-tree',
-        // 'architecture/agent-db',  // COMMENTED OUT: Agent DB doc disabled
-        'architecture/observability',
-        'architecture/testing-and-optimization',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Configuration',
-      collapsed: false,
-      items: [
-        'configuration/environment',
-        'configuration/filesystem-policy-and-promo',
-        'configuration/web-search-and-fetch',
-        'configuration/profiles',
-        'configuration/skills-and-prompts',
-        'configuration/office-and-legacy-word',
-        'configuration/document-evidence',
-        'configuration/soul-memory-user',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Deployment',
-      collapsed: false,
-      items: ['deployment/docker'],
-    },
-    {
-      type: 'category',
-      label: 'API and Runtime',
-      collapsed: false,
-      items: [
-        'api-and-runtime/rest-api',
-        'api-and-runtime/mcp-integrations-api',
         'api-and-runtime/agent-pipeline',
-        'api-and-runtime/session-charts',
+        'architecture/plan-execution-run-model',
+        'architecture/context-offloading',
+        'architecture/aion-harness-v2',
+        'clients/chat-ui',
       ],
-    },
-    {
-      type: 'category',
-      label: 'Clients',
-      collapsed: false,
-      items: ['clients/chat-ui', 'clients/admin-ui', 'clients/sdk-and-widget', 'clients/n8n'],
     },
     {
       type: 'category',
@@ -71,15 +182,18 @@ const sidebars: SidebarsConfig = {
         'memory/stm-ltm-and-query',
         'memory/mnemos',
         'memory/mnemos-hardening',
+        'memory/context-compaction',
         'memory/chat-history-and-fts',
         'memory/structured-memory',
+        'learning/hermes-features',
       ],
     },
     {
       type: 'category',
-      label: 'Benchmarks',
+      label: 'Quality and benchmarks',
       collapsed: true,
       items: [
+        'architecture/testing-and-optimization',
         'benchmarks/overview',
         'benchmarks/mnemos-bench',
         'benchmarks/longmemeval-v2',
@@ -87,42 +201,21 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
-      label: 'MCP',
-      collapsed: false,
-      items: [
-        'mcp/registry',
-        'mcp/promo-render',
-        'mcp/user-isolation-and-credentials',
-        'mcp/connector-catalog',
-        'mcp/microsoft-365',
-        'mcp/smb-files',
-        'mcp/hub-wizard',
-        'mcp/orchestration',
-      ],
-    },
-    {
-      type: 'category',
-      label: 'Security and Identity',
-      collapsed: false,
-      items: ['security/identity-and-chat-auth', 'security/api-keys', 'security/service-accounts'],
-    },
-    {
-      type: 'category',
-      label: 'Learning (Hermes)',
-      collapsed: false,
-      items: ['learning/hermes-features'],
-    },
-    {
-      type: 'category',
-      label: 'Integrations',
-      collapsed: false,
-      items: ['integrations/deep-research'],
-    },
-    {
-      type: 'category',
-      label: 'Standards',
+      label: 'Contributing',
       collapsed: true,
-      items: ['standard/authoring'],
+      items: ['opensource/repository-model', 'opensource/releases', 'standard/authoring'],
+    },
+    {
+      type: 'category',
+      label: 'Design notes',
+      collapsed: true,
+      items: [
+        'architecture/aion-native-hardening-plan',
+        'architecture/agent-deployment-governance',
+        'architecture/whatsapp-channel-plan',
+        'architecture/aion-vs-longrun-assessment',
+        'architecture/long-run-pi-mode',
+      ],
     },
   ],
 };

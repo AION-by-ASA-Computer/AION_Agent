@@ -1,10 +1,12 @@
 ---
 sidebar_position: 3
-title: MCP integrations API (chat)
-description: /v1/integrations endpoints for per-user credentials; chat Bearer authentication, not API Key.
+title: MCP integrations API
+description: Endpoints the chat-ui uses to let each user save credentials for the tool integrations they use.
 ---
 
 # MCP integrations API (`/v1/integrations`)
+
+Many tools available to the agent are MCP (Model Context Protocol) servers that need the user's own credentials — for example a personal API token or a Windows account. The `/v1/integrations` endpoints let the chat-ui list the integrations an administrator has enabled and let each user save, update or delete their own credentials for them. This page documents those endpoints for developers building or debugging clients.
 
 These endpoints live under `/v1` but do **not** follow the "API Key" authentication model described in [REST API v1](rest-api.md): API keys are rejected with `403 api_key_not_allowed` (see [API keys](../security/api-keys.md)).
 

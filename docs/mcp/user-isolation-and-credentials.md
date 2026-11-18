@@ -1,156 +1,170 @@
 ---
 sidebar_position: 3
-title: MCP isolamento per utente e credential store
-description: HOME/XDG per processo MCP, credenziali cifrate per utente, placeholder AION_USER e flussi admin/chat.
+title: MCP user isolation and credentials
+description: Per-process HOME/XDG isolation for MCP servers, encrypted per-user credentials, AION_USER placeholders, and the admin and chat flows.
 ---
 
-# MCP: isolamento per utente e credential store
+# MCP user isolation and credentials
 
-In deployment multi-utente, i processi MCP non devono condividere la stessa `$HOME` del sistema né token globali in chiaro. AION combina:
+When many people share one AION installation, each person's connectors must use **their own** login and must not see anyone else's files or tokens. This page explains how AION keeps MCP (Model Context Protocol) server processes apart per user and how it stores connector credentials (passwords, API keys, OAuth tokens) encrypted, either shared by the organization or personal to each user. It is for administrators who set up connectors and for developers/operators who run the backend; end users only see the result in chat-ui under **My integrations**.
 
-1. **Isolamento HOME/XDG** — ogni worker stdio riceve directory dedicate sotto `data/users/<user_id>/mcp_home/` (variabili `HOME`, `XDG_*`, `USERPROFILE`, `APPDATA`).
-2. **Credential store** — tabella `user_mcp_credentials` in `aion.db` con valori cifrati (AES-256-GCM) e risoluzione `${AION_USER_*}` nell’`env:` del registry al momento dello spawn.
+In a multi-user deployment, MCP processes must not share the system `$HOME` or global plain-text tokens. AION combines:
 
-## Variabili d’ambiente
+1. **HOME/XDG isolation** — each stdio worker gets dedicated directories under `data/users/<user_id>/mcp_home/` (variables `HOME`, `XDG_*`, `USERPROFILE`, `APPDATA`).
+2. **Credential store** — the `user_mcp_credentials` table in `aion.db`, with encrypted values (AES-256-GCM), and resolution of `${AION_USER_*}` placeholders in the registry `env:` at spawn time.
 
-| Variabile | Default | Ruolo |
-|-----------|---------|--------|
-| `AION_MCP_USER_HOME_ISOLATION` | `1` | Abilita directory HOME/XDG per utente per i processi MCP stdio. |
-| `AION_MCP_USER_CREDENTIALS` | `0` | Abilita lettura/scrittura credenziali per-utente e API `/v1/integrations`. |
-| `AION_CREDENTIAL_ENCRYPTION_KEY` | — | Chiave hex (32 byte = 64 caratteri) per AES-GCM. Obbligatoria in produzione se `AION_MCP_USER_CREDENTIALS=1`. |
-| `AION_DEFAULT_TENANT_ID` | `default` | Tenant usato per le righe credenziali. |
-| `AION_MCP_ENV_SCRUB` | `1` | I server del repository (`mcp_servers/`, `-m src.*`) ereditano l'env del backend senza i segreti di firma (`AION_CHAT_AUTH_SECRET`, `AION_CHAT_UI_INTERNAL_SECRET`, `AION_ORCHESTRATION_INTERNAL_SECRET`, `AION_API_KEY_BOOTSTRAP`, `AION_SETUP_*`); quelli di terze parti (`npx`, `node`, `mcp-remote`, script esterni) ricevono solo PATH/HOME/locale/proxy/certificati più l'`env:` del registry. `0` = env completo a tutti. |
-| `AION_MCP_ENV_ALLOWLIST` | — | Variabili extra (CSV) passate anche ai server di terze parti. |
+## Environment variables
 
-Generazione chiave:
+| Variable | Default | Role |
+|----------|---------|------|
+| `AION_MCP_USER_HOME_ISOLATION` | `1` | Enables per-user HOME/XDG directories for stdio MCP processes. |
+| `AION_MCP_USER_CREDENTIALS` | `0` | Enables reading/writing per-user credentials and the `/v1/integrations` API. |
+| `AION_CREDENTIAL_ENCRYPTION_KEY` | — | Hex key (32 bytes = 64 characters) for AES-GCM. Required in production if `AION_MCP_USER_CREDENTIALS=1`. |
+| `AION_DEFAULT_TENANT_ID` | `default` | Tenant used for credential rows. |
+| `AION_MCP_ENV_SCRUB` | `1` | Repository servers (`mcp_servers/`, `-m src.*`) inherit the backend env without the signing secrets (`AION_CHAT_AUTH_SECRET`, `AION_CHAT_UI_INTERNAL_SECRET`, `AION_ORCHESTRATION_INTERNAL_SECRET`, `AION_API_KEY_BOOTSTRAP`, `AION_SETUP_*`); third-party servers (`npx`, `node`, `mcp-remote`, external scripts) only get PATH/HOME/locale/proxy/certificates plus the registry `env:`. `0` = full env for everyone. |
+| `AION_MCP_ENV_ALLOWLIST` | — | Extra variables (CSV) also passed to third-party servers. |
+
+Generate the key:
 
 ```bash
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-## Placeholder nel registry (`env:`)
+:::danger Back up the encryption key
+Losing `AION_CREDENTIAL_ENCRYPTION_KEY` makes the encrypted values unrecoverable. Keep the key in a company vault, together with the `aion.db` backups (see [Backup](#backup)).
+:::
 
-- `${VAR}` — risolto da `os.environ` / `.env` (comportamento storico).
-- `${AION_USER_<SLUG_MAIUSCOLO>__<CHIAVE>}` — risolto dal DB per l’utente corrente, es. `${AION_USER_EMAIL_MCP__ACCESS_TOKEN}` per lo slug registry `email_mcp`.
-- `${AION_USER_<CHIAVE>}` — forma breve: la chiave è relativa allo **slug del server** in cui compare la mappa `env`.
-- `${AION_USER_<SLUG_MAIUSCOLO>__*}` — jolly: un oggetto JSON con **tutte** le credenziali dell'utente per lo slug (stringa vuota se non ce ne sono). Serve quando i nomi delle chiavi dipendono dalla configurazione admin e non si possono elencare nel registry, es. i set di credenziali di [`smb_files`](smb-files.md#server-multipli-e-set-di-credenziali). Non blocca mai l'avvio del worker, non genera campi nel form (la variabile che lo riceve è un trasporto) e nel probe dell'Hub riceve un valore mock non-JSON. Solo i connettori che lo dichiarano ricevono il bundle.
+## Placeholders in the registry (`env:`) {#placeholder-nel-registry-env}
 
-Vedi anche il commento di esempio in `config_std/mcp_registry.yaml`.
+| Placeholder | Resolved from |
+|-------------|---------------|
+| `${VAR}` | `os.environ` / `.env` (historical behavior). |
+| `${AION_USER_<UPPERCASE_SLUG>__<KEY>}` | The DB, for the current user. Example: `${AION_USER_EMAIL_MCP__ACCESS_TOKEN}` for the registry slug `email_mcp`. |
+| `${AION_USER_<KEY>}` | Short form: the key is relative to the **slug of the server** whose `env` map contains it. |
+| `${AION_USER_<UPPERCASE_SLUG>__*}` | Wildcard: a JSON object with **all** of the user's credentials for that slug (empty string if there are none). |
 
-## Modalità credenziali (`credential_mode`)
+The wildcard is useful when key names depend on the admin configuration and cannot be listed in the registry, e.g. the credential sets of [`smb_files`](smb-files.md#server-multipli-e-set-di-credenziali). It never blocks the worker from starting, does not create form fields (the variable that receives it is just a carrier) and, in the Hub probe, receives a non-JSON mock value. Only connectors that declare it receive the bundle.
 
-Il campo `credential_mode` nella tabella `mcp_server_configs` definisce come vengono gestite le credenziali per ciascun server MCP. I valori possibili sono:
+See also the example comment in `config_std/mcp_registry.yaml`.
 
-| Valore | Significato | Registry `env` | Credenziali |
-|--------|------------|----------------|-------------|
-| **`none`** | Nessuna credenziale richiesta. Il server funziona senza segreti o usa variabili globali non sensibili. | Placeholder `${VAR}` risolti da `os.environ` | Nessun form utente |
-| **`org_shared`** | Credenziali condivise a livello di organizzazione. L'admin configura i valori in MCP Hub e vengono iniettati via `.env` del backend. | Placeholder `${VAR}` risolti da `os.environ` | Messaggio «Gestito dall'organizzazione» in chat-ui |
-| **`per_user`** | Ogni utente configura le proprie credenziali personali nella chat-ui. I valori sono cifrati (AES-256-GCM) e isolati per `(user_id, tenant_id, server_slug, credential_key)`. | Placeholder `${AION_USER_*}` risolti dal credential store per-utente | Form credenziali in chat-ui → `/integrations` |
+## Credential modes (`credential_mode`)
 
-L'inferenza automatica della modalità avviene in `src/mcp_integration_sync.py` analizzando i placeholder nelle variabili d'ambiente del registry:
+The `credential_mode` field in the `mcp_server_configs` table defines how credentials are handled for each MCP server:
+
+| Value | Meaning | Registry `env` | Credentials |
+|-------|---------|----------------|-------------|
+| **`none`** | No credentials needed. The server works without secrets or uses non-sensitive global variables. | `${VAR}` placeholders resolved from `os.environ` | No user form |
+| **`org_shared`** | Credentials shared by the organization. The admin sets the values in the MCP Hub and they are injected via the backend `.env`. | `${VAR}` placeholders resolved from `os.environ` | "Managed by the organization" message in chat-ui |
+| **`per_user`** | Each user sets their own personal credentials in chat-ui. Values are encrypted (AES-256-GCM) and isolated per `(user_id, tenant_id, server_slug, credential_key)`. | `${AION_USER_*}` placeholders resolved from the per-user credential store | Credential form in chat-ui → `/integrations` |
+
+The mode is inferred automatically in `src/mcp_integration_sync.py` by looking at the placeholders in the registry environment variables:
+
 - `${AION_USER_*}` → `per_user`
-- `${VAR}` (variabili standard) → `org_shared`
-- Nessuna variabile → `none`
+- `${VAR}` (standard variables) → `org_shared`
+- No variables → `none`
 
-## Campi write-only (`write_only`)
+## Write-only fields (`write_only`)
 
-Un campo di `credential_fields` (catalogo connettori) può dichiarare `write_only: true`, tipicamente per password che non devono mai poter essere rilette, come la password di dominio Windows di [`smb_files`](smb-files.md). Per questi campi:
+A `credential_fields` entry (in the connector catalog) can declare `write_only: true`, typically for passwords that must never be readable again, such as the Windows domain password of [`smb_files`](smb-files.md). For these fields:
 
-- `GET /v1/integrations/credentials/{slug}/{key}` risponde **403** `secret_write_only` (il controllo usa schema DB e catalogo, quindi non si aggira con alias di slug o chiave): il valore è letto solo dal runtime allo spawn del processo MCP.
-- L'hint di visualizzazione resta sempre `****`; gli hint salvati in precedenza sono mascherati in `GET /v1/integrations`.
-- chat-ui nasconde l'icona «occhio» sul campo già salvato (compare solo mentre si digita un nuovo valore, che sostituisce quello salvato); admin-ui preserva il flag quando si salva lo schema dall'Hub.
-- Il flag è un'impostazione del catalogo: i campi senza `write_only` mantengono il comportamento storico.
+- `GET /v1/integrations/credentials/{slug}/{key}` returns **403** `secret_write_only` (the check uses the DB schema and the catalog, so it cannot be bypassed with slug or key aliases): the value is read only by the runtime when it spawns the MCP process.
+- The display hint is always `****`; hints saved earlier are masked in `GET /v1/integrations`.
+- chat-ui hides the "eye" icon on an already saved field (it appears only while typing a new value, which replaces the saved one); admin-ui keeps the flag when saving the schema from the Hub.
+- The flag is a catalog setting: fields without `write_only` keep the historical behavior.
 
-## Hub unificato (admin)
+## Unified Hub (admin) {#hub-unificato-admin}
 
-La configurazione admin avviene in **un solo percorso**: **MCP Hub** (`/hub` → Modifica configurazione). Vedi [MCP Hub Wizard](hub-wizard.md) per il flusso completo.
+Admin configuration happens in **one place only**: the **MCP Hub** (`/hub` → Edit configuration). See [MCP Hub install wizard](hub-wizard.md) for the full flow.
 
-| `credential_mode` | Admin in Hub | Registry `env` | Chat-ui |
-|-------------------|--------------|----------------|---------|
-| `none` | Nessun segreto | Solo env non sensibili | Nessun form |
-| `org_shared` | Form credenziali catalogo | `${VAR}` globali | Messaggio «gestito dall'organizzazione» |
-| `per_user` | Anteprima campi + «Applica env suggerito» | `${AION_USER_*}` | Form credenziali utente |
+| `credential_mode` | Admin in the Hub | Registry `env` | Chat-ui |
+|-------------------|------------------|----------------|---------|
+| `none` | No secrets | Non-sensitive env only | No form |
+| `org_shared` | Catalog credential form | Global `${VAR}` | "Managed by the organization" message |
+| `per_user` | Field preview + "Apply suggested env" | `${AION_USER_*}` | User credential form |
 
-Lo **schema credenziali** è rilevato automaticamente (README / `.env.example` / sorgenti) al wizard e alla preview; il catalogo opzionale `config/mcp_connector_catalog.yaml` arricchisce solo integrazioni curate.
+The **credential schema** is detected automatically (README / `.env.example` / source code) in the wizard and the preview; the optional catalog `config/mcp_connector_catalog.yaml` only enriches curated integrations.
 
-API aggiuntive: `POST /admin/mcp-integrations/sync-from-registry`, `GET .../preview`, `POST .../advise`, `POST .../apply-suggested-env`.
+Additional APIs: `POST /admin/mcp-integrations/sync-from-registry`, `GET .../preview`, `POST .../advise`, `POST .../apply-suggested-env`.
 
-Migrazione installazioni esistenti:
+Migrating existing installations:
 
 ```bash
 alembic upgrade head
 ./.venv/bin/python scripts/sync_mcp_integration_from_catalog.py
 ```
 
-Profilo consulente: `mcp_integration_advisor` (chat-ui `?profile=mcp_integration_advisor&context=<slug>`).
+Advisor profile: `mcp_integration_advisor` (chat-ui `?profile=mcp_integration_advisor&context=<slug>`).
 
-## Modello dati
+## Data model
 
-- **`mcp_server_configs`** — policy chat (`credential_mode`, `is_enabled_for_users`, schema dal catalogo, `aion_connector_id`).
-- **`user_mcp_credentials`** — una riga per `(user_id, tenant_id, server_slug, credential_key)` con `value_encrypted`.
+- **`mcp_server_configs`** — chat policy (`credential_mode`, `is_enabled_for_users`, schema from the catalog, `aion_connector_id`).
+- **`user_mcp_credentials`** — one row per `(user_id, tenant_id, server_slug, credential_key)` with `value_encrypted`.
 
 ## API
 
-- **Admin** (Bearer admin): `GET/POST/PATCH/DELETE /admin/mcp-integrations` — gestione catalogo integrazioni.
-- **Chat** (Bearer token chat o secret BFF dove applicabile): `GET /v1/integrations`, `POST /v1/integrations/credentials`, `DELETE /v1/integrations/credentials/{slug}/{key}`.  
-  Autenticazione: **non** accettano le API key (`X-API-Key`, risposta `403 api_key_not_allowed`, vedi [API keys](../security/api-keys.md)); usano lo stesso modello degli altri endpoint user-facing protetti da `require_chat_auth`. Con `AION_CHAT_PASSWORD_AUTH=0`, la lista è anonima senza hint credenziali; **mutazioni** (salvataggio credenziali) richiedono identità non anonima.
+- **Admin** (admin Bearer token): `GET/POST/PATCH/DELETE /admin/mcp-integrations` — manages the integration catalog.
+- **Chat** (chat Bearer token, or BFF secret where applicable): `GET /v1/integrations`, `POST /v1/integrations/credentials`, `DELETE /v1/integrations/credentials/{slug}/{key}`.
+  - Authentication: these endpoints do **not** accept API keys (`X-API-Key` gets `403 api_key_not_allowed`, see [API keys](../security/api-keys.md)); they use the same model as the other user-facing endpoints protected by `require_chat_auth`.
+  - With `AION_CHAT_PASSWORD_AUTH=0` the list is anonymous and has no credential hints; **changes** (saving credentials) require a non-anonymous identity.
 
 ## UI
 
-- **Admin UI** — **MCP Hub** (`/hub`): installazione, env registry, policy utenti e modalità credenziali. Voce «Policy MCP (Hub)» per il focus integrazioni.
-- **Chat UI** — «Le mie integrazioni» (`/integrations`): form solo per `credential_mode=per_user`; `org_shared` mostra messaggio senza input.
+- **Admin UI** — **MCP Hub** (`/hub`): installation, registry env, user policy and credential mode. The "MCP policy (Hub)" entry focuses on integrations.
+- **Chat UI** — "My integrations" (`/integrations`): form only for `credential_mode=per_user`; `org_shared` shows a message with no inputs.
 
-## Operazioni
+## Operations
 
-Dopo le migration Alembic, seed idempotente del catalogo da registry:
+After the Alembic migrations, seed the catalog from the registry (idempotent):
 
 ```bash
 ./.venv/bin/python scripts/seed_mcp_integration_configs.py
 ```
 
-Lo script `scripts/upgrade-aion.sh` / `upgrade_core.py` invoca il seed in modo non bloccante dopo `init_unified_db`.
+`scripts/upgrade-aion.sh` / `upgrade_core.py` runs the seed in non-blocking mode after `init_unified_db`.
 
 ## OAuth
 
-Il flusso OAuth 2.0 (Authorization Code + PKCE S256) è implementato in `src/api/v1/mcp_integrations.py`:
+The OAuth 2.0 flow (Authorization Code + PKCE S256) is implemented in `src/api/v1/mcp_integrations.py`:
 
-- `GET /v1/integrations/oauth/start` — avvio flow con discovery RFC 9728/8414 e registrazione dinamica client opzionale (`AION_MCP_OAUTH_DYNAMIC_REGISTRATION`, default `1`).
-- `GET /v1/integrations/oauth/callback` — callback browser con redirect verso chat-ui (`<chat>/integrations`). Base chat-ui risolta in ordine: `AION_CHAT_URL` / `AION_PUBLIC_CHAT_URL` non-loopback → `AION_OAUTH_REDIRECT_BASE_URL` / `AION_PUBLIC_API_URL` pubblico (senza `/api`) → `AION_PUBLIC_CHAT_URL` loopback (dev) → header proxy / `DOMAIN`.
-- `POST /v1/integrations/oauth/callback` — scambio codice/token programmatico.
-- `GET /v1/integrations/{slug}/oauth-status` — stato connessione utente.
+- `GET /v1/integrations/oauth/start` — starts the flow, with RFC 9728/8414 discovery and optional dynamic client registration (`AION_MCP_OAUTH_DYNAMIC_REGISTRATION`, default `1`).
+- `GET /v1/integrations/oauth/callback` — browser callback that redirects to chat-ui (`<chat>/integrations`). The chat-ui base URL is resolved in this order: non-loopback `AION_CHAT_URL` / `AION_PUBLIC_CHAT_URL` → public `AION_OAUTH_REDIRECT_BASE_URL` / `AION_PUBLIC_API_URL` (without `/api`) → loopback `AION_PUBLIC_CHAT_URL` (dev) → proxy headers / `DOMAIN`.
+- `POST /v1/integrations/oauth/callback` — programmatic code/token exchange.
+- `GET /v1/integrations/{slug}/oauth-status` — the user's connection status.
 
-I token (`OAUTH_TOKEN`, `OAUTH_REFRESH_TOKEN`) sono salvati cifrati in `user_mcp_credentials`. Il refresh automatico avviene in `src/runtime/credential_store.py` quando il token di accesso scade ma il refresh token è ancora valido. Lo scambio HTTP è centralizzato in `src/runtime/oauth_token_exchange.py`.
+Tokens (`OAUTH_TOKEN`, `OAUTH_REFRESH_TOKEN`) are stored encrypted in `user_mcp_credentials`. Automatic refresh happens in `src/runtime/credential_store.py` when the access token has expired but the refresh token is still valid. The HTTP exchange is centralized in `src/runtime/oauth_token_exchange.py`.
 
-Anche il `client_secret` OAuth del server (configurato dall'admin o ottenuto via registrazione dinamica) è cifrato a riposo: in `mcp_server_configs.oauth_config` compare solo `client_secret_encrypted` (stessa chiave `AION_CREDENTIAL_ENCRYPTION_KEY`, tipo colonna `EncryptedOAuthConfigJSON` in `src/data/encrypted_types.py`). I valori legacy in chiaro restano leggibili e vengono cifrati alla prima scrittura o dalla migrazione `x6y7z8a026`, che viene saltata se la chiave non è impostata nell'ambiente in cui gira.
+The server's OAuth `client_secret` (set by the admin or obtained through dynamic registration) is also encrypted at rest: `mcp_server_configs.oauth_config` contains only `client_secret_encrypted` (same `AION_CREDENTIAL_ENCRYPTION_KEY`, column type `EncryptedOAuthConfigJSON` in `src/data/encrypted_types.py`). Legacy plain-text values remain readable and are encrypted on the first write or by migration `x6y7z8a026`, which is skipped if the key is not set in the environment where it runs.
 
-**Vincolo architetturale**: lo stato PKCE (`_oauth_pending`) è in memoria di processo — il backend deve restare a `--workers 1`.
+:::warning Architectural constraint
+The PKCE state (`_oauth_pending`) lives in process memory, so the backend must run with `--workers 1`.
+:::
 
 ## Backup
 
-La perdita di `AION_CREDENTIAL_ENCRYPTION_KEY` rende irreversibili i valori cifrati: conservare la chiave in un vault aziendale insieme ai backup di `aion.db`.
+Losing `AION_CREDENTIAL_ENCRYPTION_KEY` makes the encrypted values unrecoverable: keep the key in a company vault together with the `aion.db` backups.
 
-## Esempio end-to-end: email (IMAP/SMTP)
+## End-to-end example: email (IMAP/SMTP)
 
-Template in `config_std/`; runtime legge `config/` (vedi `scripts/sync_config.py`).
+Templates live in `config_std/`; the runtime reads `config/` (see `scripts/sync_config.py`).
 
-1. **Registry** (`config/mcp_registry.local.yaml`): server `email-mcp-server` con `command: bun`, `args: [run, mcp_servers/email-mcp-server/index.ts]`, `aion_connector_id: email_imap`, env con `${AION_USER_EMAIL_MCP_SERVER__*}`.
-2. **Profilo** (`config/profiles/generic_assistant.yaml`): includere `email-mcp-server` in `mcp_servers` e skill `email_imap_mcp`.
-3. **Hub**: wizard AI o Modifica → `credential_mode=per_user` → Applica env suggerito → abilita chat. **Probe** (`POST /admin/mcp/{slug}/probe`) per verificare `search_emails`, `send_email`, `list_folders`.
-4. **Chat-ui**: Le mie integrazioni → compilare `EMAIL_USER`, `EMAIL_PASSWORD`, `IMAP_*`, `SMTP_*`.
-5. **Env**: `AION_MCP_USER_CREDENTIALS=1` e `AION_CREDENTIAL_ENCRYPTION_KEY` nel `.env` backend.
+1. **Registry** (`config/mcp_registry.local.yaml`): server `email-mcp-server` with `command: bun`, `args: [run, mcp_servers/email-mcp-server/index.ts]`, `aion_connector_id: email_imap`, env with `${AION_USER_EMAIL_MCP_SERVER__*}`.
+2. **Profile** (`config/profiles/generic_assistant.yaml`): add `email-mcp-server` to `mcp_servers` and the `email_imap_mcp` skill.
+3. **Hub**: AI wizard or Edit → `credential_mode=per_user` → Apply suggested env → enable in chat. Run the **probe** (`POST /admin/mcp/{slug}/probe`) to check `search_emails`, `send_email`, `list_folders`.
+4. **Chat-ui**: My integrations → fill in `EMAIL_USER`, `EMAIL_PASSWORD`, `IMAP_*`, `SMTP_*`.
+5. **Env**: `AION_MCP_USER_CREDENTIALS=1` and `AION_CREDENTIAL_ENCRYPTION_KEY` in the backend `.env`.
 
-Migrazione chiavi legacy (`IMAP_USER` → `EMAIL_USER`):
+Migrating legacy keys (`IMAP_USER` → `EMAIL_USER`):
 
 ```bash
-./.venv/bin/python scripts/migrate_email_credential_keys.py --slug email-mcp-server --dry-run
+./.venv/bin/python scripts/migration/migrate_email_credential_keys.py --slug email-mcp-server --dry-run
 ```
 
-## Architettura unificata (pipeline)
+## Unified architecture (pipeline)
 
-Unica funzione `apply_integration_config` in `src/mcp_integration_sync.py` usata da:
+A single function, `apply_integration_config` in `src/mcp_integration_sync.py`, is used by:
 
-- Wizard commit (`POST /admin/mcp/install-wizard/commit`)
-- Applica env (`POST /admin/mcp-integrations/{slug}/apply-suggested-env`)
-- Post-install marketplace (`normalize_and_apply_env_after_install`)
+- Apply env (`POST /admin/mcp-integrations/{slug}/apply-suggested-env`)
+- Marketplace post-install (`normalize_and_apply_env_after_install`)
+- Integrity repair (`src/runtime/mcp_integration_integrity.py`)
 
-Discovery + registry definiscono schema/env; il DB (`mcp_server_configs`) la policy; le skill guidano l'agente su **quando** usare i tool (non mapping prompt in Python).
+Discovery and the registry define schema and env; the DB (`mcp_server_configs`) holds the policy; skills tell the agent **when** to use the tools (no prompt mapping in Python).

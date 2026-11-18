@@ -225,6 +225,16 @@ def build_session_env(
         if val is not None:
             env[key] = val
 
+    # NODE_PATH always reaches the session: it points at the global node_modules
+    # where the Docker images preinstall the office skill libraries (docx,
+    # pptxgenjs) and holds no secret. A custom AION_SANDBOX_ENV_ALLOWLIST that
+    # omits it (the value shipped in older .env.example files) used to make
+    # require("docx") fail in every session while sandbox_install_npm_packages
+    # answered "already preinstalled", trapping the agent in a retry loop.
+    node_path = os.environ.get("NODE_PATH")
+    if node_path:
+        env.setdefault("NODE_PATH", node_path)
+
     env.setdefault("LANG", "en_US.UTF-8")
     session_root_resolved = session_root.resolve()
     env["HOME"] = str(session_root_resolved)

@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "docs-site",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--dir", "website", "run", "serve", "--port", "3011", "--no-open"],
+      "port": 3011
+    }
+  ]
+}

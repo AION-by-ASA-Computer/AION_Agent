@@ -23,16 +23,16 @@ version: 9
 | Do | Don't |
 |----|-------|
 | Write complete file bodies via tools | Dump full files in chat |
-| `sandbox_install_npm_packages` **before** docx-js scripts | Install deps after a failed run |
+| `require("docx")` directly: `docx`/`pptxgenjs` are preinstalled on the server | `sandbox_install_npm_packages(["docx"])` up front, or reinstalling after a failed run (follow the run's `HINT`) |
 | Read file section before edit | Call `sandbox_edit_workspace_file` with `{}` or missing `relative_path` |
 | Retry with fixed arguments after tool error | Invent tools `aion_artifact`, `artifact`, `create_file` |
 
 ## Operational order (e.g. Word .docx)
 
 1. `skill_search("docx")` → `skill_view("docx")` when available.
-2. `sandbox_install_npm_packages(["docx"])` — if not already installed.
-3. `sandbox_write_workspace_file` with a **complete** `workspace/create_doc.js` script.
-4. `sandbox_run_node_file(relative_path="workspace/create_doc.js")`.
+2. `sandbox_write_workspace_file` with a **complete** `workspace/create_doc.js` script (CommonJS `require("docx")`, no ESM `import`; `docx` is preinstalled, no install step).
+3. `sandbox_run_node_file(relative_path="workspace/create_doc.js")`.
+4. Only if the run fails, follow its `HINT`; python-docx is a fallback, not the default.
 
 If `skill_search("docx")` returns nothing, **still proceed** with docx-js via write tool (see `core_protocol`).
 

@@ -1,90 +1,100 @@
 ---
-title: Passaggio da docker-compose.yml a docker-compose.ghcr.yml
+title: Switch to GHCR images
 sidebar_position: 6
-description: Guida passo-passo per fare il backup completo e passare dallo stack compilato in locale (docker-compose.yml) alle immagini GHCR (docker-compose.ghcr.yml) senza perdere dati.
+description: Step-by-step guide to back up everything and move from the locally built stack (docker-compose.yml) to the GHCR images (docker-compose.ghcr.yml) without losing data.
 ---
 
-# Passaggio da `docker-compose.yml` a `docker-compose.ghcr.yml`
+# Switch from `docker-compose.yml` to `docker-compose.ghcr.yml`
 
-Questa guida porta un'installazione avviata finora con `docker-compose.yml`
-(immagini `aion/*` compilate dal clone) a `docker-compose.ghcr.yml` (immagini
-`ghcr.io/aion-by-asa-computer/aion-*`), **nella stessa cartella** e **senza
-perdere dati**.
+This guide moves an installation that has so far run with `docker-compose.yml`
+(`aion/*` images built from the repository clone) to `docker-compose.ghcr.yml`
+(prebuilt `ghcr.io/aion-by-asa-computer/aion-*` images from GitHub Container
+Registry, GHCR), **in the same folder** and **without losing data**. It is meant
+for the administrator or operator who manages the server. Once on GHCR, you can
+install new releases with one command or with the "Update now" button in the
+admin UI.
 
-## Perché i dati non si perdono
+**Summary of the steps:** pick the image version (0), run pre-flight checks (1),
+back up (2), take a "before" snapshot of the data (3), update `.env` (4), start
+the new stack (5), verify (6), then make GHCR the default (7). Rollback is in
+step 8.
 
-- Entrambi i file hanno `name: aion-agent`: i volumi si chiamano sempre
-  `aion-agent_aion_data`, `aion-agent_redis_data`, `aion-agent_caddy_data`,
-  `aion-agent_caddy_config`. Il nuovo stack si aggancia ai volumi esistenti.
-- Il DB (`/app/data/aion.db`: chat, utenti, impostazioni, credenziali cifrate)
-  vive nel volume `aion_data`, con lo stesso `AION_DB_URL` in entrambi i file.
-- I bind mount `./.env`, `./config`, `./mcp_servers`, `./data/sessions`,
-  `./data/db_test` sono identici.
+## Why no data is lost
 
-Cambiano solo le immagini (il codice). Le differenze da gestire sono elencate
-nei passi sotto: overlay MCP, versione/migrazioni Alembic, file di override.
+- Both files declare `name: aion-agent`, so the volumes always have the same
+  names: `aion-agent_aion_data`, `aion-agent_redis_data`,
+  `aion-agent_caddy_data`, `aion-agent_caddy_config`. The new stack attaches to
+  the existing volumes.
+- The database (`/app/data/aion.db`: chats, users, settings, encrypted
+  credentials) lives in the `aion_data` volume, with the same `AION_DB_URL` in
+  both files.
+- The bind mounts `./.env`, `./config`, `./mcp_servers`, `./data/sessions`,
+  `./data/db_test` are identical.
 
-:::danger Regole d'oro
-- **Mai** `docker compose down -v` sullo stack reale: `-v` cancella i volumi.
-- Non toccare `AION_CREDENTIAL_ENCRYPTION_KEY`, `REDIS_PASSWORD`,
-  `AION_CHAT_AUTH_SECRET` nel `.env`.
-- Esegui **tutti** i comandi nello **stesso terminale** (le variabili
-  `export` valgono solo lì) e dalla **root del clone**.
+Only the images (the code) change. The differences you need to handle are
+covered in the steps below: MCP overlay, Alembic version/migrations, override
+file.
+
+:::danger Golden rules
+- **Never** run `docker compose down -v` on the real stack: `-v` deletes the volumes.
+- Do not touch `AION_CREDENTIAL_ENCRYPTION_KEY`, `REDIS_PASSWORD` or
+  `AION_CHAT_AUTH_SECRET` in `.env`.
+- Run **all** commands in the **same terminal** (`export`ed variables only
+  exist there) and from the **root of the clone**.
 :::
 
 ---
 
-## 0. Variabili di lavoro
+## 0. Working variables
 
 ```bash
 cd /percorso/del/clone/AION_Agent
 ```
 
-### Scegli la versione delle immagini
+### Choose the image version
 
-**Opzione A: ultima release pubblicata (niente build locale).** Le immagini
-vengono scaricate da GHCR. È la scelta per la produzione e l'unica con cui
-funzionano gli aggiornamenti automatici (`install.sh upgrade`, pulsante
-"Aggiorna ora").
+**Option A: latest published release (no local build).** Images are pulled from
+GHCR. This is the choice for production, and the only one that works with
+automatic updates (`install.sh upgrade`, the "Update now" button).
 
-Con la CLI `gh`:
+With the `gh` CLI:
 
 ```bash
 export AION_TARGET=$(gh release view --repo AION-by-ASA-Computer/AION_Agent --json tagName -q .tagName | sed 's/^v//') && echo "Release: $AION_TARGET"
 ```
 
-Senza `gh` (stessa chiamata usata da `install.sh`):
+Without `gh` (same call `install.sh` uses):
 
 ```bash
 export AION_TARGET=$(curl -fsSL https://api.github.com/repos/AION-by-ASA-Computer/AION_Agent/releases/latest | python3 -c "import sys, json; print(json.load(sys.stdin)['tag_name'].lstrip('v'))") && echo "Release: $AION_TARGET"
 ```
 
-Per una release specifica: `export AION_TARGET=1.6.2` (senza la `v`).
+For a specific release: `export AION_TARGET=1.6.2` (without the `v`).
 
-**Opzione B: immagini compilate in locale** con i nomi GHCR
-(`bash ./scripts/install.sh --local` o `build_local_images`), tag `local`.
-Serve quando il codice del clone è più nuovo dell'ultima release.
+**Option B: images built locally** with the GHCR names
+(`bash ./scripts/install.sh --local` or `build_local_images`), tag `local`.
+Use it when the code in your clone is newer than the latest release.
 
 ```bash
 export AION_TARGET=local
 ```
 
-:::caution Release e DB già migrato
-Se il DB è già stato migrato da un codice più nuovo dell'ultima release (ad
-esempio da un avvio con immagini `local` o con il compose di default su un
-branch non rilasciato), l'opzione A non è utilizzabile finché non esce una
-release che contiene quelle migrazioni. Il check del passo **1c** lo rileva.
-In quel caso usa l'opzione B ora e passa alla release più avanti (passo 9).
+:::caution Release vs an already-migrated DB
+If the DB has already been migrated by code newer than the latest release (for
+example by a start with `local` images, or with the default compose on an
+unreleased branch), option A cannot be used until a release containing those
+migrations is published. The check in step **1c** detects this. In that case
+use option B now and move to the release later (step 9).
 :::
 
-Cartella di backup (fuori dal clone, con timestamp):
+Backup folder (outside the clone, with a timestamp):
 
 ```bash
 export BK=~/aion-backups/pre-ghcr-$(date +%Y%m%d_%H%M%S) && mkdir -p "$BK" && echo "$BK"
 ```
 
-Funzione di comodo per il nuovo stack: include `docker-compose.override.yml`
-se presente (con `-f` non viene più caricato in automatico).
+Helper function for the new stack: it includes `docker-compose.override.yml` if
+present (with `-f`, the override is no longer loaded automatically).
 
 ```bash
 dcg() { if [ -f docker-compose.override.yml ]; then docker compose -f docker-compose.ghcr.yml -f docker-compose.override.yml "$@"; else docker compose -f docker-compose.ghcr.yml "$@"; fi; }
@@ -92,26 +102,25 @@ dcg() { if [ -f docker-compose.override.yml ]; then docker compose -f docker-com
 
 ---
 
-## 1. Controlli preliminari (stack vecchio ancora acceso)
+## 1. Pre-flight checks (old stack still running)
 
-**1a. Modifiche locali al codice.** Con GHCR `src/`, `config_std/` e
-`mcp_servers_std/` non sono più montati: valgono quelli dell'immagine.
-Modifiche non committate/non rilasciate smettono di avere effetto.
+**1a. Local code changes.** With GHCR, `src/`, `config_std/` and
+`mcp_servers_std/` are no longer mounted: the versions inside the image are
+used. Uncommitted or unreleased changes stop having any effect.
 
 ```bash
 git status --short src config_std mcp_servers_std
 ```
 
-**1b. Immagini disponibili.** Per una release va prima fatto il pull (lo
-stack vecchio resta acceso, così il fermo è più breve); per `local` devono già
-esistere.
+**1b. Images available.** For a release, pull first (the old stack keeps
+running, so downtime is shorter); for `local`, the images must already exist.
 
 ```bash
 [ "$AION_TARGET" != "local" ] && AION_VERSION=$AION_TARGET docker compose -f docker-compose.ghcr.yml pull
 ```
 
-Se il pull risponde `denied` o `unauthorized`, le immagini richiedono il login
-a GHCR (token GitHub con scope `read:packages`):
+If the pull answers `denied` or `unauthorized`, the images require a GHCR login
+(GitHub token with the `read:packages` scope):
 
 ```bash
 docker login ghcr.io
@@ -121,12 +130,12 @@ docker login ghcr.io
 for s in backend chat-ui admin-ui website; do docker image inspect ghcr.io/aion-by-asa-computer/aion-$s:$AION_TARGET >/dev/null 2>&1 && echo "ok     aion-$s:$AION_TARGET" || echo "MANCA  aion-$s:$AION_TARGET"; done
 ```
 
-Se una riga dice `MANCA`, fermati.
+If any line says `MANCA` (missing), stop.
 
-**1c. Compatibilità del DB (Alembic).** La revision attuale del DB deve
-essere nota alla nuova immagine, altrimenti il backend non parte. La revision
-si legge direttamente dalla tabella `alembic_version`: `alembic current`
-fallirebbe se il DB fosse già più avanti del codice vecchio.
+**1c. Database compatibility (Alembic).** The DB's current revision must be
+known to the new image, otherwise the backend does not start. The revision is
+read straight from the `alembic_version` table, because `alembic current` would
+fail if the DB were already ahead of the old code.
 
 ```bash
 REV=$(docker compose exec -T backend python -c "import sqlite3; print(sqlite3.connect('file:data/aion.db?mode=ro', uri=True).execute('select version_num from alembic_version').fetchone()[0])" 2>/dev/null); echo "Revision DB: $REV"
@@ -136,19 +145,20 @@ REV=$(docker compose exec -T backend python -c "import sqlite3; print(sqlite3.co
 if [ -n "$REV" ] && docker run --rm --entrypoint alembic ghcr.io/aion-by-asa-computer/aion-backend:$AION_TARGET history 2>/dev/null | grep -q "$REV"; then echo "OK: la nuova immagine conosce $REV"; else echo "STOP: la nuova immagine NON conosce '$REV' (troppo vecchia o errore)"; fi
 ```
 
-Con `STOP` non proseguire: serve una versione più recente (con l'opzione A,
-passa all'opzione B e vedi il passo 9). Non fidarti del solo healthcheck: se
-le migrazioni falliscono, il backend logga
-`ERROR … Errore durante le migrazioni Alembic` ma parte comunque `healthy`,
-con un codice che non conosce lo schema del DB.
+The command prints `OK` if the new image knows the revision, `STOP` otherwise.
+On `STOP` do not continue: you need a newer version (if you chose option A,
+switch to option B and see step 9). Do not rely on the healthcheck alone: if
+migrations fail, the backend logs
+`ERROR … Errore durante le migrazioni Alembic` but still becomes `healthy`,
+running code that does not know the DB schema.
 
-:::caution DB già più avanti dello stack vecchio
-Se nei log dello stack vecchio compare
-`Can't locate revision identified by '<rev>'`, il DB è già stato migrato da
-un'immagine più nuova (ad esempio un avvio precedente del compose GHCR) e il
-codice vecchio gira su uno schema che non conosce. Non è una perdita di dati:
-il passaggio a un'immagine che conosce quella revision (check `OK` sopra)
-riallinea codice e DB.
+:::caution DB already ahead of the old stack
+If the old stack's logs show
+`Can't locate revision identified by '<rev>'`, the DB has already been migrated
+by a newer image (for example a previous start of the GHCR compose) and the old
+code is running on a schema it does not know. This is not data loss: switching
+to an image that knows that revision (the `OK` check above) brings code and DB
+back in line.
 
 ```bash
 docker compose logs backend | grep -iE "alembic|migrat" | tail -5
@@ -159,7 +169,7 @@ docker compose logs backend | grep -iE "alembic|migrat" | tail -5
 
 ## 2. Backup
 
-**2a. Backup logico** (stack acceso), poi copiato nella cartella di backup:
+**2a. Logical backup** (stack running), then copied into the backup folder:
 
 ```bash
 docker compose exec backend python scripts/aion_backup.py --output /app/data/_backups
@@ -169,21 +179,21 @@ docker compose exec backend python scripts/aion_backup.py --output /app/data/_ba
 mkdir -p "$BK/backup-logico" && docker compose cp backend:/app/data/_backups/. "$BK/backup-logico/"
 ```
 
-**2b. Ferma lo stack vecchio.** Senza `-v`.
+**2b. Stop the old stack.** Without `-v`.
 
 ```bash
 docker compose down
 ```
 
-**2c. Backup dei volumi** (a stack fermo, così la copia di SQLite è
-consistente):
+**2c. Volume backup** (with the stack stopped, so the SQLite copy is
+consistent):
 
 ```bash
 for v in aion_data redis_data caddy_data caddy_config; do docker run --rm -v aion-agent_$v:/v:ro -v "$BK:/b" alpine tar -czpf /b/$v.tar.gz -C /v . && echo "ok $v"; done
 ```
 
-**2d. Backup dei file sull'host** (`.env` incluso, contiene i segreti: tieni
-la cartella al sicuro):
+**2d. Backup of host files** (`.env` included; it contains secrets, so keep the
+folder safe):
 
 ```bash
 tar -czpf "$BK/host-files.tar.gz" .env config mcp_servers data/sessions data/db_test $( [ -f docker-compose.override.yml ] && echo docker-compose.override.yml ) && echo ok
@@ -193,7 +203,7 @@ tar -czpf "$BK/host-files.tar.gz" .env config mcp_servers data/sessions data/db_
 git rev-parse HEAD > "$BK/git-commit.txt" && docker images --format '{{.Repository}}:{{.Tag}} {{.ID}}' | grep '^aion/' > "$BK/old-images.txt"
 ```
 
-**2e. Verifica il backup.**
+**2e. Check the backup.**
 
 ```bash
 ls -lh "$BK" && tar -tzf "$BK/aion_data.tar.gz" | grep -E '^\./aion\.db$' && echo "DB presente nel backup"
@@ -201,14 +211,14 @@ ls -lh "$BK" && tar -tzf "$BK/aion_data.tar.gz" | grep -E '^\./aion\.db$' && ech
 
 ---
 
-## 3. Fotografia dei dati "prima"
+## 3. "Before" snapshot of the data
 
-Script che conta le righe di ogni tabella del DB (l'URI SQLite è passato come
-argomento):
+A script that counts the rows of every table in the DB (the SQLite URI is passed
+as an argument):
 
 ```bash
 cat > "$BK/count.py" <<'EOF'
-# Conta le righe di ogni tabella del DB AION: serve a confrontare prima/dopo il passaggio.
+# Counts the rows of every table in the AION DB: used to compare before/after the switch.
 import sqlite3, sys
 c = sqlite3.connect(sys.argv[1], uri=True)
 for (t,) in c.execute("select name from sqlite_master where type='table' and name not like 'sqlite_%' order by 1"):
@@ -219,7 +229,7 @@ for (t,) in c.execute("select name from sqlite_master where type='table' and nam
 EOF
 ```
 
-Conteggio sul volume (stack fermo), con l'immagine vecchia:
+Count on the volume (stack stopped), using the old image:
 
 ```bash
 docker run --rm -i --entrypoint python -v aion-agent_aion_data:/d:ro aion/backend:latest - "file:/d/aion.db?immutable=1" < "$BK/count.py" > "$BK/before.txt" && wc -l "$BK/before.txt"
@@ -227,15 +237,16 @@ docker run --rm -i --entrypoint python -v aion-agent_aion_data:/d:ro aion/backen
 
 ---
 
-## 4. Aggiorna il `.env`
+## 4. Update `.env`
 
-Imposta le chiavi senza aprire il file: le righe esistenti con la stessa
-chiave vengono rimosse e riscritte in fondo; le righe commentate restano.
+Set the keys without opening the file: existing lines with the same key are
+removed and rewritten at the end; commented lines are kept.
 
-- `AION_VERSION`: tag delle immagini GHCR (deve essere esplicito, non `latest`).
-- `AION_MCP_REGISTRY_LOCAL_PATH`: mantiene l'overlay MCP dove stava
-  (`./config/mcp_registry.local.yaml`). Il default del compose GHCR punterebbe
-  a `/app/data/…` e i server MCP aggiunti dall'admin sembrerebbero spariti.
+- `AION_VERSION`: tag of the GHCR images (must be explicit, not `latest`).
+- `AION_MCP_REGISTRY_LOCAL_PATH`: keeps the MCP overlay where it was
+  (`./config/mcp_registry.local.yaml`). The GHCR compose default would point to
+  `/app/data/…`, and the MCP servers added by the admin would seem to have
+  disappeared.
 
 ```bash
 [ -n "$(tail -c1 .env)" ] && echo >> .env; for kv in "AION_VERSION=$AION_TARGET" "AION_MCP_REGISTRY_LOCAL_PATH=/app/config/mcp_registry.local.yaml"; do k=${kv%%=*}; sed -i '' "/^${k}=/d" .env; echo "$kv" >> .env; done
@@ -246,27 +257,27 @@ grep -E '^(AION_VERSION|AION_MCP_REGISTRY_LOCAL_PATH)=' .env
 ```
 
 :::note Linux
-`sed -i ''` è la sintassi macOS; su Linux usa `sed -i`.
+`sed -i ''` is the macOS syntax; on Linux use `sed -i`.
 :::
 
-**Immagine sandbox (opzionale, consigliata con l'opzione A).** La sandbox
-resta `aion/sandbox:latest`, compilata dal clone, finché non punti
-all'immagine GHCR. Non tocca i dati: puoi farlo anche dopo. L'immagine deve
-essere presente in **Podman**, non in Docker.
+**Sandbox image (optional, recommended with option A).** The sandbox stays on
+`aion/sandbox:latest`, built from the clone, until you point it to the GHCR
+image. It does not touch data, so you can also do it later. The image must be
+available in **Podman**, not in Docker.
 
-Opzione A (release):
+Option A (release):
 
 ```bash
 podman pull ghcr.io/aion-by-asa-computer/aion-sandbox:$AION_TARGET
 ```
 
-Opzione B (`local`, copia da Docker a Podman):
+Option B (`local`, copied from Docker to Podman):
 
 ```bash
 docker save ghcr.io/aion-by-asa-computer/aion-sandbox:local | podman load
 ```
 
-Poi in `.env`:
+Then in `.env`:
 
 ```bash
 k=AION_SANDBOX_CONTAINER_IMAGE; sed -i '' "/^${k}=/d" .env; echo "$k=ghcr.io/aion-by-asa-computer/aion-sandbox:$AION_TARGET" >> .env
@@ -274,14 +285,14 @@ k=AION_SANDBOX_CONTAINER_IMAGE; sed -i '' "/^${k}=/d" .env; echo "$k=ghcr.io/aio
 
 ---
 
-## 5. Avvio con `docker-compose.ghcr.yml`
+## 5. Start with `docker-compose.ghcr.yml`
 
 ```bash
 dcg up -d
 ```
 
-Attendi che `backend` sia `healthy` (fino a ~2 minuti al primo avvio, le
-migrazioni girano al boot):
+Wait until `backend` is `healthy` (up to about 2 minutes on the first start,
+because migrations run at boot):
 
 ```bash
 dcg ps
@@ -293,68 +304,68 @@ dcg logs backend | grep -iE 'alembic|migrat|aion-entrypoint|error|traceback'
 
 ---
 
-## 6. Verifica
+## 6. Verify
 
-**6a. Revision DB** allineata alla nuova immagine:
+**6a. DB revision** matches the new image:
 
 ```bash
 dcg exec backend alembic current
 ```
 
-**6b. Confronto dei dati** (lettura in sola lettura sul DB in uso):
+**6b. Compare the data** (read-only access to the live DB):
 
 ```bash
 dcg exec -T backend python - "file:/app/data/aion.db?mode=ro" < "$BK/count.py" > "$BK/after.txt" && diff "$BK/before.txt" "$BK/after.txt" && echo "Nessuna differenza"
 ```
 
-Esito atteso: nessuna tabella esistente con **meno** righe. Sono normali
-tabelle nuove (migrazioni) e variazioni sulle tabelle interne FTS
-(`*_data`, `*_idx`, `*_docsize`, `*_config`).
+Expected result: no existing table has **fewer** rows. New tables (from
+migrations) and changes in the internal FTS tables (`*_data`, `*_idx`,
+`*_docsize`, `*_config`) are normal.
 
-**6c. Controlli da UI** (`http://localhost` o `https://<DOMAIN>`):
+**6c. Checks in the UI** (`http://localhost` or `https://<DOMAIN>`):
 
-- [ ] login con un utente esistente
-- [ ] storico chat nella sidebar, apertura di una conversazione vecchia
-- [ ] profili e progetti
-- [ ] admin-ui → server MCP personalizzati presenti
-- [ ] admin-ui → provider LLM: invio di un messaggio funziona (conferma che
-      la chiave di cifratura è corretta)
-- [ ] canali (Telegram/WhatsApp) se configurati
+- [ ] log in with an existing user
+- [ ] chat history in the sidebar; open an old conversation
+- [ ] profiles and projects
+- [ ] admin-ui → custom MCP servers are present
+- [ ] admin-ui → LLM providers: sending a message works (confirms the
+      encryption key is correct)
+- [ ] channels (Telegram/WhatsApp), if configured
 
 ---
 
-## 7. Dopo il passaggio
+## 7. After the switch
 
-**Usa sempre il compose GHCR.** Un `docker compose up -d --build` col file di
-default riporterebbe lo stack sulle immagini `aion/*`. Per renderlo il
-default della cartella, aggiungi `COMPOSE_FILE` al `.env` (con l'override solo
-se il file esiste):
+**Always use the GHCR compose.** A `docker compose up -d --build` with the
+default file would bring the stack back to the `aion/*` images. To make GHCR the
+default for this folder, add `COMPOSE_FILE` to `.env` (including the override
+only if the file exists):
 
 ```bash
 echo "COMPOSE_FILE=docker-compose.ghcr.yml$( [ -f docker-compose.override.yml ] && echo :docker-compose.override.yml )" >> .env
 ```
 
-Da quel momento `docker compose ps/logs/exec/up` usano GHCR. Nota:
-`scripts/install.sh` usa sempre e solo `-f docker-compose.ghcr.yml`, quindi
-negli upgrade automatici l'override non viene applicato.
+From then on, `docker compose ps/logs/exec/up` use GHCR. Note:
+`scripts/install.sh` always uses only `-f docker-compose.ghcr.yml`, so the
+override is not applied during automatic upgrades.
 
-**Aggiornamenti successivi (solo opzione A).** Con `AION_VERSION=X.Y.Z` le
-release nuove si installano con lo script, che fa backup, pull e migrazioni
-hop per hop:
+**Later updates (option A only).** With `AION_VERSION=X.Y.Z`, new releases are
+installed with the script, which takes a backup, pulls the images and runs
+migrations one hop at a time:
 
 ```bash
 bash scripts/install.sh upgrade
 ```
 
-Con `AION_VERSION=local` l'upgrade non è supportato, salvo modalità ibrida:
-vedi [self-update](./self-update.md) e il passo 9.
+With `AION_VERSION=local`, upgrades are not supported, except in hybrid mode:
+see [Update from the admin UI](./self-update.md) and step 9.
 
-**Pulsante "Aggiorna ora" nell'admin-ui (opzionale, solo opzione A).** Serve
-il sidecar `updater`, che si attiva con `COMPOSE_PROFILES=updater` e le chiavi
-`AION_HOST_*`. `install.sh upgrade` le scrive da solo, ma solo se c'è
-davvero un aggiornamento: se sei già all'ultima release esce prima. In quel
-caso aggiungile così (solo quelle mancanti; `AION_HOST_DOCKER_GID=0` vale per
-Docker Desktop su macOS, su Linux usa `stat -L -c %g /var/run/docker.sock`):
+**"Update now" button in the admin UI (optional, option A only).** It needs the
+`updater` sidecar, enabled by `COMPOSE_PROFILES=updater` and the `AION_HOST_*`
+keys. `install.sh upgrade` writes them on its own, but only when there really is
+an update: if you are already on the latest release it exits early. In that case
+add them like this (only the missing ones; `AION_HOST_DOCKER_GID=0` is right for
+Docker Desktop on macOS, on Linux use `stat -L -c %g /var/run/docker.sock`):
 
 ```bash
 add() { grep -q "^$1=" .env || echo "$1=$2" >> .env; }; add AION_HOST_INSTALL_DIR "$PWD"; add AION_HOST_HOME "$HOME"; add AION_HOST_UID "$(id -u)"; add AION_HOST_GID "$(id -g)"; add AION_HOST_DOCKER_GID 0; add AION_UPDATER_TOKEN "$(openssl rand -hex 32)"; add COMPOSE_PROFILES updater
@@ -364,7 +375,7 @@ add() { grep -q "^$1=" .env || echo "$1=$2" >> .env; }; add AION_HOST_INSTALL_DI
 dcg up -d updater && dcg ps updater
 ```
 
-**Pulizia (solo dopo qualche settimana senza problemi):**
+**Cleanup (only after a few weeks without problems):**
 
 ```bash
 docker volume rm aion-agent_uv_cache
@@ -378,12 +389,15 @@ docker image rm aion/backend:latest aion/chat-ui:latest aion/admin-ui:latest aio
 
 ## 8. Rollback
 
-Le migrazioni applicate dalla nuova immagine possono rendere il DB
-incompatibile con il codice vecchio: il rollback **ripristina sempre i volumi
-dal backup**. Le chat create dopo il passaggio vanno perse.
+Migrations applied by the new image can make the DB incompatible with the old
+code, so a rollback **always restores the volumes from the backup**.
 
-Nello stesso terminale (servono `$BK` e `dcg`; se il terminale è nuovo,
-reimposta `BK` col percorso della cartella di backup e ridefinisci `dcg`):
+:::warning
+Chats created after the switch are lost on rollback.
+:::
+
+In the same terminal (you need `$BK` and `dcg`; in a new terminal, set `BK`
+again to the backup folder path and redefine `dcg`):
 
 ```bash
 dcg down
@@ -401,20 +415,19 @@ tar -xzpf "$BK/host-files.tar.gz" && echo "file host ripristinati"
 docker compose -f docker-compose.yml up -d
 ```
 
-Il ripristino di `host-files.tar.gz` riporta anche il `.env` originale (senza
-`AION_VERSION`, `COMPOSE_FILE`, ecc.). Le immagini `aion/*` sono ancora in
-locale (elenco in `$BK/old-images.txt`), quindi non serve ricompilare.
+Restoring `host-files.tar.gz` also brings back the original `.env` (without
+`AION_VERSION`, `COMPOSE_FILE`, etc.). The `aion/*` images are still available
+locally (listed in `$BK/old-images.txt`), so there is no need to rebuild.
 
 ---
 
-## 9. Da `local` all'ultima release (in seguito)
+## 9. From `local` to the latest release (later on)
 
-Se hai fatto il passaggio con l'opzione B perché il DB era più avanti
-dell'ultima release, passa alla release appena ne esce una che contiene le
-stesse migrazioni. I dati restano nei volumi: cambia solo il tag.
+If you switched with option B because the DB was ahead of the latest release,
+move to a release as soon as one ships with the same migrations. The data stays
+in the volumes; only the tag changes.
 
-Definisci di nuovo le variabili del passo 0 (opzione A per `AION_TARGET`) e
-`dcg`, poi:
+Define the step 0 variables again (option A for `AION_TARGET`) and `dcg`, then:
 
 ```bash
 docker pull ghcr.io/aion-by-asa-computer/aion-backend:$AION_TARGET
@@ -424,8 +437,11 @@ docker pull ghcr.io/aion-by-asa-computer/aion-backend:$AION_TARGET
 REV=$(dcg exec -T backend python -c "import sqlite3; print(sqlite3.connect('file:data/aion.db?mode=ro', uri=True).execute('select version_num from alembic_version').fetchone()[0])" 2>/dev/null); if [ -n "$REV" ] && docker run --rm --entrypoint alembic ghcr.io/aion-by-asa-computer/aion-backend:$AION_TARGET history 2>/dev/null | grep -q "$REV"; then echo "OK: la release $AION_TARGET conosce $REV"; else echo "STOP: la release $AION_TARGET non conosce '$REV', aspetta la prossima"; fi
 ```
 
-Solo con `OK`: backup come al passo 2 (con `dcg down` al posto di
-`docker compose down`), poi:
+`OK` means the release knows the DB revision; `STOP` means it does not yet, so
+wait for the next release.
+
+Only on `OK`: back up as in step 2 (with `dcg down` instead of
+`docker compose down`), then:
 
 ```bash
 k=AION_VERSION; sed -i '' "/^${k}=/d" .env; echo "$k=$AION_TARGET" >> .env
@@ -435,7 +451,6 @@ k=AION_VERSION; sed -i '' "/^${k}=/d" .env; echo "$k=$AION_TARGET" >> .env
 dcg pull && dcg up -d && dcg logs backend | grep -iE 'alembic|migrat|error'
 ```
 
-Se avevi impostato la sandbox GHCR, aggiorna anche
-`AION_SANDBOX_CONTAINER_IMAGE` e fai il `podman pull` come al passo 4. Da qui
-in poi gli aggiornamenti passano da `install.sh upgrade` o dal pulsante
-nell'admin-ui (passo 7).
+If you had set up the GHCR sandbox, also update `AION_SANDBOX_CONTAINER_IMAGE`
+and run `podman pull` as in step 4. From here on, updates go through
+`install.sh upgrade` or the admin UI button (step 7).

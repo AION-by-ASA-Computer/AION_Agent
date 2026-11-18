@@ -1,10 +1,12 @@
 ---
-title: SSO Migration & Authentication Modes
+title: Switching to SSO login
 sidebar_position: 2
-description: How the AION agent handles migration between local passwords and Single Sign-On (SSO) providers.
+description: How users move from AION passwords to Microsoft or Google sign-in, and what administrators need to do.
 ---
 
 # SSO Migration & Authentication Modes
+
+Single Sign-On (SSO) lets users sign in to AION with their company Microsoft or Google account instead of a separate AION password. This page explains what happens when an administrator switches AION from password login to SSO (or back), what each user sees during the switch and how new accounts are handled. It is for **administrators**; the user-facing steps are in [Migration Flow (User Perspective)](#1-migration-flow-user-perspective).
 
 This document explains how the AION platform handles the migration from local password-based authentication to external SSO providers (like Microsoft Entra ID or Google Workspace).
 
@@ -20,7 +22,7 @@ When AION is switched from "Password Mode" to "SSO Mode" (e.g., Microsoft or Goo
 
 When the administrator switches the system to "Microsoft" or "Google":
 
-1. The user visits the login page. The SSO button (e.g., "Accedi con Microsoft") is displayed.
+1. The user visits the login page. The SSO button (e.g., "Accedi con Microsoft", i.e. "Sign in with Microsoft") is displayed.
 2. If the user clicks the SSO button but they haven't linked their account yet, login fails with `sso_not_linked`: while the migration is active no new account is created from an unlinked identity (this avoids duplicate ghost accounts).
 3. Therefore, existing users must log in using the **username and password form**.
 4. Upon successful password login, the API detects that the system requires SSO and the user hasn't linked their account. The API returns `sso_link_required: true`.

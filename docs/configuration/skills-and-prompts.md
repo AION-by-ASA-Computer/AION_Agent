@@ -1,10 +1,12 @@
 ---
 sidebar_position: 3
 title: Skills and system prompt
-description: Index/full modes, skill registry and MCP skills_hub.
+description: What skills are, how they reach the agent system prompt, and how to write one.
 ---
 
 # Skills and system prompt
+
+A **skill** is a Markdown file of instructions that teaches the agent how to do a specific job (for example, how to build a Word document or how to cite web sources). Skills are attached to agent [profiles](./profiles.md); the **system prompt** is the hidden set of instructions the agent receives before every conversation. This page explains how skills are added to that prompt, the skill file format and the skills registry. It is for **administrators** who manage profiles and skills and for **developers** who write new skills.
 
 ## Two modes of skill injection
 
@@ -23,7 +25,7 @@ Extended tool descriptions for sandbox write/edit/patch live in `config_std/tool
 
 The curated skill **`artifact_protocol`** (`config_std/skills/artifact_protocol.md`, v8) is the single source for file-delivery rules. Legacy per-strategy skills (`artifact_protocol_tool`, `artifact_protocol_xml`, `artifact_protocol_markdown`) were removed — delivery is always via sandbox tools unless `AION_ARTIFACT_STREAM_LEGACY=1`.
 
-Companion skill **`docx`** documents the docx-js workflow (`skill_view` → `sandbox_install_npm_packages` → write script → `sandbox_run_node_file`). Legacy **`.doc`** (Word 97–2003) is converted to `.docx` on the API host at upload — see [Office files and legacy Word](./office-and-legacy-word.md).
+Companion skill **`docx`** documents the docx-js workflow (`skill_view` → write script → `sandbox_run_node_file`). docx-js is the default for new documents, python-docx only a fallback. The `docx` and `pptxgenjs` Node packages are preinstalled in the Docker images (`NODE_PATH`, always forwarded to sandbox processes even with a custom `AION_SANDBOX_ENV_ALLOWLIST`); `sandbox_install_npm_packages` skips packages that are preinstalled or already in the session's `workspace/node_modules`, and a "Cannot find module" failure returns a `HINT` telling the agent whether to switch to `require()`, install the package or fall back to python-docx. Legacy **`.doc`** (Word 97–2003) is converted to `.docx` on the API host at upload — see [Office files and legacy Word](./office-and-legacy-word.md).
 
 For multi-page PDF → Word reports with screenshots, skill **`long_document_protocol`** requires MCP **`pdf_evidence_crop`** (server `ocr`) instead of full-page `pdftoppm`. See [PDF evidence images](./document-evidence.md).
 

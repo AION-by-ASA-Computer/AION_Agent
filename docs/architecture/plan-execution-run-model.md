@@ -1,12 +1,12 @@
 ---
 sidebar_position: 6
-title: Plan execution — run model and activity feed
-description: Architecture for background plan execution, persistence after refresh, and real-time UI without chat SSE replay.
+title: Plan execution run model
+description: How approved plans run in the background, survive page reloads and show live progress in the UI.
 ---
 
 # Plan execution — run model and activity feed
 
-This document outlines the architecture for background execution of approved plans, progress persistence across page refreshes, and the real-time UI streaming model.
+In **Plan mode** the agent first proposes a multi-step plan; once the user approves it, the plan's tasks run in the background, possibly for minutes. This page explains how that background run is stored, how its progress survives a page refresh, and how the chat-ui shows live activity without replaying the chat SSE (Server-Sent Events) stream. It is meant for developers working on plan execution in the backend or the chat-ui.
 
 ---
 
@@ -68,12 +68,12 @@ Tool activities are logged as structured progress entries in the execution's `ac
 ```
 
 ### Label Mapping Heuristic
-The handler uses an English mapping heuristic (`_tool_activity_label`) to generate descriptive, human-readable labels from technical tool names and parameters:
+The handler uses a mapping heuristic (`_tool_activity_label` in `src/plan_execution/handler.py`) to generate descriptive, human-readable labels from technical tool names and parameters (some labels emitted by the code are still partly in Italian; they are quoted verbatim below, with the meaning in brackets):
 * `sandbox_write_workspace_file` → *Writing file to workspace: `[file_path]`*
-* `sandbox_read_workspace_file` → *Reading file dal workspace: `[file_path]`*
-* `sandbox_edit_workspace_file` → *Editing file nel workspace: `[file_path]`*
-* `mark_task_completed` → *Segno task completed: `[task_id]`*
-* `mempalace_*` → *Querying MemPalace: `[query]`*
+* `sandbox_read_workspace_file` → *Reading file dal workspace: `[file_path]`* (reading file from the workspace)
+* `sandbox_edit_workspace_file` → *Editing file nel workspace: `[file_path]`* (editing file in the workspace)
+* `mark_task_completed` → *Segno task completed: `[task_id]`* (marking task completed)
+* `memory_*` → *Querying Mnemos memory: `[query]`*
 * `grep / search / ripgrep` → *Searching codebase: `[pattern]`*
 
 ---

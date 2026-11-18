@@ -1,71 +1,76 @@
 ---
-title: AION nativo vs Long-Run Mode (Pi Agent) — Valutazione e Consolidamento
+title: Native AION vs Long-Run Mode (Pi Agent) — Assessment and Consolidation
 sidebar_position: 20
-description: "Analisi tecnica e resoconto del consolidamento architetturale: dismissione del worker esterno Pi Agent e piena integrazione nativa in AION (Haystack runtime)."
+description: "Technical analysis and report on the architectural consolidation: retirement of the external Pi Agent worker and full native integration into AION (Haystack runtime)."
 ---
 
-# AION nativo vs Long-Run Mode (Pi Agent) — Valutazione e Consolidamento
+# Native AION vs Long-Run Mode (Pi Agent) — Assessment and Consolidation
 
-> [!NOTE]
-> **Stato Architetturale (Completato)**: La valutazione tecnica ha portato alla **completa dismissione del worker esterno Node.js (Pi Agent)** e all'integrazione di tutti i pattern di solidità (Tool Offloading L1, Tool Ledger L2, Circuit Breaker, Compattazione nativa) direttamente nel runtime Python nativo di AION (Haystack).
->
-> Il backend AION è ora unificato in un unico processo performante, affidabile e senza dipendenze chiuse esterne.
+:::info Design note
+Technical assessment comparing the native AION runtime with the former external Pi Agent worker, and the resulting consolidation decision. Status: implemented — the Pi worker is gone and offloading, ledger, circuit breaker and compaction live in `src/runtime/` and `src/memory/`.
+:::
+
+:::note
+**Architectural status (completed)**: the technical assessment led to the **complete retirement of the external Node.js worker (Pi Agent)** and to the integration of all the robustness patterns (L1 tool offloading, L2 tool ledger, circuit breaker, native compaction) directly into AION's native Python runtime (Haystack).
+
+The AION backend is now unified in a single, fast, reliable process with no external closed dependencies.
+:::
 
 ---
 
-## 1. Executive Summary del Consolidamento
+## 1. Consolidation executive summary
 
-| Dimensione | Vecchio approccio (Pi Long-Run Worker) | Stato Attuale (AION Nativo Integrato) |
+| Dimension | Old approach (Pi Long-Run Worker) | Current state (integrated native AION) |
 |---|---|---|
-| **Architettura** | ❌ Servizio Node.js separato (`services/pi-long-run`) con dipendenze esterne | ✅ **Processo unico Python/Haystack** in-process |
-| **Velocità & Latenza** | ❌ Overhead di 2+ hop di rete HTTP/NDJSON per ogni singola tool call | ✅ **Esecuzione in-process ad alte prestazioni** con parallelismo reale (`ToolInvoker` / `ThreadPoolExecutor`) |
-| **Persistenza & Memoria** | ❌ Sessioni solo in-memory lato Node (rischio perdita dati) | ✅ **Persistenza SQLite unificata** con ricerca Full-Text (FTS5) e gestione memorie LTM/STM |
-| **Tool Offloading (L1)** | ⚠️ Parziale e mediato da chiamate HTTP interne | ✅ **Nativo (`src/runtime/tool_offload.py`)** con memorizzazione su file e anteprime nel prompt |
-| **Tool Ledger (L2)** | ⚠️ Hook asincrono verso il backend | ✅ **Nativo (`src/runtime/tool_ledger.py`)** con tracciamento JSONL e iniezione nel context |
-| **Circuit Breaker** | ⚠️ Implementato solo nel worker esterno | ✅ **Nativo (`src/runtime/tool_circuit.py`)** contro i loop di fallimenti ripetuti (`AION_TOOL_CIRCUIT_BREAKER_MAX`) |
-| **Compattazione** | ⚠️ Fallback opaco su bridge HTTP | ✅ **Nativa (`src/memory/context_compressor.py`)** con cut points coerenti (`AION_HARNESS_V2_COMPACTION`) |
+| **Architecture** | ❌ Separate Node.js service (`services/pi-long-run`) with external dependencies | ✅ **Single in-process Python/Haystack process** |
+| **Speed & latency** | ❌ Overhead of 2+ HTTP/NDJSON network hops for every single tool call | ✅ **High-performance in-process execution** with real parallelism (`ToolInvoker` / `ThreadPoolExecutor`) |
+| **Persistence & memory** | ❌ In-memory-only sessions on the Node side (risk of data loss) | ✅ **Unified SQLite persistence** with full-text search (FTS5) and LTM/STM memory management |
+| **Tool offloading (L1)** | ⚠️ Partial and mediated by internal HTTP calls | ✅ **Native (`src/runtime/tool_offload.py`)** with storage on file and previews in the prompt |
+| **Tool ledger (L2)** | ⚠️ Asynchronous hook towards the backend | ✅ **Native (`src/runtime/tool_ledger.py`)** with JSONL tracking and injection into the context |
+| **Circuit breaker** | ⚠️ Implemented only in the external worker | ✅ **Native (`src/runtime/tool_circuit.py`)** against loops of repeated failures (`AION_TOOL_CIRCUIT_BREAKER_MAX`) |
+| **Compaction** | ⚠️ Opaque fallback over the HTTP bridge | ✅ **Native (`src/memory/context_compressor.py`)** with consistent cut points (`AION_HARNESS_V2_COMPACTION`) |
 
 ---
 
-## 2. Decisione Architetturale e Motivazioni
+## 2. Architectural decision and rationale
 
-La valutazione comparativa sul codice sorgente ha evidenziato due fattori chiave che hanno guidato la migrazione:
+The comparative assessment of the source code highlighted two key factors that drove the migration:
 
-1. **Il divario di velocità era strutturale:**
-   Il worker esterno Pi imponeva la serializzazione di ogni chiamata e risultato via bridge HTTP/NDJSON tra Python e Node.js. Questo aggiungeva latenza inevitabile a ogni interazione con i tool.
+1. **The speed gap was structural:**
+   The external Pi worker required every call and result to be serialized over an HTTP/NDJSON bridge between Python and Node.js. This added unavoidable latency to every interaction with the tools.
 
-2. **I punti di forza di Pi erano puramente logici e portabili:**
-   Funzionalità come il *Tool Ledger*, il *Tool Result Offloading*, il *Circuit Breaker* anti-loop e la protezione del context non richiedevano un runtime Node separato, ma potevano essere implementate in modo più robusto ed efficiente direttamente dentro la pipeline AION.
-
----
-
-## 3. Funzionalità Integrate Nativamente in AION
-
-### 3.1 Tool Result Offloading (`L1`)
-- **Modulo:** [`src/runtime/tool_offload.py`](file:///c:/Users/ACOLOMBO/OneDrive%20-%20AION/Desktop/Progetti/AION_Agent/src/runtime/tool_offload.py)
-- **Funzionamento:** I risultati dei tool che superano la soglia di caratteri (`AION_TOOL_OFFLOAD_MIN_CHARS`, default 8000) vengono scritti automaticamente su disco in `data/sessions/<session_id>/derived/tool_results/`.
-- **Nel contesto del modello:** Rimane un'anteprima mirata con il percorso del file, riducendo drasticamente il consumo di token senza perdere informazioni.
-
-### 3.2 In-Session Tool Ledger (`L2`)
-- **Modulo:** [`src/runtime/tool_ledger.py`](file:///c:/Users/ACOLOMBO/OneDrive%20-%20AION/Desktop/Progetti/AION_Agent/src/runtime/tool_ledger.py)
-- **Funzionamento:** Mantiene un registro cronologico JSONL compatto di tutti i tool invocati nella sessione.
-- **Iniezione Context:** Una tabella strutturata viene iniettata automaticamente nel prompt dell'agente, permettendo al modello di mantenere visibilità sull'avanzamento anche attraverso compattazioni successive.
-
-### 3.3 Tool Circuit Breaker
-- **Modulo:** [`src/runtime/tool_circuit.py`](file:///c:/Users/ACOLOMBO/OneDrive%20-%20AION/Desktop/Progetti/AION_Agent/src/runtime/tool_circuit.py)
-- **Funzionamento:** Intercetta e blocca tentativi ripetuti di chiamare lo stesso tool con parametri fallimentari (es. parametri troncati o path errati), prevenendo loop infiniti e spreco di budget token.
-- **Configurazione:** Controllato da `AION_TOOL_CIRCUIT_BREAKER_MAX` e `AION_TOOL_CIRCUIT_BREAKER_ENABLED`.
-
-### 3.4 Compattazione Context Avanzata (Harness V2)
-- **Moduli:** [`src/memory/context_compressor.py`](file:///c:/Users/ACOLOMBO/OneDrive%20-%20AION/Desktop/Progetti/AION_Agent/src/memory/context_compressor.py) e [`src/runtime/turn_compaction.py`](file:///c:/Users/ACOLOMBO/OneDrive%20-%20AION/Desktop/Progetti/AION_Agent/src/runtime/turn_compaction.py)
-- **Funzionamento:** Quando il contesto si avvicina al limite massimo del modello, la cronologia più vecchia viene sintetizzata con preservazione dei punti di taglio validi (non spezza mai coppie tool call / tool response) e integrata con il ledger degli strumenti eseguiti.
-- **Controllo:** Attivata con `AION_HARNESS_V2_COMPACTION=1`.
+2. **Pi's strengths were purely logical and portable:**
+   Features such as the *tool ledger*, *tool result offloading*, the anti-loop *circuit breaker* and context protection did not require a separate Node runtime; they could be implemented more robustly and efficiently directly inside the AION pipeline.
 
 ---
 
-## 4. Benefici del Consolidamento
+## 3. Features integrated natively into AION
 
-- **Zero dipendenze esterne closed-source:** Eliminato il pacchetto npm `@earendil-works/pi-coding-agent`.
-- **Semplificazione operativa:** Nessun processo o container Node.js aggiuntivo da avviare, monitorare o autenticare con chiavi condivise.
-- **Maggiore reattività:** Flusso streaming SSE in tempo reale nativo end-to-end dal server FastAPI al client Web.
-- **Resilienza e Persistenza:** Tutte le conversazioni, memorie e offload sono persistiti su database unificato SQLite e filesystem locale delle sessioni.
+### 3.1 Tool result offloading (`L1`)
+- **Module:** [`src/runtime/tool_offload.py`](../../src/runtime/tool_offload.py)
+- **How it works:** tool results that exceed the character threshold (`AION_TOOL_OFFLOAD_MIN_CHARS`, default 8000) are automatically written to disk in `data/sessions/<session_id>/derived/tool_results/`.
+- **In the model context:** a targeted preview with the file path remains, drastically reducing token consumption without losing information.
+
+### 3.2 In-session tool ledger (`L2`)
+- **Module:** [`src/runtime/tool_ledger.py`](../../src/runtime/tool_ledger.py)
+- **How it works:** keeps a compact, chronological JSONL log of all the tools invoked in the session.
+- **Context injection:** a structured table is automatically injected into the agent prompt, letting the model keep track of progress even across successive compactions.
+
+### 3.3 Tool circuit breaker
+- **Module:** [`src/runtime/tool_circuit.py`](../../src/runtime/tool_circuit.py)
+- **How it works:** intercepts and blocks repeated attempts to call the same tool with failing parameters (e.g. truncated parameters or wrong paths), preventing infinite loops and wasted token budget.
+- **Configuration:** controlled by `AION_TOOL_CIRCUIT_BREAKER_MAX` and `AION_TOOL_CIRCUIT_BREAKER_ENABLED`.
+
+### 3.4 Advanced context compaction (Harness V2)
+- **Modules:** [`src/memory/context_compressor.py`](../../src/memory/context_compressor.py) and [`src/runtime/turn_compaction.py`](../../src/runtime/turn_compaction.py)
+- **How it works:** when the context approaches the model's maximum limit, the oldest history is summarized while preserving valid cut points (it never splits tool call / tool response pairs) and is combined with the ledger of the tools that were executed.
+- **Control:** enabled with `AION_HARNESS_V2_COMPACTION=1`.
+
+---
+
+## 4. Benefits of the consolidation
+
+- **Zero external closed-source dependencies:** the npm package `@earendil-works/pi-coding-agent` has been removed.
+- **Operational simplification:** no additional Node.js process or container to start, monitor or authenticate with shared keys.
+- **Greater responsiveness:** native, real-time end-to-end SSE streaming from the FastAPI server to the web client.
+- **Resilience and persistence:** all conversations, memories and offloads are persisted in the unified SQLite database and in the local session file system.

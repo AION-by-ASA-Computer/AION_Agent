@@ -125,11 +125,11 @@ docker-compose.redis.yml   # dev: solo Redis (stack locale uvicorn/pnpm)
 - **Persistent volumes**: `aion_data` (SQLite, sessions, profiles, generated
   skills), `caddy_data` (certs), `redis_data`. Backup with
   `scripts/aion_backup.py` from inside the backend container.
-- **Docs URL caveat**: with `DOCUSAURUS_BASE_URL=/docs/` the build keeps
-  `routeBasePath=docs` (default), so deep doc URLs become
-  `/docs/docs/<page>`. To collapse the prefix, set `routeBasePath: '/'` in
-  `website/docusaurus.config.ts` and remove `website/src/pages/index.tsx`
-  to avoid the homepage route collision.
+- **Docs URLs**: docs are mounted at the site root (`routeBasePath: '/'`,
+  no landing page; `docs/index.md` is home). In Docker (`DOCUSAURUS_BASE_URL=/docs/`)
+  pages are `/docs/<page>`; on Vercel (baseUrl `/`) they are `/<page>`.
+  Navigation is split by audience in `website/sidebars.ts`; writing rules in
+  `docs/standard/authoring.md`.
 - **SSE / streaming**: Caddy is configured with `flush_interval -1` and
   unlimited timeouts on `/api/*` for the `/chat` SSE endpoint.
 

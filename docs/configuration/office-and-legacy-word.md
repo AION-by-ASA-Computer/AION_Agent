@@ -1,10 +1,12 @@
 ---
 sidebar_position: 6
-title: Office files and legacy Word (.doc)
-description: Auto-conversion of Word 97–2003 binaries on upload via LibreOffice on the API host.
+title: Office files and legacy Word
+description: Old Word .doc files are converted to .docx automatically when uploaded.
 ---
 
 # Office files and legacy Word (.doc)
+
+Users sometimes upload old Word files (`.doc`, the Word 97–2003 format). The agent's document tools only understand the modern `.docx` format, so AION converts `.doc` files to `.docx` automatically at upload time, using LibreOffice on the server. Users do not have to do anything. This page is for **administrators** (who must make sure LibreOffice is installed) and **developers** (conversion flow and API fields).
 
 ## Why conversion on the API host?
 

@@ -1,124 +1,25 @@
 ---
 sidebar_position: 2
-title: Admin UI - Philosophy and Role
-description: Why the Admin UI is separate from Chat UI, what the administrator can do, security and separation of responsibilities.
+title: Admin UI
+description: The administration panel - what administrators can do with it, how admin login works and how to run it.
 ---
 
-# Admin UI - Philosophy and Role
+# Admin UI
+
+The Admin UI is the web control panel where administrators run an AION installation: they create users, set up agent profiles and skills, connect integrations (MCP servers, LLM providers, SMTP, SSO), schedule jobs and check system health. It is separate from the [Chat UI](./chat-ui.md), which is what end users chat in. This page is for **administrators** and, in the later sections, for **developers and IT staff** who deploy or extend the panel.
+
+:::tip On this page
+- **Administrators**: start with [What can an administrator do?](#what-can-an-administrator-do) and [First login & default admin](#first-login--default-admin).
+- **IT / security**: read [Admin auth (always on)](#admin-auth-always-on), [Change password flow](#change-password-flow), [One-click update](#one-click-update) and [Security considerations](#security-considerations).
+- **Developers**: see [Next.js Architecture](#nextjs-architecture), [Configuration](#configuration) and [Troubleshooting](#troubleshooting).
+:::
 
 :::info Admin auth — always active (default)
-Starting from the current release, the `/admin` panel is **always protected** (Grafana style): all `/admin/*` endpoints require a Bearer token and the `admin` role.
+The `/admin` panel is **always protected** (Grafana style): all `/admin/*` endpoints require a Bearer token and the `admin` role.
 See the sections [Admin auth (always on)](#admin-auth-always-on),
 [First login & default admin](#first-login--default-admin) and
 [Change password flow](#change-password-flow) below.
 :::
-
-## Admin auth (always on)
-
-The `FastAPI` backend applies a global guard to the `/admin/*` router
-(`src/api/admin.py` + `src/api/admin_agent_db.py`):
-
-```python
-router = APIRouter(
-    prefix="/admin",
-    dependencies=[Depends(require_admin_role)],
-)
-```
-
-`require_admin_role` (in `src/api/auth_login.py`):
-
-1. Resolves identity by calling `require_chat_auth` (Bearer / internal BFF secret). API keys never carry the `admin` role and are rejected on every `/admin/*` endpoint (`403`); see [API keys](../security/api-keys.md).
-2. Verifies that the token payload contains the `admin` role.
-3. Responds with `401` if the token is missing, `403` if the `admin` role is not present.
-
-Override variable (escape hatch in dev):
-
-| Variable | Default | Description |
-|-----------|---------|-------------|
-| `AION_ADMIN_PASSWORD_AUTH` | `1` | `0` makes `require_admin_role` a no-op (opens `/admin/*`). Do not use in production. |
-| `AION_CHAT_PASSWORD_AUTH`  | `0` | Independent: the admin remains protected even when the chat is open. |
-
-Login works if at least one of the two auths (chat or admin) is active. The
-token issued by `POST /auth/login` now includes `roles` (HMAC-signed CSV, no
-DB lookup needed per request) and `must_change_password`:
-
-```json
-{
-  "access_token": "<base64-urlsafe>",
-  "user_id": "u_admin",
-  "identifier": "admin",
-  "roles": ["admin"],
-  "must_change_password": true
-}
-```
-
-User schema: new columns `users.roles` (`TEXT`, JSON list) and
-`users.must_change_password` (`BOOLEAN`). Idempotent migration:
-`migrations/versions/d1a23b4f0001_user_roles_must_change.py`. For existing DBs
-already marked as `head` by Alembic, the columns are added by
-`src/data/bootstrap.py::_patch_sqlite_columns`.
-
-## First login & default admin
-
-At `setup_aion_env.py` (or at the first boot when setup is automatic) the
-backend creates a default admin if **no user with the `admin` role** is
-yet present in the tenant (`src/data/user_password.py::admin_exists`).
-
-Default credentials:
-
-| Field       | Value (env override)                              |
-|-------------|----------------------------------------------------|
-| Identifier  | `AION_SETUP_ADMIN_DEFAULT_IDENTIFIER` (`admin`)    |
-| Password    | `AION_SETUP_ADMIN_DEFAULT_PASSWORD` (`admin`)      |
-| Roles       | `["admin"]`                                        |
-| Flag        | `must_change_password=True`                        |
-
-Disable with `AION_SETUP_ADMIN_BOOTSTRAP=0` in `.env` before setup.
-
-The script prints a conspicuous warning when it creates the admin:
-
-```
-========================================================================
- DEFAULT ADMIN CREATED: identifier='admin' password='admin'
- At the first login, changing the password will be proposed (skippable 24h).
- Disable with AION_SETUP_ADMIN_BOOTSTRAP=0 in the .env before setup.
- ========================================================================
-```
-
-## Change password flow
-
-The `must_change_password` flag is read by `GET /auth/me`. On the admin-ui side:
-
-- The `AdminAuthGate` automatically redirects to `/change-password` if the flag is
-  `true` and the user has not already "skipped".
-- The password change page calls `POST /auth/change-password` with
-  `{old_password, new_password}`. The backend revalidates the old password
-  (bcrypt), updates the hash and clears the flag.
-- "Remind me tomorrow" button → sets
-  `localStorage.aion_admin_change_pw_skipped_until = now + 24h`.
-
-On the chat-ui side there is a parallel flow (`chat-ui/app/change-password/page.tsx`).
-Skip key: `localStorage.aion_chat_change_pw_skipped_until`.
-
-```mermaid
-sequenceDiagram
-  participant U as Browser
-  participant G as AdminAuthGate
-  participant B as Backend /auth
-  U->>G: GET /admin
-  G->>B: GET /auth/status
-  G->>B: GET /auth/me (Bearer)
-  B-->>G: {roles, must_change_password}
-  alt no admin role
-    G-->>U: "Access denied" page + logout
-  else must_change_password
-    G-->>U: /change-password
-    U->>B: POST /auth/change-password
-    B-->>U: {status: ok}
-  else
-    G-->>U: /admin content
-  end
-```
 
 ## Why is the Admin UI separate from the Chat UI?
 
@@ -317,10 +218,9 @@ Admins cannot read users' chats. There is no conversation viewer in the admin UI
 **Path:** `/memory`
 
 **Features:**
-- Monitor usage and status of the PromQL cache.
-- Manage long-term memory (LTM) via MemPalace and Knowledge Graph.
-- View detailed statistics on the number of entities and relationships inserted in the graph.
-- Perform manual optimization or purging (purge) of the cache and memory nodes.
+- Manage **memory projects**: each project groups the shared memory of a team or topic (SQL QueryMemory and [Mnemos](../memory/mnemos.md) long-term memory notes).
+- Create, edit and delete projects.
+- Grant or revoke project access for individual users (members).
 
 ### 10. Logic Extension Hub (Plugins & Hooks)
 
@@ -386,6 +286,114 @@ Probe requires a successful connection test before advancing LLM/embedding/OCR (
 
 ---
 
+## Admin auth (always on)
+
+The `FastAPI` backend applies a global guard to the `/admin/*` router
+(`src/api/admin.py` + `src/api/admin_agent_db.py`):
+
+```python
+router = APIRouter(
+    prefix="/admin",
+    dependencies=[Depends(require_admin_role)],
+)
+```
+
+`require_admin_role` (in `src/api/auth_login.py`):
+
+1. Resolves identity by calling `require_chat_auth` (Bearer / internal BFF secret). API keys never carry the `admin` role and are rejected on every `/admin/*` endpoint (`403`); see [API keys](../security/api-keys.md).
+2. Verifies that the token payload contains the `admin` role.
+3. Responds with `401` if the token is missing, `403` if the `admin` role is not present.
+
+Override variable (escape hatch in dev):
+
+| Variable | Default | Description |
+|-----------|---------|-------------|
+| `AION_ADMIN_PASSWORD_AUTH` | `1` | `0` makes `require_admin_role` a no-op (opens `/admin/*`). Do not use in production. |
+| `AION_CHAT_PASSWORD_AUTH`  | `0` | Independent: the admin remains protected even when the chat is open. |
+
+Login works if at least one of the two auths (chat or admin) is active. The
+token issued by `POST /auth/login` now includes `roles` (HMAC-signed CSV, no
+DB lookup needed per request) and `must_change_password`:
+
+```json
+{
+  "access_token": "<base64-urlsafe>",
+  "user_id": "u_admin",
+  "identifier": "admin",
+  "roles": ["admin"],
+  "must_change_password": true
+}
+```
+
+User schema: new columns `users.roles` (`TEXT`, JSON list) and
+`users.must_change_password` (`BOOLEAN`). Idempotent migration:
+`migrations/versions/d1a23b4f0001_user_roles_must_change.py`. For existing DBs
+already marked as `head` by Alembic, the columns are added by
+`src/data/bootstrap.py::_patch_sqlite_columns`.
+
+## First login & default admin
+
+At `setup_aion_env.py` (or at the first boot when setup is automatic) the
+backend creates a default admin if **no user with the `admin` role** is
+yet present in the tenant (`src/data/user_password.py::admin_exists`).
+
+Default credentials:
+
+| Field       | Value (env override)                              |
+|-------------|----------------------------------------------------|
+| Identifier  | `AION_SETUP_ADMIN_DEFAULT_IDENTIFIER` (`admin`)    |
+| Password    | `AION_SETUP_ADMIN_DEFAULT_PASSWORD` (`admin`)      |
+| Roles       | `["admin"]`                                        |
+| Flag        | `must_change_password=True`                        |
+
+Disable with `AION_SETUP_ADMIN_BOOTSTRAP=0` in `.env` before setup.
+
+The script prints a conspicuous warning when it creates the admin:
+
+```
+========================================================================
+ DEFAULT ADMIN CREATED: identifier='admin' password='admin'
+ At the first login, changing the password will be proposed (skippable 24h).
+ Disable with AION_SETUP_ADMIN_BOOTSTRAP=0 in the .env before setup.
+ ========================================================================
+```
+
+## Change password flow
+
+The `must_change_password` flag is read by `GET /auth/me`. On the admin-ui side:
+
+- The `AdminAuthGate` automatically redirects to `/change-password` if the flag is
+  `true` and the user has not already "skipped".
+- The password change page calls `POST /auth/change-password` with
+  `{old_password, new_password}`. The backend revalidates the old password
+  (bcrypt), updates the hash and clears the flag.
+- "Remind me tomorrow" button → sets
+  `localStorage.aion_admin_change_pw_skipped_until = now + 24h`.
+
+On the chat-ui side there is a parallel flow (`chat-ui/app/change-password/page.tsx`).
+Skip key: `localStorage.aion_chat_change_pw_skipped_until`.
+
+```mermaid
+sequenceDiagram
+  participant U as Browser
+  participant G as AdminAuthGate
+  participant B as Backend /auth
+  U->>G: GET /admin
+  G->>B: GET /auth/status
+  G->>B: GET /auth/me (Bearer)
+  B-->>G: {roles, must_change_password}
+  alt no admin role
+    G-->>U: "Access denied" page + logout
+  else must_change_password
+    G-->>U: /change-password
+    U->>B: POST /auth/change-password
+    B-->>U: {status: ok}
+  else
+    G-->>U: /admin content
+  end
+```
+
+
 ## One-click update
 
 When a new release is available the admin-ui shows a banner on every page
@@ -429,7 +437,7 @@ admin-ui/
 │   ├── skills/             # Skill Management
 │   ├── hub/                # MCP Hub (marketplace and wizard)
 │   ├── schedules/          # Scheduled Cron Jobs
-│   ├── memory/             # LTM & Memory Management
+│   ├── memory/             # Memory projects (QueryMemory + Mnemos)
 │   ├── security/           # Security Audit & Scans
 │   ├── system/             # Infrastructure integrity (System health)
 │   ├── first-setup/        # Initial setup wizard (LLM/embeddings/OCR probe)

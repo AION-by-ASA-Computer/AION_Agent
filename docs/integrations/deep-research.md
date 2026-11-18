@@ -1,14 +1,16 @@
 ---
 title: Deep Research
 sidebar_position: 12
-description: IterResearch-style deep web research with HTML reports and Deep Research Mode.
+description: Let the agent research a topic on the web over many steps and produce a full HTML report.
 ---
 
 # Deep Research Integration
 
-AION Agents includes a native **Deep Research** module, ported from the [Odysseus](https://github.com/) IterResearch loop under Apache 2.0 license (see [DeepResearch-Apache-2.0.txt](licenses/DeepResearch-Apache-2.0.txt)). 
+Deep Research is for questions that need more than a quick answer, such as comparing products, checking facts across many sources or writing a how-to. The agent runs on its own for several minutes: it plans searches, reads web pages and then writes a structured report you can open, keep in your research library and share. This page is for **end users** (see [Deep Research Mode](#deep-research-mode) and [UI Integration](#ui-integration)), **administrators** (configuration and profiles) and **developers** (agent tools and REST API).
 
-Instead of generating quick, single-turn chat answers, this module executes an autonomous, multi-step research loop: **Plan $\rightarrow$ Search $\rightarrow$ Extract $\rightarrow$ Synthesize $\rightarrow$ Stop**. It streams progress in real time via Server-Sent Events (SSE) and persists results as self-contained HTML reports with advanced layout options.
+AION Agents includes a native **Deep Research** module, ported from the [Odysseus](https://github.com/) IterResearch loop under Apache 2.0 license (see [DeepResearch-Apache-2.0.txt](../../licenses/DeepResearch-Apache-2.0.txt)). 
+
+Instead of generating quick, single-turn chat answers, this module executes an autonomous, multi-step research loop: **Plan → Search → Extract → Synthesize → Stop**. It streams progress in real time via Server-Sent Events (SSE) and persists results as self-contained HTML reports with advanced layout options.
 
 ---
 

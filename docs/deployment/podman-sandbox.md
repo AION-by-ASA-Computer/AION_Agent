@@ -1,10 +1,12 @@
 ---
-title: Podman sandbox deploy
+title: Podman sandbox setup
 sidebar_position: 4
-description: Podman rootless setup for per-session sandbox containers in Docker Compose.
+description: Install and troubleshoot Podman so each chat session runs its code in its own container.
 ---
 
 # Podman sandbox deployment
+
+This page is for **IT staff** deploying AION on a Linux server. It explains how to install Podman, a container engine, so that code written by the agent runs in a separate, locked-down container for each chat session (see [Session isolation](../security/session-isolation.md) for why). "Rootless" means Podman runs as a normal user, not as the system administrator (root), which limits damage if a container is ever compromised.
 
 Production session isolation uses **Podman rootless** on the host. The backend container mounts the Podman socket and spawns `aion/sandbox` workers via `podman run -i`.
 
@@ -192,7 +194,7 @@ Production hardening checklist:
 | Permission denied on volume | SELinux `:Z` or UID mapping; ensure session dir owned by host user |
 | Permission denied `/opt/venv/bin/python` | Do not chmod session `.venv` symlinks; update to latest `container_runtime.py` and recreate backend |
 | `crun: make .../merged private: Permission denied` (any `--userns=keep-id` run fails, also with runc) | `AION_SANDBOX_CONTAINER_USERNS=root`: sandbox runs as container root, which rootless Podman maps to the host user. The setup script probes this and sets it automatically |
-| `path fuori dalla sessione` running any script (`sandbox_run_python_file`) | Bug in 1.6.1: the session `.venv/bin/python` symlink points outside the session and was rejected by the realpath confinement. Fixed in `session_venv_python`; with `AION_SANDBOX_LIVE_SRC=0` the **sandbox image** must contain the fix (see below) |
+| `path fuori dalla sessione` ("path outside the session") running any script (`sandbox_run_python_file`) | Bug in 1.6.1: the session `.venv/bin/python` symlink points outside the session and was rejected by the realpath confinement. Fixed in `session_venv_python`; with `AION_SANDBOX_LIVE_SRC=0` the **sandbox image** must contain the fix (see below) |
 | `.env` change to `AION_SANDBOX_CONTAINER_IMAGE` ignored | Check for duplicate keys (`grep -n AION_SANDBOX_CONTAINER_IMAGE .env`, the last one wins: the setup script block may override yours) and recreate with `docker compose ... up -d --force-recreate backend`. Verify with `docker compose exec backend env \| grep SANDBOX_CONTAINER_IMAGE` |
 | Old behaviour after switching image | Running session workers keep their image: `podman rm -f $(podman ps -aq --filter label=aion.component=session_sandbox)` and open a new chat |
 | Orphan `aion-sandbox-*` containers | `podman ps -a --filter label=aion.component=session_sandbox`; stop manually |

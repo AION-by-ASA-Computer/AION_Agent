@@ -1,10 +1,12 @@
 ---
 sidebar_position: 1
-title: Environment and Config - Philosophy and Trade-off
-description: Why variables are categorized, performance trade-offs, and when to modify each setting.
+title: Environment and config files
+description: Where AION settings live (.env, config_std/, config/) and what the main AION_* variables do.
 ---
 
 # Environment and Config Files
+
+AION is configured through environment variables (mostly named `AION_*`, stored in a `.env` file) and a few YAML files. This page explains where each kind of setting lives, groups the most important variables by purpose (critical, infrastructure, feature switches, observability, auth) and shows how they are set in a Docker deployment. It is for **administrators and IT staff** who install or tune AION; end users never need to touch these settings.
 
 ## Philosophy of the configuration system
 

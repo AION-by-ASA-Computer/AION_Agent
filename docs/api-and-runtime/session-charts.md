@@ -1,10 +1,12 @@
 ---
 sidebar_position: 4
 title: Session Charts
-description: How charts from the charts MCP tools are streamed live, stored in Redis and SQLite, re-rendered inline after reload, plus the chart JSON contract and the legacy GET /sessions/{id}/charts endpoint.
+description: How charts produced by the agent are shown live in the chat and kept after a page reload.
 ---
 
 # Session Charts
+
+When a user asks for a chart, the agent calls a `charts` MCP (Model Context Protocol) tool and the chat-ui draws an interactive chart right inside the answer. This page explains how that chart travels from the tool to the browser, where it is stored so it reappears after a reload, and the JSON format a chart must follow. It is for developers working on the charts tools, the backend or the chat-ui.
 
 Interactive BI (Business Intelligence) charts in the **chat-ui** are produced by the `charts` MCP tools. A chart is shown **as soon as the tool returns**, inline in the assistant turn right after the tool step, while the model keeps streaming its explanation. It is kept live in Redis and copied to SQLite at the end of the SSE turn, so it is rendered again, at the same position, after a page reload or a chat switch.
 

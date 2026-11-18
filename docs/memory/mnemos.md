@@ -1,10 +1,12 @@
 ---
 sidebar_position: 2
-title: Mnemos Long-Term Memory
-description: Native LTM backend — notes, digests, wake/recall, hybrid retrieval, dream cycle, project scope.
+title: Mnemos long-term memory
+description: How AION remembers facts across conversations — notes, recall, scopes and the nightly dream cycle.
 ---
 
 # Mnemos (LTM v2)
+
+Mnemos is AION's long-term memory (LTM): the place where the agent keeps short, durable facts — a user's preferences, a project's conventions, lessons learned — so it can use them in later conversations. Each fact is stored as a small "note" scoped to a user, a project or the whole tenant, and is recalled with a mix of keyword search (FTS, full-text search) and semantic search (embeddings). This page explains the concepts, the agent tools and the configuration; it is for developers and administrators who want to understand or tune what the agent remembers.
 
 AION Mnemos replaces the external MemPalace MCP server with an **in-process** long-term memory backend on the unified SQLite database (`data/aion.db`).
 

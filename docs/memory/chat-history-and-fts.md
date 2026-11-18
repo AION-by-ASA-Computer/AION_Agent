@@ -1,12 +1,14 @@
 ---
 sidebar_position: 2
-title: Chat history and FTS search
-description: Unified database, FTS5, migrations and session_search tool.
+title: Chat history and full-text search
+description: Where conversations are stored and how the agent searches past messages.
 ---
 
 # Chat history and FTS search
 
-## Database Structure (Duality)
+Every message exchanged with AION is saved in a database so conversations can be reloaded, shown in the sidebar and searched. AION also builds a full-text search (FTS) index over the messages, using SQLite's FTS5 extension, so the agent itself can look up what was said in earlier conversations through the `session_search` tool. This page describes the storage layout, the search index and how to migrate between storage modes; it is for developers and administrators who manage the database.
+
+## Database Structure (Duality) {#database-structure-duality}
 
 The system stores the message history and manages the FTS5 (Full-Text Search) index in two alternative ways depending on the environment variable `AION_UNIFIED_DB`:
 

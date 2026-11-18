@@ -1,24 +1,28 @@
 ---
 sidebar_position: 1
 title: Architectural overview
-description: End-to-end flow and main modules of AION Agents.
+description: How AION Agents is built and what happens, step by step, when a user sends a message.
 ---
 
 # Architectural overview
 
-AION Agents exposes an HTTP API (FastAPI) that for each user message executes the following end-to-end flow:
+AION Agents is an AI assistant platform: a Python backend (FastAPI) runs a language-model agent that can call tools, remember context and stream its answers to web clients such as chat-ui. This page is the entry point for developers and IT staff who want to understand how the pieces fit together before diving into a specific area. It describes the end-to-end flow of one user message, the main modules and where shared state (database, Redis, files) lives.
+
+Acronyms used below: **LLM** = large language model, **MCP** = Model Context Protocol (the standard AION uses to plug external tool servers into the agent), **STM** = short-term memory (the recent turns of the current conversation), **LTM** = long-term memory (facts kept across conversations), **SSE** = Server-Sent Events (the streaming protocol of the chat endpoint).
+
+For each user message the HTTP API executes the following end-to-end flow:
 
 1. **Profile and System Prompt Resolution**: Resolves the **agent profile** loading the corresponding YAML file. Standard profiles reside in `config/profiles/*.yaml` (synchronized at startup starting from `config_std/profiles/`), while custom overwritable profiles can optionally reside in `AION_PROFILES_WRITE_DIR`. Constructs the **system prompt** including the instructions of the profile, the MCP servers and references to the enabled skills (in `full` or `index` mode depending on `AION_SKILL_SYSTEM_PROMPT_MODE`). If `AION_SOUL_MEMORY_USER_SPLIT=1` is enabled, it also dynamically integrates the soul (*soul*), the operational memory (*memory*) and the preferences of the user (*user*).
 2. **MCP Server Initialization**: Starts or reuses the **MCP servers** based on the stdio protocol configured for the profile. If `AION_MCP_POOL=1` is active (enabled by default), the connections remain persistent and are kept in a dedicated pool per chat session to avoid the overhead of starting new subprocesses at each turn.
 3. **Language Model Execution (LLM)**: Runs the Haystack agent engine delegating calls to a unified wrapper, **`AionChatGeneratorWrapper`** (`src/runtime/llm_adapter.py`). This wrapper dynamically selects the correct generator (**`OpenAIChatGenerator`** for OpenAI/vLLM compatible providers, **`AnthropicChatGenerator`** for Anthropic Claude with prompt caching enabled, or **`GoogleGenAIChatGenerator`** for Gemini models) based on `AION_LLM_ADAPTER` and the configured model, managing the normalization of the generation parameters.
 4. **Persistence and Memory Management**:
    - Persists conversations, messages and attachments in the **unified database** of runtime (configured via `AION_DB_URL`, by default local SQLite in `data/aion.db` or PostgreSQL).
-   - Manages isolated per-user operating databases saved under `data/agent_dbs/<tenant>/<user>.db`.
-   - If enabled, extracts long-term memory (**LTM**) using the integration with **MemPalace v3**.
+   - If enabled, recalls and extracts long-term memory (**LTM**) with **Mnemos**, the native in-process LTM backend stored in the unified database (`src/memory/mnemos/`, see [Mnemos](../memory/mnemos.md)).
    - Applies short-term memory (**STM**) context compression if the context window exceeds the established token threshold (`AION_CONTEXT_COMPRESS_ENABLED=1`), with optional database persistence (`AION_CONTEXT_COMPRESS_PERSIST=1`). See **[Context Compaction](../memory/context-compaction.md)** for the full two-level architecture (pre-turn and mid-turn).
 
-> [!WARNING]
-> The delegation and execution module of **Sub-agents** (`SubagentOrchestrator` / `delegate_task` / `delegate_to_subagent`) is currently **under active development and not working** in this version of the codebase. It must not be configured or used in production environments.
+:::warning
+The delegation and execution module of **Sub-agents** (`SubagentOrchestrator` / `delegate_task` / `delegate_to_subagent`) is currently **under active development and not working** in this version of the codebase. It must not be configured or used in production environments.
+:::
 
 ```mermaid
 flowchart TB
@@ -45,7 +49,6 @@ flowchart TB
 
     subgraph Storage["Storage layer"]
         AIONDB[(aion.db — SQLite/Postgres)]
-        USERDB[(agent.db — Per-user SQLite)]
         REDIS[(Redis / LocalFallback)]
         OBJ[(Object storage via boto3/local)]
     end
@@ -53,7 +56,6 @@ flowchart TB
     subgraph External["External services"]
         LLM["AionChatGeneratorWrapper (OpenAI, Anthropic, Google)"]
         MCP[MCP stdio pool]
-        MEMP[MemPalace v3]
     end
 
     CHATUI --> AUTH
@@ -71,12 +73,11 @@ flowchart TB
     PIPE --> PLAN
 
     PIPE --> AIONDB
-    PIPE --> USERDB
     PIPE --> REDIS
     FILES --> OBJ
     PIPE --> MCP
     PIPE --> LLM
-    PIPE --> MEMP
+    PIPE --> MNEMOS[Mnemos LTM in aion.db]
 ```
 
 ## Key modules
@@ -89,12 +90,12 @@ flowchart TB
 | **Agent Factory** | `src/main.py` | Exports the `get_agent()` function, responsible for assembling the agent, retrieving the profile, and dynamically registering MCP tools. |
 | **Pipeline** | `src/agent_pipeline.py` | Manages `AgentPipeline`, which orchestrates asynchronous execution (`run_stream`), tool call management, event tracking, and turn budget control. |
 | **Runtime & Logic** | `src/runtime/` | Redis client and in-process fallback (`redis_client.py`), system hooks management (`hooks.py`), slash commands routing (`slash.py`), planning engines (`plan_engine.py`, `plan_mode.py`), and profile synchronization. |
-| **Memory & LTM** | `src/memory/` | STM context compression, **Mnemos** native LTM (`src/memory/mnemos/`), LTM extraction (`ltm_orchestrator.py`), MemPalace navigation bridge (ERP profiles), and project memory scoping. |
+| **Memory & LTM** | `src/memory/` | STM context compression, **Mnemos** native LTM (`src/memory/mnemos/`), LTM extraction (`ltm_orchestrator.py`), SQL QueryMemory (`sql_query_memory/`), and project/user memory services. |
 | **Security** | `src/security/` | PII/personal data redaction (`pii_redactor.py`), smart approvals for destructive or shell tools (`approval_manager.py`), and session sandbox isolation (`session_runner.py`, `container_runtime.py`). |
 
 ## Typical startup
 
-IJS packages must be executed using **pnpm** (never npm/yarn). Below are the commands to start the services in a local environment:
+JS packages must be managed with **pnpm** (never npm/yarn). Below are the commands to start the services in a local environment:
 
 - **Backend API (port 8001)**:
   ```bash
@@ -128,7 +129,11 @@ IJS packages must be executed using **pnpm** (never npm/yarn). Below are the com
   Files uploaded or generated during the agent session reside locally within the `data/sessions/<session_id>/` directory (excluded from git tracking). Uploads are stored both in the local filesystem and, optionally, saved via the remote S3-compatible `StorageBackend`.
 - **Database Persistence**:
   - **Unified Runtime Database (`data/aion.db`)**: Shared between the Chat UI, the Admin Panel and the backend API. Uses asynchronous SQLAlchemy with Alembic for migrations.
-  - **Isolated User Databases**: Each user has their own SQLite file for personal agent data under `data/agent_dbs/<tenant>/<user>.db`.
+  - **Long-term memory**: Mnemos notes and digests live in the same unified database, scoped per user, project or tenant.
+
+:::note
+Earlier versions documented isolated per-user databases under `data/agent_dbs/<tenant>/<user>.db` (the `agent_db` MCP server) and LTM on the external **MemPalace** server. Both have been removed from the standard distribution; LTM is now provided by Mnemos.
+:::
 
 ## Further readings
 

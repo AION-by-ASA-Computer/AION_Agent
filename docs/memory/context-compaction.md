@@ -1,12 +1,14 @@
 ---
 sidebar_position: 4
-title: Context Compaction
-description: How AION automatically compresses the conversation context when it approaches the LLM token window limit.
+title: Context compaction
+description: How AION summarizes old messages when a conversation gets too long for the model.
 ---
 
 # Context Compaction
 
 When a conversation grows long enough to approach the LLM's token window limit, AION automatically **compacts** it: old messages are summarized into a single compact block and the originals are deleted from the database, while the most recent messages are preserved intact.
+
+Without compaction, a long conversation would eventually exceed the model's context window and fail or be truncated. This page explains when compaction triggers, what is kept and what is summarized; it is for developers and administrators who tune the related `AION_CONTEXT_COMPRESS_*` settings or debug a conversation that "forgot" something.
 
 This mechanism has two independent levels that can both activate in the same turn.
 

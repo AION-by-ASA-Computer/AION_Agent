@@ -1,10 +1,14 @@
 ---
 sidebar_position: 2
-title: Agent pipeline (AgentPipeline)
-description: Architectural concepts, STM/LTM flows, compression, timeout and streaming.
+title: Agent pipeline
+description: What happens inside one chat turn — memory, context compression, tool calls, streaming and timeouts.
 ---
 
 # Agent pipeline (`AgentPipeline`)
+
+The agent pipeline is the heart of a chat turn: it takes the user's message, gathers the context the model needs (recent history, long-term memory, workspace files), runs the language model with its tools, streams the answer back to the client and finally schedules background work such as memory extraction. This page explains each step and the design choices behind it (memory split, compression, timeouts, file delivery). It is aimed at developers who change or debug the turn flow.
+
+Acronyms: **STM** = short-term memory (recent messages of the current conversation), **LTM** = long-term memory (facts kept across conversations, stored in Mnemos), **MCP** = Model Context Protocol (external tool servers), **SSE** = Server-Sent Events (the streaming protocol used by `/chat`).
 
 Implementation: **`src/agent_pipeline.py`**. Class **`AgentPipeline`** that encapsulates the Haystack agent, `session_id`, `profile_name`, `user_id`.
 
@@ -124,10 +128,11 @@ AION implements a hook system inspired by Claude Code and Hermes that allows ext
 
 ### Subagent Pattern
 
-> [!WARNING]
-> Sub-agents are under development and **are not working** in this version of the codebase.
-> 
-> The architecture provides for delegating tasks to specialized **Subagents** (isolated profiles operating in child conversations via the `delegate_to_subagent` tool), in order to guarantee context isolation and prevent pollution of the main context. However, this functionality is currently not active or usable.
+:::warning
+Sub-agents are under development and **are not working** in this version of the codebase.
+
+The architecture provides for delegating tasks to specialized **Subagents** (isolated profiles operating in child conversations via the `delegate_to_subagent` tool), in order to guarantee context isolation and prevent pollution of the main context. However, this functionality is currently not active or usable.
+:::
 
 ### Slash Commands
 Slash commands (e.g. `/help`, `/clear`, `/compact`, `/ttc`) are managed by the `SlashCommandRouter` via the `on_user_message` hook. If a message starts with `/`, it is routed to the corresponding command handler, skipping the normal LLM call if the command is self-contained. The old `/plan` no longer creates plans: it replies with a message indicating to use **Plan mode** in the chat-ui.
@@ -139,10 +144,10 @@ Slash commands (e.g. `/help`, `/clear`, `/compact`, `/ttc`) are managed by the `
 #### 1. **Wake + memory inject (pre-turn)**
 ```python
 wake = await ltm_orchestrator.wake_up(self.conversation_id)
-# pre_turn hooks: SQL QueryMemory + MemPalace navigation (wing_proj_{sql_query_project})
+# pre_turn hooks: SQL QueryMemory for the active project (sql_query_project)
 augmented_user = ltm_orchestrator.build_augmented_user_text(augmented_user, "", wake)
 ```
-**Why:** `wake_up` provides a compact summary (identity / top drawers). The `pre_turn` hooks inject validated SQL caches and MemPalace navigation drawers for the **active project** (same slug as the QueryMemory drawer). `retrieve_context()` remains available but is not on the hot path — navigation retrieval is aligned to SQL QM via hook.
+**Why:** `wake_up` provides a compact summary of the most relevant Mnemos notes for the user and the active project. The `pre_turn` hooks inject validated SQL caches for the **active project** (same slug as the QueryMemory drawer); navigation lessons for that project are Mnemos notes, recalled by the wake-up or on demand with `memory_recall`. `retrieve_context()` remains available but is not on the hot path.
 
 #### 2. **STM window**
 ```python
@@ -156,10 +161,10 @@ The pipeline queries the `HookRegistry` at critical points. Plugins in `data/plu
 #### 4. **Augmented user message**
 ```python
 augmented_user = await self._augment_user_input(user_input)
-# + inject da query_memory_hooks e db_navigation_mempalace_hooks
+# + injections from query_memory_hooks
 augmented_user = ltm_orchestrator.build_augmented_user_text(augmented_user, "", wake)
 ```
-**Why:** The message to the model includes workspace manifest, QueryMemory SQL, MemPalace navigation (project), and wake hint — without duplicating entire SELECTs in MemPalace (only paths/JOINs).
+**Why:** The message to the model includes workspace manifest, QueryMemory SQL and the Mnemos wake hint — without duplicating entire SELECTs in Mnemos (only paths/JOINs/pitfalls).
 
 #### 5. **Agent execution**
 ```python
@@ -184,7 +189,7 @@ await hook_registry.dispatch("post_turn", ctx)
 ```
 **Why:** After the response has been sent to the user, the system executes LTM extraction, optional skill distillation, and the dispatch of closing hooks in the background. These tasks **do not block** the return of the response to the user.
 
-**MemPalace / OpenClaw Parity:** on Claude Code, the `mempal_save_hook` and `mempal_precompact_hook` hooks save automatically without regex on the user text. In AION, `extract_and_persist` (`ltm_extraction` skill) is the equivalent of the save hook; `precompact_flush` covers STM compression. Explicit "remember" requests are managed with **in-turn MCP tools** (`mempalace_kg_add`, …) according to `mempalace_protocol`, not with server-side catchers.
+**Automatic saving (parity with MemPalace / OpenClaw hooks):** on Claude Code, the MemPalace `mempal_save_hook` and `mempal_precompact_hook` hooks save automatically without regex on the user text. In AION, `extract_and_persist` (`ltm_extraction` skill) is the equivalent of the save hook; `precompact_flush` covers STM compression. Explicit "remember" requests are managed with the **in-turn native tool** `memory_note` according to `memory_protocol`, not with server-side catchers.
 
 ---
 

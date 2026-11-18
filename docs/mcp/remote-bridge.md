@@ -1,23 +1,20 @@
 ---
 sidebar_position: 6
-title: Server MCP remoti tramite mcp-remote (remote-bridge)
-description: Come AION raggiunge server MCP streamable HTTP con Bearer token attraverso il ponte stdio mcp-remote - credenziali org_shared e per_user, broker in HTTP, versione fissata, ambiente ridotto e dimensionamento.
+title: Remote MCP servers (remote-bridge)
+description: How AION reaches streamable HTTP MCP servers with a Bearer token through the mcp-remote stdio bridge - org_shared and per_user credentials, HTTP brokers, pinned version, reduced environment and sizing.
 ---
 
-# Server MCP remoti tramite `mcp-remote` (`remote-bridge`)
+# Remote MCP servers via `mcp-remote` (`remote-bridge`)
 
-Un server MCP remoto (streamable HTTP o SSE) si installa come voce `type: remote-bridge`. AION non
-apre direttamente la connessione HTTP: avvia il ponte [`mcp-remote`](https://www.npmjs.com/package/mcp-remote),
-che per AION è un normale server stdio e inoltra le richieste al server remoto con l'header
-`Authorization`.
+Some MCP (Model Context Protocol) servers do not run next to AION but on another machine, reachable over HTTP. This page explains how AION connects to them through a small bridge process, how the access token is passed, and how many resources the bridge uses. It is for administrators and developers/operators who add remote MCP servers or size an installation.
 
-È il modo in cui AION SRE collega i propri broker (un container per fonte dati, tool in sola
-lettura, Bearer token).
+A remote MCP server (streamable HTTP or SSE) is installed as a `type: remote-bridge` entry. AION does not open the HTTP connection itself: it starts the [`mcp-remote`](https://www.npmjs.com/package/mcp-remote) bridge, which to AION looks like a normal stdio server and forwards requests to the remote server with an `Authorization` header.
 
-## Voce del registro
+This is how AION SRE connects its brokers (one container per data source, read-only tools, Bearer token).
 
-L'installazione da URL dell'admin (`build_remote_bridge_registry_config` in
-`src/mcp_remote_install.py`) produce una voce simile:
+## Registry entry
+
+The admin "install from URL" action (`build_remote_bridge_registry_config` in `src/mcp_remote_install.py`) produces an entry like this:
 
 ```yaml
 ssh_broker:
@@ -32,99 +29,75 @@ ssh_broker:
     API_KEY: ${API_KEY}
   auth_env_var: API_KEY
   remote_url: http://ssh-broker:8080/mcp
-  allow_http: true          # solo per broker in HTTP sulla rete interna
+  allow_http: true          # only for HTTP brokers on the internal network
   enabled_tools: [read_status, search_logs]
 ```
 
-`${API_KEY}` nell'header viene risolto da `mcp-remote` nel proprio ambiente: il token non compare
-negli argomenti del processo.
+`${API_KEY}` in the header is resolved by `mcp-remote` from its own environment, so the token never appears in the process arguments.
 
-## Credenziali
+## Credentials
 
-| `credential_mode` | Token | Variabile (`auth_env_var`) |
+| `credential_mode` | Token | Variable (`auth_env_var`) |
 | --- | --- | --- |
-| `org_shared` | Unico per l'organizzazione, cifrato nel `credential_store` | `API_KEY` / `OAUTH_TOKEN` / `BASIC_AUTH` |
-| `per_user` | Uno per utente, collegato da chat-ui | `AION_USER_<SLUG>__<CHIAVE>` |
+| `org_shared` | One for the whole organization, encrypted in the `credential_store` | `API_KEY` / `OAUTH_TOKEN` / `BASIC_AUTH` |
+| `per_user` | One per user, connected from chat-ui | `AION_USER_<SLUG>__<KEY>` |
 
-I broker di AION SRE usano `org_shared`: un token per AION, non uno per utente.
+AION SRE brokers use `org_shared`: one token for AION, not one per user.
 
-Se il token manca AION non avvia il ponte (`_remote_bridge_auth_missing` in `src/mcp_manager.py`).
-Senza Bearer `mcp-remote` tenterebbe il proprio flusso OAuth nel browser. Con un token sbagliato un
-broker che risponde `401` a tutte le richieste, compresa la registrazione del client OAuth, fa
-terminare `mcp-remote` subito (meno di un secondo), senza callback in attesa.
+If the token is missing, AION does not start the bridge (`_remote_bridge_auth_missing` in `src/mcp_manager.py`). Without a Bearer token, `mcp-remote` would try its own OAuth flow in the browser. With a wrong token, a broker that answers `401` to every request (including OAuth client registration) makes `mcp-remote` exit immediately (in under a second), with no callback left waiting.
 
-:::note Voci `org_shared` installate prima della correzione
-Fino alla versione che ha introdotto questa pagina, le voci `org_shared` avevano
-`auth_env_var: AION_USER_<SLUG>__…` mentre il token arrivava in `API_KEY`, e il ponte non partiva
-mai. `resolve_remote_bridge_auth_env_var` ora usa la variabile dell'header in questo caso, quindi
-le voci esistenti funzionano senza modifiche.
+:::note `org_shared` entries installed before the fix
+Up to the version that introduced this page, `org_shared` entries had `auth_env_var: AION_USER_<SLUG>__…` while the token arrived in `API_KEY`, so the bridge never started. `resolve_remote_bridge_auth_env_var` now uses the header variable in this case, so existing entries work without changes.
 :::
 
-## Broker in HTTP: `allow_http`
+## HTTP brokers: `allow_http`
 
-`mcp-remote` rifiuta gli URL `http://` che non puntano a localhost. Per un broker raggiunto in HTTP
-sulla rete Docker interna impostare `allow_http: true` sulla voce (solo da YAML,
-`config/mcp_registry.local.yaml`). AION aggiunge `--allow-http` al momento dell'avvio
-(`resolve_remote_bridge_spawn`), senza scriverlo negli `args` salvati.
+`mcp-remote` rejects `http://` URLs that do not point to localhost. For a broker reached over HTTP on the internal Docker network, set `allow_http: true` on the entry (YAML only, `config/mcp_registry.local.yaml`). AION adds `--allow-http` at start time (`resolve_remote_bridge_spawn`) without writing it into the saved `args`.
 
-Il traffico in chiaro è accettabile solo su una rete privata non condivisa; altrimenti esporre il
-broker in HTTPS.
+:::warning
+Unencrypted traffic is acceptable only on a private, non-shared network. Otherwise expose the broker over HTTPS.
+:::
 
-## Quali tool vede l'agente
+## Which tools the agent sees
 
-Il filtro è `enabled_tools` sulla voce del registro (admin `POST /admin/mcp/{name}/tools-config`),
-in aggiunta ai tool in sola lettura esposti dal broker. AION non usa l'opzione `--ignore-tool` di
-`mcp-remote`.
+The filter is `enabled_tools` on the registry entry (admin `POST /admin/mcp/{name}/tools-config`), applied on top of the read-only tools exposed by the broker. AION does not use the `--ignore-tool` option of `mcp-remote`.
 
-## Versione di `mcp-remote`
+## `mcp-remote` version
 
-Tutto il traffico verso i server remoti passa dal ponte, quindi la versione è fissata:
+All traffic to remote servers goes through the bridge, so its version is pinned:
 
 - `MCP_REMOTE_VERSION` in `src/mcp_remote_install.py`;
-- `docker/package.mcp-remote.json` (versione esatta) e `docker/package-lock.mcp-remote.json`,
-  installati nell'immagine backend con `npm ci --omit=dev`;
-- fuori da Docker, senza `node_modules/mcp-remote` locale, AION avvia
-  `npx -y mcp-remote@<MCP_REMOTE_VERSION>`.
+- `docker/package.mcp-remote.json` (exact version) and `docker/package-lock.mcp-remote.json`, installed in the backend image with `npm ci --omit=dev`;
+- outside Docker, without a local `node_modules/mcp-remote`, AION runs `npx -y mcp-remote@<MCP_REMOTE_VERSION>`.
 
-Per aggiornarla: cambiare la versione nella costante e nel `package.mcp-remote.json`, rigenerare il
-lockfile (`npm install --package-lock-only` in una cartella con quel `package.json`) e lanciare
-`src/test/test_mcp_remote_install.py` (controlla che le tre versioni coincidano) e
-`src/test/test_mcp_remote_bridge_broker.py`.
+To upgrade:
 
-## Ambiente del processo
+1. Change the version in the constant and in `package.mcp-remote.json`.
+2. Regenerate the lockfile (`npm install --package-lock-only` in a folder containing that `package.json`).
+3. Run `src/test/test_mcp_remote_install.py` (checks that the three versions match) and `src/test/test_mcp_remote_bridge_broker.py`.
 
-Il ponte è un server di terze parti: riceve solo `PATH`, `HOME`, locale, proxy e certificati
-(`NODE_EXTRA_CA_CERTS`, …) più il blocco `env:` del registro, cioè il token. Nessuna variabile
-`AION_*` del backend, tranne quelle di contesto (`AION_CURRENT_*`, `AION_CHAT_SESSION_ID`). Vedi
-`AION_MCP_ENV_SCRUB` e `AION_MCP_ENV_ALLOWLIST` in
-[isolamento per utente e credential store](user-isolation-and-credentials.md).
+## Process environment
 
-## Dimensionamento
+The bridge is third-party software, so it only receives `PATH`, `HOME`, locale, proxy and certificate variables (`NODE_EXTRA_CA_CERTS`, …) plus the registry `env:` block, i.e. the token. It gets none of the backend's `AION_*` variables, except the context ones (`AION_CURRENT_*`, `AION_CHAT_SESSION_ID`). See `AION_MCP_ENV_SCRUB` and `AION_MCP_ENV_ALLOWLIST` in [MCP user isolation and credentials](user-isolation-and-credentials.md).
 
-Misura su un broker FastMCP locale (macOS, Node 22, `mcp-remote` 0.1.49): circa **100 MB di RSS**
-per processo, invariati dopo 20 chiamate.
+## Sizing
 
-Quanti processi ci sono dipende dal pool (`AION_MCP_POOL=1`):
+Measured on a local FastMCP broker (macOS, Node 22, `mcp-remote` 0.1.49): about **100 MB of RSS** per process, unchanged after 20 calls.
 
-| Configurazione | Processi `mcp-remote` | Chiusura degli inattivi |
+How many processes exist depends on the pool (`AION_MCP_POOL=1`):
+
+| Configuration | `mcp-remote` processes | Idle shutdown |
 | --- | --- | --- |
-| `AION_MCP_USER_POOL=1` (default) | uno per **utente** e per broker, condiviso da tutte le sue conversazioni | solo con `AION_MCP_USER_POOL_IDLE_CLEANUP=1`, dopo `AION_MCP_POOL_IDLE_SEC` |
-| `AION_MCP_USER_POOL=0` | uno per **conversazione** e per broker | dopo `AION_MCP_POOL_IDLE_SEC` (default 1800 s, controllo ogni 60 s) |
+| `AION_MCP_USER_POOL=1` (default) | one per **user** and per broker, shared by all of that user's conversations | only with `AION_MCP_USER_POOL_IDLE_CLEANUP=1`, after `AION_MCP_POOL_IDLE_SEC` |
+| `AION_MCP_USER_POOL=0` | one per **conversation** and per broker | after `AION_MCP_POOL_IDLE_SEC` (default 1800 s, checked every 60 s) |
 
-Con il default, tutte le indagini di `sre-bot` condividono un solo processo per broker
-(memoria ≈ broker × 100 MB) e il worker serializza le chiamate: con molte indagini contemporanee le
-chiamate allo stesso broker si mettono in fila. Con `AION_MCP_USER_POOL=0` le chiamate vanno in
-parallelo, ma i processi diventano indagini contemporanee × broker; il limite di concorrenza di
-AION SRE li tiene sotto controllo.
+With the default, all `sre-bot` investigations share one process per broker (memory ≈ brokers × 100 MB) and the worker serializes calls: with many concurrent investigations, calls to the same broker queue up. With `AION_MCP_USER_POOL=0` calls run in parallel, but the number of processes becomes concurrent investigations × brokers; the AION SRE concurrency limit keeps that under control.
 
-## Test
+## Tests
 
-`src/test/test_mcp_remote_bridge_broker.py` (marcatore `integration`) avvia un broker FastMCP
-streamable HTTP con controllo del Bearer e lo raggiunge con `mcp-remote` reale: token giusto, token
-mancante, token sbagliato e broker in HTTP su un IP non loopback con e senza `allow_http`. Viene
-saltato se mancano `node` o `mcp-remote` locale; per indicarne uno installato altrove:
+`src/test/test_mcp_remote_bridge_broker.py` (marker `integration`) starts a streamable HTTP FastMCP broker that checks the Bearer token and reaches it with the real `mcp-remote`: correct token, missing token, wrong token, and an HTTP broker on a non-loopback IP with and without `allow_http`. The test is skipped if `node` or a local `mcp-remote` is missing; to point to one installed elsewhere:
 
 ```bash
-AION_TEST_MCP_REMOTE_PROXY=/percorso/node_modules/mcp-remote/dist/proxy.js \
+AION_TEST_MCP_REMOTE_PROXY=/path/to/node_modules/mcp-remote/dist/proxy.js \
   python -m pytest src/test/test_mcp_remote_bridge_broker.py -v
 ```

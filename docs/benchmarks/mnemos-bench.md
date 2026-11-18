@@ -1,10 +1,12 @@
 ---
 title: Mnemos Bench
 sidebar_position: 2
-description: Dev-only benchmark for Mnemos FTS and hybrid embedding recall — smoke, full regression, and adversarial suites.
+description: Developer benchmark that checks how well Mnemos long-term memory finds the right notes.
 ---
 
 # Mnemos Bench
+
+Mnemos is AION's long-term memory (LTM); Mnemos Bench is the test suite that checks whether it returns the right notes for a query. It runs fixed datasets of notes and questions through keyword (FTS, full-text search) and hybrid (keyword + embeddings) recall and reports a score, so retrieval changes can be compared against a baseline. Read it if you change Mnemos retrieval or tune its settings.
 
 Mnemos Bench validates **what Mnemos is designed for**: short post-it notes, scoped recall (user / project), and hybrid retrieval — not full episodic memory over 100k trajectory chunks.
 
@@ -223,7 +225,7 @@ STM (chat window)
 Mnemos notes (this benchmark)
 SQL Query Memory (embedding + FTS on SQL cache)
 Project RAG / KHUB (long documents — future native hook)
-Agent DB / MemPalace (structured navigation)
+Database navigation notes (Mnemos project scope; formerly Agent DB / MemPalace)
 ```
 
 Mnemos Bench does **not** replace end-to-end eval of the full stack.
