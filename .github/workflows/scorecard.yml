@@ -34,7 +34,7 @@ jobs:
         # which runs OSV-Scanner with PyPI transitive resolution on every requirements
         # file without hashes (same cause as our slow OSV job). See ossf/scorecard#5234.
         # Revisit when a newer release is confirmed fixed.
-        uses: ossf/scorecard-action@4eaacf0543bb3f2c246792bd56e8cdeffafb205a # v2.4.3
+        uses: ossf/scorecard-action@fa7117db83c52d787ae5a89f350999701505d78e # v2.5.0
         with:
           results_file: results.sarif
           results_format: sarif
