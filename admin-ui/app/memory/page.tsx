@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { apiFetch } from "@/lib/api/headers";
 import { useT } from "@/lib/i18n/use-t";
+import { getLocale } from "@/lib/i18n/i18n-store";
 import {
   Folder,
   FolderPlus,
@@ -25,7 +26,7 @@ import { apiBase } from "@/lib/api";
 import { PageToast, type ToastState } from "@/components/PageToast";
 import { Dialog } from "@/components/profiles/Dialog";
 import { Select } from "@/components/ui/Select";
-import { DeleteDialog, nameSlot } from "@/components/ui/ConfirmDialogs";
+import { DeleteDialog } from "@/components/ui/ConfirmDialogs";
 import { ghostBtn, inputCls, outlineBtn, solidBtn, dangerBtn } from "@/components/ui/classes";
 
 interface ProjectMember {
@@ -49,32 +50,6 @@ interface Project {
   members: ProjectMember[];
 }
 
-const ROLE_OPTIONS = [
-  { value: "member", label: "Member", description: "Can use the project's memory" },
-  { value: "owner", label: "Owner", description: "Can also manage the project" },
-];
-
-const SCOPE_OPTIONS = [
-  { value: "inherit", label: "Inherit", description: "Use the tenant default" },
-  { value: "shared", label: "Shared", description: "Everyone shares the same results" },
-  { value: "per_user", label: "Per user", description: "Results are isolated per user" },
-];
-
-const SCOPE_LABELS: Record<string, string> = Object.fromEntries(SCOPE_OPTIONS.map((o) => [o.value, o.label]));
-
-const DELETE_TEXT: Record<string, string> = {
-  "delete.title": "Delete this memory project?",
-  "delete.body": `${nameSlot} will be permanently deleted, with all its members and cached queries. This cannot be undone.`,
-  "delete.confirm_label": `Type ${nameSlot} to confirm`,
-  "delete.cancel": "Cancel",
-  "delete.confirm": "Delete",
-  "delete.deleting": "Deleting…",
-};
-
-/** Page strings are plain English; adapts them to the shared dialog's translator signature. */
-const deleteText = (key: string, vars?: Record<string, string | number>) =>
-  (DELETE_TEXT[key] ?? key).replace(/\{\{(\w+)\}\}/g, (_, n) => String(vars?.[n] ?? ""));
-
 function hueOf(key: string): number {
   let h = 0;
   for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) % 360;
@@ -86,6 +61,14 @@ interface ProfileRow {
   slug?: string;
 }
 
+interface UserRow {
+  id: string;
+  identifier?: string;
+  display_name?: string;
+  email?: string;
+  account_type?: string;
+}
+
 export default function MemoryPage() {
   const t = useT();
   const [toast, setToast] = useState<ToastState>(null);
@@ -95,6 +78,7 @@ export default function MemoryPage() {
 
   const [projects, setProjects] = useState<Project[]>([]);
   const [profiles, setProfiles] = useState<ProfileRow[]>([]);
+  const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(false);
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -133,13 +117,25 @@ export default function MemoryPage() {
     }
   }, []);
 
+  const fetchUsers = useCallback(async () => {
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/users?include_service=1`);
+      if (res.ok) {
+        const data = await res.json();
+        setUsers(Array.isArray(data?.users) ? data.users : []);
+      }
+    } catch (e) {
+      console.error("Users fetch error", e);
+    }
+  }, []);
+
   const fetchProjects = useCallback(async (opts?: { notify?: boolean }) => {
     const notify = opts?.notify !== false;
     setLoading(true);
     try {
       const res = await apiFetch(`${apiBase()}/admin/query-memory/projects`);
       if (!res.ok) {
-        show(`Projects: HTTP error ${res.status}`, "error");
+        show(t("admin_memory.toast.fetch_http_error", { status: res.status }), "error");
         return;
       }
       const data = await res.json();
@@ -150,18 +146,19 @@ export default function MemoryPage() {
         const updated = projectList.find((p: Project) => p.slug === prevDetails.slug);
         return updated || null;
       });
-      if (notify) show("Project list updated.");
+      if (notify) show(t("admin_memory.toast.list_updated"));
     } catch (e) {
-      show("Unable to load projects: " + String(e), "error");
+      show(t("admin_memory.toast.load_error", { error: String(e) }), "error");
     } finally {
       setLoading(false);
     }
-  }, [show]);
+  }, [show, t]);
 
   const loadAllData = useCallback(() => {
     void fetchProfiles();
+    void fetchUsers();
     void fetchProjects({ notify: false });
-  }, [fetchProfiles, fetchProjects]);
+  }, [fetchProfiles, fetchUsers, fetchProjects]);
 
   useEffect(() => {
     loadAllData();
@@ -170,7 +167,7 @@ export default function MemoryPage() {
   const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!createSlug.trim() || !createDisplayName.trim()) {
-      show("Project slug and name are required.", "error");
+      show(t("admin_memory.toast.slug_name_required"), "error");
       return;
     }
     setLoading(true);
@@ -188,9 +185,9 @@ export default function MemoryPage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        show(err.detail || `HTTP error ${res.status}`, "error");
+        show(err.detail || t("admin_memory.toast.http_error", { status: res.status }), "error");
       } else {
-        show(`Project "${createDisplayName}" created successfully.`);
+        show(t("admin_memory.toast.project_created", { name: createDisplayName }));
         setIsCreateOpen(false);
         setCreateSlug("");
         setCreateDisplayName("");
@@ -222,9 +219,9 @@ export default function MemoryPage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        show(err.detail || `HTTP error ${res.status}`, "error");
+        show(err.detail || t("admin_memory.toast.http_error", { status: res.status }), "error");
       } else {
-        show(`Project "${editDisplayName}" updated successfully.`);
+        show(t("admin_memory.toast.project_updated", { name: editDisplayName }));
         setIsEditingDetails(false);
         void fetchProjects({ notify: false });
       }
@@ -243,9 +240,9 @@ export default function MemoryPage() {
         method: "DELETE",
       });
       if (!res.ok) {
-        show(`Deletion failed: HTTP error ${res.status}`, "error");
+        show(t("admin_memory.toast.delete_failed", { status: res.status }), "error");
       } else {
-        show(`Project "${projectToDelete.display_name}" permanently deleted.`);
+        show(t("admin_memory.toast.project_deleted", { name: projectToDelete.display_name }));
         setIsDeleteProjOpen(false);
         setProjectToDelete(null);
         setIsDetailsOpen(false);
@@ -263,7 +260,7 @@ export default function MemoryPage() {
   const handleAddMember = async (e: React.FormEvent, projectSlug: string) => {
     e.preventDefault();
     if (!memberUserIdentifier.trim()) {
-      show("User identifier is required.", "error");
+      show(t("admin_memory.toast.user_required"), "error");
       return;
     }
     setLoading(true);
@@ -278,9 +275,9 @@ export default function MemoryPage() {
       });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        show(err.detail || `HTTP error ${res.status}`, "error");
+        show(err.detail || t("admin_memory.toast.http_error", { status: res.status }), "error");
       } else {
-        show(`User "${memberUserIdentifier}" added to the project.`);
+        show(t("admin_memory.toast.member_added", { user: memberUserIdentifier }));
         setMemberUserIdentifier("");
         setMemberRole("member");
         void fetchProjects({ notify: false });
@@ -302,9 +299,9 @@ export default function MemoryPage() {
         { method: "DELETE" }
       );
       if (!res.ok) {
-        show(`Revocation failed: HTTP error ${res.status}`, "error");
+        show(t("admin_memory.toast.revoke_failed", { status: res.status }), "error");
       } else {
-        show(`Access revoked for user "${userIdentifier}".`);
+        show(t("admin_memory.toast.member_revoked", { user: userIdentifier }));
         setIsDeleteMemberOpen(false);
         setMemberToDelete(null);
         void fetchProjects({ notify: false });
@@ -321,6 +318,8 @@ export default function MemoryPage() {
     setEditDisplayName(p.display_name);
     setEditDescription(p.description || "");
     setEditProfileSlug(p.profile_slug || "");
+    setMemberUserIdentifier("");
+    setMemberRole("member");
     setIsEditingDetails(false);
     setDetailsTab("overview");
     setIsDetailsOpen(true);
@@ -334,7 +333,7 @@ export default function MemoryPage() {
 
   const formatDate = (isoString: string) => {
     try {
-      return new Date(isoString).toLocaleDateString("en-US", {
+      return new Date(isoString).toLocaleDateString(getLocale(), {
         year: "numeric",
         month: "short",
         day: "numeric",
@@ -346,10 +345,45 @@ export default function MemoryPage() {
     }
   };
 
+  const roleOptions = [
+    { value: "member", label: t("admin_memory.roles.member"), description: t("admin_memory.roles.member_desc") },
+    { value: "owner", label: t("admin_memory.roles.owner"), description: t("admin_memory.roles.owner_desc") },
+  ];
+
+  const scopeOptions = [
+    { value: "inherit", label: t("admin_memory.scopes.inherit"), description: t("admin_memory.scopes.inherit_desc") },
+    { value: "shared", label: t("admin_memory.scopes.shared"), description: t("admin_memory.scopes.shared_desc") },
+    { value: "per_user", label: t("admin_memory.scopes.per_user"), description: t("admin_memory.scopes.per_user_desc") },
+  ];
+
+  const scopeLabels: Record<string, string> = Object.fromEntries(scopeOptions.map((o) => [o.value, o.label]));
+
   const profileOptions = [
-    { value: "", label: "No profile" },
+    { value: "", label: t("admin_memory.no_profile") },
     ...profiles.map((p) => ({ value: p.slug || p.name.replace(/\s+/g, "_").toLowerCase(), label: p.name })),
   ];
+
+  const existingMemberIds = new Set(
+    (projectDetails?.members ?? []).map((m) => m.user_identifier.toLowerCase()),
+  );
+  const userOptions = users
+    .filter((u) => {
+      const id = u.identifier || u.id;
+      return Boolean(id) && !existingMemberIds.has(id.toLowerCase());
+    })
+    .map((u) => {
+      const value = u.identifier || u.id;
+      const label = u.display_name ? `${u.display_name} (${value})` : value;
+      const parts = [
+        u.email && u.email !== value ? u.email : null,
+        u.account_type === "service" ? t("admin_memory.service_account") : null,
+      ].filter(Boolean);
+      return {
+        value,
+        label,
+        description: parts.length > 0 ? parts.join(" · ") : undefined,
+      };
+    });
 
   return (
     <div className="mx-auto flex max-w-[84rem] flex-col gap-6">
@@ -359,10 +393,10 @@ export default function MemoryPage() {
       <header className="flex flex-col gap-4 pt-2 sm:flex-row sm:items-end">
         <div className="min-w-0 flex-1">
           <h1 className="text-balance text-2xl font-semibold tracking-[-0.02em] sm:text-[28px]">
-            Memory Projects
+            {t("admin_memory.title")}
           </h1>
           <p className="mt-1 max-w-[60ch] text-sm text-muted-foreground">
-            Manage query memory contexts and control per-project member access for isolated SQL results.
+            {t("admin_memory.subtitle")}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -378,13 +412,13 @@ export default function MemoryPage() {
       </header>
 
       {/* Projects list */}
-      <section className="flex flex-col gap-4" aria-label="Active projects">
+      <section className="flex flex-col gap-4" aria-label={t("admin_memory.active_projects_aria")}>
         {!loading && projects.length === 0 ? (
           <div className="flex flex-col items-center rounded-3xl border border-dashed border-border px-6 py-20 text-center">
             <Folder className="mb-4 h-8 w-8 text-muted-foreground" strokeWidth={1.5} aria-hidden />
-            <h2 className="text-lg font-semibold tracking-[-0.015em]">No projects yet</h2>
+            <h2 className="text-lg font-semibold tracking-[-0.015em]">{t("admin_memory.empty.title")}</h2>
             <p className="mt-1.5 max-w-[46ch] text-sm text-muted-foreground">
-              Create a Memory Project to start isolating SQL query contexts per team or workflow.
+              {t("admin_memory.empty.description")}
             </p>
             <div className="mt-6 flex flex-wrap justify-center gap-2">
               <button type="button" className={solidBtn} onClick={() => setIsCreateOpen(true)}>
@@ -398,18 +432,18 @@ export default function MemoryPage() {
             {loading && projects.length === 0 ? (
               <div className="flex items-center justify-center gap-2 py-12 text-sm text-muted-foreground" role="status">
                 <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                Loading projects…
+                {t("admin_memory.loading")}
               </div>
             ) : (
               <table className="w-full text-left" role="grid">
                 <thead>
                   <tr className="border-b border-border/60 text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                    <th className="px-5 py-3.5" scope="col">Project</th>
-                    <th className="px-5 py-3.5" scope="col">Profile</th>
-                    <th className="px-5 py-3.5" scope="col">Scope</th>
-                    <th className="px-5 py-3.5" scope="col">Members</th>
-                    <th className="px-5 py-3.5" scope="col">Created</th>
-                    <th className="px-5 py-3.5 text-right" scope="col">Actions</th>
+                    <th className="px-5 py-3.5" scope="col">{t("admin_memory.table.project")}</th>
+                    <th className="px-5 py-3.5" scope="col">{t("admin_memory.table.profile")}</th>
+                    <th className="px-5 py-3.5" scope="col">{t("admin_memory.table.scope")}</th>
+                    <th className="px-5 py-3.5" scope="col">{t("admin_memory.table.members")}</th>
+                    <th className="px-5 py-3.5" scope="col">{t("admin_memory.table.created")}</th>
+                    <th className="px-5 py-3.5 text-right" scope="col">{t("admin_memory.table.actions")}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border/40 text-sm">
@@ -434,7 +468,7 @@ export default function MemoryPage() {
                       </td>
                       <td className="px-5 py-4">
                         <span className="rounded-lg border border-border bg-secondary px-2 py-0.5 font-mono text-xs font-medium uppercase tracking-wide">
-                          {project.scope_mode}
+                          {scopeLabels[project.scope_mode] ?? project.scope_mode}
                         </span>
                       </td>
                       <td className="px-5 py-4">
@@ -454,7 +488,7 @@ export default function MemoryPage() {
                           <button
                             type="button"
                             onClick={() => openDetailsModal(project)}
-                            title="View details & members"
+                            title={t("admin_memory.actions.view_details")}
                             className={ghostBtn}
                           >
                             <Eye className="h-4 w-4" aria-hidden />
@@ -465,7 +499,7 @@ export default function MemoryPage() {
                               setProjectToDelete(project);
                               setIsDeleteProjOpen(true);
                             }}
-                            title="Delete project"
+                            title={t("admin_memory.actions.delete_project")}
                             className={cn(ghostBtn, "hover:text-destructive")}
                           >
                             <Trash2 className="h-4 w-4" aria-hidden />
@@ -484,15 +518,15 @@ export default function MemoryPage() {
       {/* MODAL: Project details & members */}
       {isDetailsOpen && projectDetails && (
         <Dialog
-          title={isEditingDetails ? "Edit project" : projectDetails.display_name}
-          closeLabel="Close"
+          title={isEditingDetails ? t("admin_memory.details.edit_title") : projectDetails.display_name}
+          closeLabel={t("admin_memory.common.close")}
           onClose={closeDetails}
           className="max-w-2xl"
         >
           <div className="flex flex-col gap-5">
             <p className="-mt-1 font-mono text-xs text-muted-foreground">{projectDetails.slug}</p>
 
-            <div role="tablist" aria-label="Project sections" className="flex gap-1 border-b border-border">
+            <div role="tablist" aria-label={t("admin_memory.details.sections_aria")} className="flex gap-1 border-b border-border">
               {(["overview", "members"] as const).map((id) => {
                 const active = detailsTab === id;
                 return (
@@ -507,7 +541,7 @@ export default function MemoryPage() {
                       active ? "border-foreground text-foreground" : "border-transparent text-muted-foreground hover:text-foreground",
                     )}
                   >
-                    {id === "overview" ? "Overview" : "Members"}
+                    {id === "overview" ? t("admin_memory.details.tab_overview") : t("admin_memory.details.tab_members")}
                     {id === "members" && (
                       <span className="rounded-md bg-secondary px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-muted-foreground">
                         {projectDetails.members?.length || 0}
@@ -523,48 +557,55 @@ export default function MemoryPage() {
                 (isEditingDetails ? (
                   <form onSubmit={handleEditProject} className="flex flex-col gap-4">
                     <label className="flex flex-col gap-1.5">
-                      <span className="text-sm font-medium">Display name</span>
+                      <span className="text-sm font-medium">{t("admin_memory.fields.display_name")}</span>
                       <input required autoFocus value={editDisplayName} onChange={(e) => setEditDisplayName(e.target.value)} className={inputCls} />
                     </label>
                     <label className="flex flex-col gap-1.5">
-                      <span className="text-sm font-medium">Description</span>
+                      <span className="text-sm font-medium">{t("admin_memory.fields.description")}</span>
                       <textarea value={editDescription} onChange={(e) => setEditDescription(e.target.value)} rows={3} className={cn(inputCls, "resize-none")} />
                     </label>
                     <label className="flex flex-col gap-1.5">
-                      <span className="text-sm font-medium">Linked profile</span>
+                      <span className="text-sm font-medium">{t("admin_memory.fields.linked_profile")}</span>
                       <Select value={editProfileSlug} onChange={setEditProfileSlug} options={profileOptions} />
                     </label>
                     <div className="flex justify-end gap-2 pt-1">
                       <button type="button" onClick={() => setIsEditingDetails(false)} className={ghostBtn}>
-                        Cancel
+                        {t("admin_memory.common.cancel")}
                       </button>
                       <button type="submit" disabled={loading} className={solidBtn}>
                         {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Save className="h-3.5 w-3.5" aria-hidden />}
-                        Save changes
+                        {t("admin_memory.details.save_changes")}
                       </button>
                     </div>
                   </form>
                 ) : (
                   <div className="flex flex-col gap-5">
                     <p className={cn("text-sm leading-relaxed", projectDetails.description ? "text-foreground" : "text-muted-foreground")}>
-                      {projectDetails.description || "No description."}
+                      {projectDetails.description || t("admin_memory.details.no_description")}
                     </p>
 
                     <dl className="grid gap-x-6 gap-y-3 rounded-2xl border border-border/70 p-4 text-sm sm:grid-cols-2">
                       {[
                         {
                           icon: Shield,
-                          label: "Source database",
-                          value: projectDetails.datasource_key.startsWith("default:") ? "Not configured" : projectDetails.datasource_key,
+                          label: t("admin_memory.details.source_db"),
+                          value: projectDetails.datasource_key.startsWith("default:")
+                            ? t("admin_memory.details.not_configured")
+                            : projectDetails.datasource_key,
                           mono: !projectDetails.datasource_key.startsWith("default:"),
                           hint: projectDetails.datasource_key.startsWith("default:")
-                            ? "No Postgres connection was found when this project was created."
-                            : "Queries learned here are kept separate from other databases.",
+                            ? t("admin_memory.details.source_db_missing_hint")
+                            : t("admin_memory.details.source_db_hint"),
                         },
-                        { icon: Users, label: "Scope", value: SCOPE_LABELS[projectDetails.scope_mode] ?? projectDetails.scope_mode },
-                        { icon: CheckCircle, label: "Linked profile", value: projectDetails.profile_slug || "None", mono: Boolean(projectDetails.profile_slug) },
-                        { icon: User, label: "Created by", value: projectDetails.created_by || "system" },
-                        { icon: Calendar, label: "Created", value: formatDate(projectDetails.created_at) },
+                        { icon: Users, label: t("admin_memory.table.scope"), value: scopeLabels[projectDetails.scope_mode] ?? projectDetails.scope_mode },
+                        {
+                          icon: CheckCircle,
+                          label: t("admin_memory.fields.linked_profile"),
+                          value: projectDetails.profile_slug || t("admin_memory.details.none"),
+                          mono: Boolean(projectDetails.profile_slug),
+                        },
+                        { icon: User, label: t("admin_memory.details.created_by"), value: projectDetails.created_by || t("admin_memory.common.system") },
+                        { icon: Calendar, label: t("admin_memory.table.created"), value: formatDate(projectDetails.created_at) },
                       ].map(({ icon: Icon, label, value, mono, hint }) => (
                         <div key={label} className="flex min-w-0 flex-col gap-0.5">
                           <dt className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -588,11 +629,11 @@ export default function MemoryPage() {
                         className={cn(ghostBtn, "hover:text-destructive")}
                       >
                         <Trash2 className="h-3.5 w-3.5" aria-hidden />
-                        Delete project
+                        {t("admin_memory.actions.delete_project")}
                       </button>
                       <button type="button" onClick={() => setIsEditingDetails(true)} className={cn(outlineBtn, "ml-auto")}>
                         <Edit2 className="h-3.5 w-3.5" aria-hidden />
-                        Edit details
+                        {t("admin_memory.details.edit_details")}
                       </button>
                     </div>
                   </div>
@@ -602,29 +643,35 @@ export default function MemoryPage() {
                 <div className="flex flex-col gap-4">
                   <form onSubmit={(e) => handleAddMember(e, projectDetails.slug)} className="flex flex-col gap-2 sm:flex-row sm:items-end">
                     <label className="flex min-w-0 flex-1 flex-col gap-1.5">
-                      <span className="text-sm font-medium">Add a member</span>
-                      <input
-                        required
-                        placeholder="User ID or email"
+                      <span className="text-sm font-medium">{t("admin_memory.members.add_member")}</span>
+                      <Select
                         value={memberUserIdentifier}
-                        onChange={(e) => setMemberUserIdentifier(e.target.value)}
-                        className={inputCls}
+                        onChange={setMemberUserIdentifier}
+                        options={userOptions}
+                        placeholder={
+                          userOptions.length === 0
+                            ? users.length === 0
+                              ? t("admin_memory.members.no_users")
+                              : t("admin_memory.members.all_members")
+                            : t("admin_memory.members.select_user")
+                        }
+                        disabled={loading || userOptions.length === 0}
                       />
                     </label>
                     <div className="sm:w-40">
-                      <Select value={memberRole} onChange={setMemberRole} aria-label="Role" options={ROLE_OPTIONS} />
+                      <Select value={memberRole} onChange={setMemberRole} aria-label={t("admin_memory.members.role_aria")} options={roleOptions} />
                     </div>
                     <button type="submit" disabled={loading || !memberUserIdentifier.trim()} className={cn(solidBtn, "h-[2.625rem] justify-center")}>
                       {loading ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <UserPlus className="h-3.5 w-3.5" aria-hidden />}
-                      Add
+                      {t("admin_memory.members.add")}
                     </button>
                   </form>
 
                   {!projectDetails.members || projectDetails.members.length === 0 ? (
                     <div className="rounded-2xl border border-dashed border-border px-6 py-10 text-center">
-                      <p className="text-sm font-medium">No members yet</p>
+                      <p className="text-sm font-medium">{t("admin_memory.members.empty_title")}</p>
                       <p className="mx-auto mt-1 max-w-[40ch] text-sm text-muted-foreground">
-                        Only the people you add here can use this project&apos;s memory.
+                        {t("admin_memory.members.empty_description")}
                       </p>
                     </div>
                   ) : (
@@ -643,7 +690,10 @@ export default function MemoryPage() {
                               {member.user_identifier}
                             </div>
                             <div className="truncate text-xs text-muted-foreground">
-                              Added by {member.invited_by || "system"} · {formatDate(member.created_at)}
+                              {t("admin_memory.members.added_by", {
+                                user: member.invited_by || t("admin_memory.common.system"),
+                                date: formatDate(member.created_at),
+                              })}
                             </div>
                           </div>
                           <span
@@ -652,7 +702,7 @@ export default function MemoryPage() {
                               member.role === "owner" ? "bg-foreground text-background" : "bg-secondary text-muted-foreground",
                             )}
                           >
-                            {member.role === "owner" ? "Owner" : "Member"}
+                            {member.role === "owner" ? t("admin_memory.roles.owner") : t("admin_memory.roles.member")}
                           </span>
                           <button
                             type="button"
@@ -660,8 +710,8 @@ export default function MemoryPage() {
                               setMemberToDelete({ projectSlug: projectDetails.slug, userIdentifier: member.user_identifier });
                               setIsDeleteMemberOpen(true);
                             }}
-                            aria-label={`Revoke access for ${member.user_identifier}`}
-                            title="Revoke access"
+                            aria-label={t("admin_memory.members.revoke_aria", { user: member.user_identifier })}
+                            title={t("admin_memory.members.revoke_title")}
                             className={cn(ghostBtn, "h-8 w-8 shrink-0 justify-center px-0 hover:text-destructive")}
                           >
                             <UserMinus className="h-3.5 w-3.5" aria-hidden />
@@ -680,21 +730,21 @@ export default function MemoryPage() {
       {/* MODAL: Create Project */}
       {isCreateOpen && (
         <Dialog
-          title="New Memory Project"
-          closeLabel="Cancel"
+          title={t("admin_memory.create.title")}
+          closeLabel={t("admin_memory.common.cancel")}
           onClose={() => setIsCreateOpen(false)}
           className="max-w-lg"
         >
           <form onSubmit={handleCreateProject} className="flex flex-col gap-4">
             <p className="text-sm text-muted-foreground">
-              Create a project to isolate SQL query memory for a specific team or context.
+              {t("admin_memory.create.subtitle")}
             </p>
 
             <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">Project Slug</span>
+              <span className="text-sm font-medium">{t("admin_memory.fields.slug")}</span>
               <input
                 required
-                placeholder="e.g. asset_manager, internal_chatbot"
+                placeholder={t("admin_memory.fields.slug_placeholder")}
                 value={createSlug}
                 onChange={(e) => setCreateSlug(e.target.value)}
                 className={cn(inputCls, "font-mono")}
@@ -702,10 +752,10 @@ export default function MemoryPage() {
             </label>
 
             <label className="flex flex-col gap-1.5">
-              <span className="text-sm font-medium">Display Name</span>
+              <span className="text-sm font-medium">{t("admin_memory.fields.display_name")}</span>
               <input
                 required
-                placeholder="e.g. Asset Manager"
+                placeholder={t("admin_memory.fields.display_name_placeholder")}
                 value={createDisplayName}
                 onChange={(e) => setCreateDisplayName(e.target.value)}
                 className={inputCls}
@@ -714,11 +764,11 @@ export default function MemoryPage() {
 
             <label className="flex flex-col gap-1.5">
               <span className="text-sm font-medium">
-                Description{" "}
-                <span className="font-normal text-muted-foreground">· optional</span>
+                {t("admin_memory.fields.description")}{" "}
+                <span className="font-normal text-muted-foreground">{t("admin_memory.fields.optional")}</span>
               </span>
               <textarea
-                placeholder="Describe this project's purpose"
+                placeholder={t("admin_memory.fields.description_placeholder")}
                 value={createDescription}
                 onChange={(e) => setCreateDescription(e.target.value)}
                 rows={3}
@@ -728,22 +778,22 @@ export default function MemoryPage() {
 
             <div className="grid gap-4 sm:grid-cols-2">
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium">Linked Profile</span>
+                <span className="text-sm font-medium">{t("admin_memory.fields.linked_profile")}</span>
                 <Select value={createProfileSlug} onChange={setCreateProfileSlug} options={profileOptions} />
               </label>
 
               <label className="flex flex-col gap-1.5">
-                <span className="text-sm font-medium">Scope Mode</span>
-                <Select value={createScopeMode} onChange={setCreateScopeMode} options={SCOPE_OPTIONS} />
+                <span className="text-sm font-medium">{t("admin_memory.fields.scope_mode")}</span>
+                <Select value={createScopeMode} onChange={setCreateScopeMode} options={scopeOptions} />
               </label>
             </div>
 
             <div className="flex justify-end gap-2 pt-1">
               <button type="button" onClick={() => setIsCreateOpen(false)} className={ghostBtn}>
-                Cancel
+                {t("admin_memory.common.cancel")}
               </button>
               <button type="submit" disabled={loading} className={solidBtn}>
-                {loading ? "Creating…" : "Create Project"}
+                {loading ? t("admin_memory.create.creating") : t("admin_memory.create.submit")}
               </button>
             </div>
           </form>
@@ -755,8 +805,8 @@ export default function MemoryPage() {
         <DeleteDialog
           name={projectToDelete.display_name}
           busy={loading}
-          ns="delete"
-          t={deleteText}
+          ns="admin_memory.delete"
+          t={t}
           onConfirm={() => void handleDeleteProject()}
           onClose={() => {
             setIsDeleteProjOpen(false);
@@ -768,8 +818,8 @@ export default function MemoryPage() {
       {/* CONFIRM: Revoke Member Access */}
       {isDeleteMemberOpen && memberToDelete && (
         <Dialog
-          title="Revoke Access"
-          closeLabel="Cancel"
+          title={t("admin_memory.revoke.title")}
+          closeLabel={t("admin_memory.common.cancel")}
           onClose={() => {
             setIsDeleteMemberOpen(false);
             setMemberToDelete(null);
@@ -777,11 +827,20 @@ export default function MemoryPage() {
         >
           <div className="flex flex-col gap-4">
             <p className="text-sm leading-relaxed text-muted-foreground">
-              Remove{" "}
-              <strong className="font-mono text-foreground">{memberToDelete.userIdentifier}</strong>{" "}
-              from project{" "}
-              <strong className="text-foreground">&quot;{memberToDelete.projectSlug}&quot;</strong>.
-              They will lose access to this project&apos;s SQL query memory.
+              {t("admin_memory.revoke.body", {
+                user: "\u0000",
+                project: "\u0001",
+              })
+                .split(/(\u0000|\u0001)/)
+                .map((part, i) =>
+                  part === "\u0000" ? (
+                    <strong key={i} className="font-mono text-foreground">{memberToDelete.userIdentifier}</strong>
+                  ) : part === "\u0001" ? (
+                    <strong key={i} className="text-foreground">&quot;{memberToDelete.projectSlug}&quot;</strong>
+                  ) : (
+                    <span key={i}>{part}</span>
+                  ),
+                )}
             </p>
             <div className="flex justify-end gap-2">
               <button
@@ -792,7 +851,7 @@ export default function MemoryPage() {
                   setMemberToDelete(null);
                 }}
               >
-                Cancel
+                {t("admin_memory.common.cancel")}
               </button>
               <button
                 type="button"
@@ -805,7 +864,7 @@ export default function MemoryPage() {
                 ) : (
                   <UserMinus className="h-3.5 w-3.5" aria-hidden />
                 )}
-                {loading ? "Revoking…" : "Revoke Access"}
+                {loading ? t("admin_memory.revoke.revoking") : t("admin_memory.revoke.submit")}
               </button>
             </div>
           </div>

@@ -115,6 +115,12 @@ def resolve_connector_row_for_mcp_server(
     Riga catalogo associata a un server MCP nel registry: ``aion_connector_id`` se presente,
     altrimenti inferenza da ``mcp_name_hints`` / id (come Hub e infer_connector_id_for_registry_name).
     """
+    # Customer-built servers are never catalog connectors: a slug like "github_crm"
+    # must not inherit the GitHub connector's credentials or OAuth settings.
+    if isinstance(server_config, dict) and isinstance(
+        server_config.get("aion_custom"), dict
+    ):
+        return None
     explicit = (server_config.get("aion_connector_id") or "").strip()
     if explicit:
         row = _connector_by_id(catalog, explicit)

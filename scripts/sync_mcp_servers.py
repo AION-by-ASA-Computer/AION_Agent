@@ -31,7 +31,14 @@ def _read_version(root: Path) -> str:
         return "unknown"
 
 
+# mcp_servers/custom/ holds customer-built servers uploaded from admin-ui
+# (src/mcp_custom): it is owned by the installation, never by the std templates.
+_CUSTOM_DIR_NAME = "custom"
+
+
 def _should_skip(rel: Path) -> bool:
+    if rel.parts and rel.parts[0] == _CUSTOM_DIR_NAME:
+        return True
     return any(part in _SKIP_DIR_NAMES for part in rel.parts)
 
 

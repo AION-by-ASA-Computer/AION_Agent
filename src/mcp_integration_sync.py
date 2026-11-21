@@ -339,6 +339,13 @@ def infer_credential_mode(
     connector_row: Optional[Dict[str, Any]],
     discovery: Optional[CredentialDiscoveryResult] = None,
 ) -> CredentialMode:
+    # Customer-built servers: the mode declared in aion-mcp.yaml always wins.
+    from .mcp_custom.integration import custom_credential_mode
+
+    custom_mode = custom_credential_mode(server_config)
+    if custom_mode is not None:
+        return custom_mode  # type: ignore[return-value]
+
     # Gestione speciale per server remote-bridge
     if server_config.get("type") == "remote-bridge":
         env = server_config.get("env")
@@ -634,6 +641,21 @@ async def sync_mcp_server_config_from_registry(
             schema, extra_keys=oauth_alias_dest_keys(connector_row)
         )
     meta = _display_meta_from_connector(connector_row, server_slug)
+
+    # Customer-built servers: mode, schema and display data come from aion-mcp.yaml
+    # and replace what is stored, at every sync (boot included). The explicit
+    # ``credential_mode`` argument is ignored for them on purpose.
+    from .mcp_custom.integration import (
+        custom_credential_mode,
+        custom_credential_schema,
+        custom_display_meta,
+    )
+
+    custom_schema = custom_credential_schema(raw_cfg)
+    if custom_schema is not None:
+        schema = custom_schema
+        mode = custom_credential_mode(raw_cfg) or "none"
+        meta = custom_display_meta(raw_cfg) or meta
     connector_id = (
         raw_cfg.get("aion_connector_id") or meta.get("aion_connector_id") or ""
     ).strip() or None
@@ -652,7 +674,14 @@ async def sync_mcp_server_config_from_registry(
         )
         now = datetime.now(timezone.utc)
         if row:
-            if force_schema_from_catalog and schema:
+            if custom_schema is not None:
+                # Manifest-owned: replace (not merge) so fields removed in a new
+                # version disappear from the forms too.
+                row.credential_schema_json = json.dumps(schema)
+                row.display_name = meta.get("display_name") or row.display_name
+                row.description = meta.get("description")
+                row.category = meta.get("category") or row.category
+            elif force_schema_from_catalog and schema:
                 current_schema = json.loads(row.credential_schema_json or "[]")
                 merged = merge_schema_sources(
                     catalog_schema=current_schema,

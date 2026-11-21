@@ -70,7 +70,6 @@ opentelemetry-instrumentation-sqlalchemy>=0.66b2
 opentelemetry-instrumentation-httpx>=0.66b2
 prometheus-fastapi-instrumentator>=6.0.0
 structlog>=24.1.0
-mcp-server-openmetadata
 # Floor needed: without it uv backtracks to openlit 1.26 (tiktoken<0.8, old OpenTelemetry).
 openlit>=1.40
 json-repair>=0.60.1

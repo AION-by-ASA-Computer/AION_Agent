@@ -18,6 +18,7 @@ import type { McpIntegrityIssue } from "@/components/McpIntegrityBanner";
 import type { McpItemRow } from "@/components/hub/ServerList";
 import type { RemoteCatalogPreset } from "@/components/RemoteMcpInstallModal";
 import type { DynamicWizardTarget } from "@/components/DynamicWizardModal";
+import type { CustomMcpConfig } from "@/components/hub/CustomMcpUploadModal";
 import { oauthAdminSetupPending } from "@/lib/mcpOAuthSetup";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -143,6 +144,8 @@ export function useHub() {
   const [manageToolsSlug, setManageToolsSlug] = useState<string | null>(null);
   const [remoteOpen, setRemoteOpen] = useState(false);
   const [remoteSeed, setRemoteSeed] = useState<{ url?: string; displayName?: string; connectorId?: string }>({});
+  const [customConfig, setCustomConfig] = useState<CustomMcpConfig | null>(null);
+  const [customUploadOpen, setCustomUploadOpen] = useState(false);
   const [deleteSlug, setDeleteSlug] = useState<string | null>(null);
   const [blockedBy, setBlockedBy] = useState<{ slug: string; profiles: string[] } | null>(null);
 
@@ -220,11 +223,23 @@ export function useHub() {
     }
   }, [connectorRows.length]);
 
+  const fetchCustomConfig = useCallback(async () => {
+    try {
+      const res = await apiFetch(`${apiBase()}/admin/mcp-custom/config`);
+      if (res.ok) {
+        setCustomConfig(await res.json());
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
   const refreshAll = useCallback(() => {
     void fetchRegistry();
     void fetchIntegrations();
     void fetchIntegrity();
-  }, [fetchRegistry, fetchIntegrations, fetchIntegrity]);
+    void fetchCustomConfig();
+  }, [fetchRegistry, fetchIntegrations, fetchIntegrity, fetchCustomConfig]);
 
   useEffect(() => {
     void fetchRegistry();
@@ -232,6 +247,7 @@ export function useHub() {
     void fetchIntegrations();
     void fetchIntegrity();
     void ensureConnectorCatalog();
+    void fetchCustomConfig();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -376,12 +392,12 @@ export function useHub() {
     (item: any) =>
       installedLoaded
         ? findInstalled([
-            item.qualified_name,
-            item.id?.startsWith?.("smithery:") ? item.id.replace("smithery:", "") : item.id,
-            item.name,
-            item.deployment_url,
-            item.url && /^https?:\/\/.+/.test(item.url) && !/github\.com|smithery\.ai/.test(item.url) ? item.url : "",
-          ])
+          item.qualified_name,
+          item.id?.startsWith?.("smithery:") ? item.id.replace("smithery:", "") : item.id,
+          item.name,
+          item.deployment_url,
+          item.url && /^https?:\/\/.+/.test(item.url) && !/github\.com|smithery\.ai/.test(item.url) ? item.url : "",
+        ])
         : null,
     [findInstalled, installedLoaded],
   );
@@ -419,15 +435,15 @@ export function useHub() {
             prev.authorization_server && prev.client_id
               ? prev
               : {
-                  provider: prev.provider || data.discovery.remote_oauth_provider || "generic",
-                  authorization_server: prev.authorization_server || data.discovery.remote_oauth_server || "",
-                  token_url: prev.token_url || data.discovery.remote_oauth_token_url || "",
-                  client_id: prev.client_id || "",
-                  client_secret: prev.client_secret || "",
-                  scopes: prev.scopes?.length ? prev.scopes : [],
-                  client_id_source: prev.client_id_source,
-                  client_secret_set: prev.client_secret_set,
-                },
+                provider: prev.provider || data.discovery.remote_oauth_provider || "generic",
+                authorization_server: prev.authorization_server || data.discovery.remote_oauth_server || "",
+                token_url: prev.token_url || data.discovery.remote_oauth_token_url || "",
+                client_id: prev.client_id || "",
+                client_secret: prev.client_secret || "",
+                scopes: prev.scopes?.length ? prev.scopes : [],
+                client_id_source: prev.client_id_source,
+                client_secret_set: prev.client_secret_set,
+              },
           );
         }
       } catch (e) {
@@ -518,19 +534,19 @@ export function useHub() {
     const json = { "Content-Type": "application/json" };
     const res = existing
       ? await apiFetch(`${apiBase()}/admin/mcp-integrations/${encodeURIComponent(slug)}`, {
-          method: "PATCH",
-          headers: json,
-          body: JSON.stringify(body),
-        })
+        method: "PATCH",
+        headers: json,
+        body: JSON.stringify(body),
+      })
       : await apiFetch(`${apiBase()}/admin/mcp-integrations`, {
-          method: "POST",
-          headers: json,
-          body: JSON.stringify({
-            server_slug: slug,
-            display_name: slug.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
-            ...body,
-          }),
-        });
+        method: "POST",
+        headers: json,
+        body: JSON.stringify({
+          server_slug: slug,
+          display_name: slug.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()),
+          ...body,
+        }),
+      });
     if (!res.ok) throw new Error(await res.text());
   };
 
@@ -704,6 +720,13 @@ export function useHub() {
 
   const openWizardFor = (name: string) => {
     const cfg = installed[name];
+    // Custom servers (uploaded package, launched with python) have no package to
+    // install: the zero-install wizard would re-register them as `npx -y <slug>` and
+    // drop the `aion_custom` entry. Route them to the configuration dialog instead.
+    if (cfg?.aion_custom) {
+      void openConfig(name, cfg as Record<string, unknown>);
+      return;
+    }
     const runner = cfg?.command === "uvx" ? "uvx" : "npx";
     const pkg = cfg?.zero_package || (cfg?.args?.length ? cfg.args[cfg.args.length - 1] : name);
     const required_envs = Object.entries(cfg?.env || {}).map(([key, v]) => {
@@ -897,6 +920,11 @@ export function useHub() {
     setBlockedBy,
     startDelete,
     confirmDelete,
+    // custom MCP
+    customConfig,
+    customUploadOpen,
+    setCustomUploadOpen,
+    fetchCustomConfig,
     // config
     editing,
     setEditing,

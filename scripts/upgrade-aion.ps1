@@ -55,7 +55,7 @@ if ((-not $dryRun) -and (-not $dockerMode)) { $extra += "--prepare-runtime" }
 
 Banner
 if ($dockerMode) {
-  Write-Host "[upgrade] Docker compose mode - will rebuild images + restart services." -ForegroundColor Cyan
+  Write-Host "[upgrade] Docker compose mode - will rebuild images (jail sandbox included) + restart services." -ForegroundColor Cyan
 }
 $py = Find-Python
 & $py $Core @extra @args

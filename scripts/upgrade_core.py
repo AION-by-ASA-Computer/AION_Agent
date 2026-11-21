@@ -4,6 +4,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import shutil
 import socket
 import subprocess
 import sys
@@ -1462,6 +1463,80 @@ def _confirm(question: str, yes: bool) -> bool:
     return ans in ("y", "yes")
 
 
+def _sandbox_engine(runtime: str) -> str | None:
+    """Container CLI that should hold the sandbox image.
+
+    The engine named by AION_CONTAINER_RUNTIME (a name or a full path such as
+    /usr/bin/podman) when it is installed here. Otherwise the other engine, if
+    present: e.g. a development PC with Docker Desktop that sets
+    AION_CONTAINER_RUNTIME=docker only in docker-compose.override.yml, while .env
+    keeps the podman default. None when neither CLI is on PATH.
+    """
+    if runtime and shutil.which(runtime):
+        return runtime
+    preferred = "docker" if "docker" in Path(runtime or "").stem.lower() else "podman"
+    for cli in (preferred, "podman" if preferred == "docker" else "docker"):
+        if shutil.which(cli):
+            return cli
+    return None
+
+
+def _upgrade_sandbox_image(
+    env_file: Path, *, docker_mode: bool, dry_run: bool, report: Report
+) -> None:
+    """Rebuild (or pull) the sandbox image used by the jails.
+
+    The jails (agent session sandbox, custom MCP servers) are not compose
+    services: the backend starts them on demand from AION_SANDBOX_CONTAINER_IMAGE,
+    and `docker compose build` skips that image (profile `sandbox-build`). Without
+    this step an upgrade keeps the old image, and features that need new content
+    in it (e.g. `aion-netjail` for custom MCP network allowlists) fail at start.
+
+    - local image (default `aion/sandbox:latest`): built from
+      docker/Dockerfile.sandbox with the engine of AION_CONTAINER_RUNTIME, so a
+      Podman host gets it in Podman's own store (no docker save/load needed);
+    - registry image (e.g. ghcr.io/...): pulled with that same engine.
+
+    Skipped when the sandbox does not run in containers (AION_SANDBOX_BACKEND,
+    default `container` in Docker mode, `subprocess` for a local install).
+    Never fatal: a failure is reported as a warning with the manual command.
+    """
+    env = {k: v for k, v, _ in _parse_env_simple(env_file)} if env_file.is_file() else {}
+    backend = (env.get("AION_SANDBOX_BACKEND") or ("container" if docker_mode else "subprocess")).strip().lower()
+    if backend != "container":
+        report.log_ok(f"Sandbox image: skipped (AION_SANDBOX_BACKEND={backend})")
+        return
+    image = (env.get("AION_SANDBOX_CONTAINER_IMAGE") or "").strip() or "aion/sandbox:latest"
+    runtime = (env.get("AION_CONTAINER_RUNTIME") or "").strip() or "podman"
+    engine = _sandbox_engine(runtime)
+    if engine is None:
+        report.log_warn(
+            f"Sandbox image: no container engine (docker/podman) on this host, image {image} not updated. "
+            f"Run on the engine host: {Path(runtime).stem} build -f docker/Dockerfile.sandbox -t {image} ."
+        )
+        return
+
+    # A first path segment with a dot or a port (ghcr.io/..., registry:5000/...) is a
+    # registry: pull the published image instead of building it.
+    first = image.split("/", 1)[0]
+    from_registry = "/" in image and ("." in first or ":" in first)
+    if from_registry:
+        cmd = [engine, "pull", image]
+        action = "pulled"
+    else:
+        cmd = [engine, "build", "-f", "docker/Dockerfile.sandbox", "-t", image]
+        py_ver = (env.get("PYTHON_VERSION") or "").strip()
+        if py_ver:
+            cmd += ["--build-arg", f"PYTHON_VERSION={py_ver}"]
+        cmd.append(".")
+        action = "built"
+    rc = _run(cmd, dry_run=dry_run, env=_docker_client_env(env_file if env_file.is_file() else None))
+    if rc != 0:
+        report.log_warn(f"Sandbox image {image} not updated ({' '.join(cmd)} failed)")
+        return
+    report.log_ok(f"Sandbox image {image} {action} with {Path(engine).stem}")
+
+
 def _docker_upgrade(args, report: Report) -> int:
     """Upgrade flow per deploy Docker Compose: rebuild + restart + healthcheck."""
     compose_file = ROOT / args.compose_file
@@ -1646,6 +1721,12 @@ def _docker_upgrade(args, report: Report) -> int:
         % docker_env.get("DOCKER_BUILDKIT", "1")
     )
 
+    # Jail image: not a compose service, so `compose build` above skips it.
+    if not args.skip_sandbox:
+        _upgrade_sandbox_image(env_file, docker_mode=True, dry_run=args.dry_run, report=report)
+    else:
+        report.log_warn("Sandbox image skipped by flag")
+
     # Restart con recreate (gestisce config drift)
     rc = _run(
         compose_cmd + ["up", "-d", "--remove-orphans"],
@@ -1719,6 +1800,11 @@ def main() -> int:
         "--skip-promo-playwright",
         action="store_true",
         help="Skip Playwright/Chromium install for promo_render MCP",
+    )
+    ap.add_argument(
+        "--skip-sandbox",
+        action="store_true",
+        help="Do not rebuild/pull the jail image (AION_SANDBOX_CONTAINER_IMAGE).",
     )
     ap.add_argument("--stale-lock-sec", type=int, default=7200)
     ap.add_argument(
@@ -2035,6 +2121,14 @@ def main() -> int:
             report.log_ok("Env coverage check")
         else:
             report.log_warn("Env coverage check reported drift")
+
+        # Jail image, when the local backend runs the sandbox in containers.
+        if not args.skip_sandbox:
+            _upgrade_sandbox_image(
+                Path(args.env_file), docker_mode=False, dry_run=args.dry_run, report=report
+            )
+        else:
+            report.log_warn("Sandbox image skipped by flag")
 
         _ver = _read_version()
         print(f"\n===== UPGRADE SUMMARY — AION {_ver} =====")

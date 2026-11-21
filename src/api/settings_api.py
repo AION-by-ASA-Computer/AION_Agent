@@ -129,6 +129,38 @@ class SettingsUpdate(BaseModel):
     settings: Dict[str, str]
 
 
+# Custom MCP server settings (Admin -> Settings -> MCPs). src/mcp_custom/settings.py
+# reads them from os.environ on every call, so after the in-process reload they apply
+# at once: a save that only touches these keys needs no backend restart.
+_HOT_RELOAD_PREFIX = "AION_CUSTOM_MCP_"
+
+# Never editable from the web panel: it runs uploaded code without the container
+# jail, i.e. inside the backend with its secrets and database. Only whoever controls
+# the server's .env may set it (development only).
+_ENV_ONLY_KEYS = ("AION_CUSTOM_MCP_ALLOW_UNSANDBOXED",)
+
+
+def _changed_keys(before: Dict[str, str], after: Dict[str, str]) -> set:
+    """Keys whose value differs between two env maps (missing counts as empty)."""
+    return {
+        k
+        for k in set(before) | set(after)
+        if (before.get(k) or "") != (after.get(k) or "")
+    }
+
+
+async def _restart_custom_mcp_workers() -> None:
+    """Restart the workers of every custom MCP server so new limits/kill switch apply."""
+    from src.mcp_custom.install import invalidate_runtime
+    from src.mcp_custom.paths import is_custom_config
+    from src.mcp_manager import mcp_manager
+
+    mcp_manager.load_registry()
+    for slug, cfg in list(mcp_manager._registry.items()):
+        if is_custom_config(cfg):
+            await invalidate_runtime(slug)
+
+
 @router.get("")
 async def get_settings():
     """Retrieve current .env settings (segreti mascherati)."""
@@ -235,11 +267,29 @@ async def update_settings(update: SettingsUpdate):
                     detail="Session Cleanup Interval (AION_SESSION_CLEANUP_INTERVAL_SEC) must be a non-negative integer.",
                 )
 
+        changed = _changed_keys(existing_env, merged)
+        blocked = sorted(k for k in changed if k in _ENV_ONLY_KEYS)
+        if blocked:
+            raise HTTPException(
+                status_code=400,
+                detail=f"{', '.join(blocked)} can only be set in the server's .env file.",
+            )
+
         _write_env(merged)
         _reload_env()
 
+        # Only custom MCP settings changed: already live after the reload above, no
+        # restart; running custom servers restart so limits and kill switch apply.
+        hot_only = bool(changed) and all(
+            k.startswith(_HOT_RELOAD_PREFIX) for k in changed
+        )
+        if any(k.startswith(_HOT_RELOAD_PREFIX) for k in changed):
+            asyncio.create_task(_restart_custom_mcp_workers())
+
         restarting = False
-        if _is_container_env():
+        if hot_only:
+            pass
+        elif _is_container_env():
             restarting = True
             logger.info(
                 "Container environment detected. Scheduling container restart..."

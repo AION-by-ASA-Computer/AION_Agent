@@ -41,8 +41,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 # Office skill Node libraries preinstalled globally, latest at build time like in
 # docker/Dockerfile.backend: docx for Word, pptxgenjs for PowerPoint.
+# nftables: network allowlist of custom MCP jails, loaded by aion-netjail inside
+# the container's own network namespace (setpriv, used to drop privileges right
+# after, ships with util-linux in the base image).
 RUN apt-get update \
- && apt-get install -y --no-install-recommends tini nodejs npm poppler-utils \
+ && apt-get install -y --no-install-recommends tini nodejs npm poppler-utils nftables \
  && rm -rf /var/lib/apt/lists/* \
  && npm config set cache /tmp/.npm-cache --global \
  && npm install -g --no-fund --no-audit docx pptxgenjs \
@@ -50,6 +53,13 @@ RUN apt-get update \
  && useradd --uid 10001 --gid sandbox --create-home --shell /usr/sbin/nologin sandbox
 
 COPY --from=builder /opt/venv /opt/venv
+
+# Entrypoint of custom MCP jails with a network allowlist (see the script header).
+# CRLF stripped: the script may be checked out on Windows.
+COPY docker/sandbox-netjail.sh /usr/local/bin/aion-netjail
+RUN sed -i 's/\r$//' /usr/local/bin/aion-netjail \
+ && chmod 0755 /usr/local/bin/aion-netjail \
+ && command -v setpriv >/dev/null
 
 # Link /opt/venv site-packages to system python so any venv created with --system-site-packages inherits preinstalled packages
 RUN python3 -c "import site, pathlib; p = list(pathlib.Path('/opt/venv/lib').glob('python*/site-packages')); print(p[0]) if p else exit(1)" > /tmp/opt_sitepkg \

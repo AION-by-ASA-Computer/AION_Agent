@@ -241,6 +241,16 @@ async def _lifespan(app: FastAPI):
     except Exception:
         pass
     _cleanup_orphaned_mcp_remotes()
+    # Customer-built MCP servers: drop expired uploads and the files of servers that
+    # are no longer in the registry (only folders AION created; see src/mcp_custom/install.py).
+    try:
+        from src.mcp_custom.install import cleanup_orphans
+
+        _custom_cleanup = await asyncio.to_thread(cleanup_orphans)
+        if _custom_cleanup.get("servers") or _custom_cleanup.get("expired_uploads"):
+            logger.info("Custom MCP cleanup at startup: %s", _custom_cleanup)
+    except Exception as e:
+        logger.warning("Custom MCP cleanup at startup failed: %s", e)
     try:
         validate_settings_at_startup()
     except Exception as _cfg_err:

@@ -11,6 +11,7 @@ import { RegistryEnvPanel, SchemaSuggestion } from "@/components/hub/CredentialS
 import { McpOAuthAdminSetupPanel } from "@/components/McpOAuthAdminSetupPanel";
 import type { CredentialMode } from "@/lib/mcpIntegrationPolicy";
 import { schemaSig, type Hub } from "@/components/hub/useHub";
+import { CustomMcpNetworkPicker } from "@/components/hub/CustomMcpNetworkPicker";
 import { useState } from "react";
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -54,6 +55,21 @@ export function ConfigDialog({ hub }: { hub: Hub }) {
   const remote = v.type === "sse" || v.type === "remote-bridge";
   const argsText: string = v.rawArgsText ?? (v.args || []).join("\n");
   const matched = hub.formContext.matched as { id?: string } | null;
+  // Customer-built server (uploaded package): command, connection and credential mode
+  // come from its aion-mcp.yaml and the activated code, so they are shown read-only.
+  // The backend enforces the same rule (src/api/admin.py, src/mcp_custom/runtime.py).
+  const custom = (v.aion_custom || null) as
+    | {
+        name?: string;
+        version?: string;
+        runtime?: string;
+        entrypoint?: string;
+        credential_mode?: string;
+        network?: string[];
+        network_source?: string;
+        network_manifest?: string[];
+      }
+    | null;
 
   const availability: "hidden" | "optional" | "required" = !editingPolicy?.enabled ? "hidden" : hub.userMayDisable ? "optional" : "required";
 
@@ -110,6 +126,30 @@ export function ConfigDialog({ hub }: { hub: Hub }) {
         <div className="max-h-[56vh] overflow-y-auto pr-1">
           {section === "runtime" && (
             <div className="flex flex-col gap-4" role="tabpanel">
+              {custom ? (
+                <div className="flex flex-col gap-3 rounded-2xl border border-border bg-secondary/40 p-4">
+                  <p className="flex items-center gap-2 text-sm font-semibold">
+                    <Lock className="h-4 w-4 text-muted-foreground" aria-hidden />
+                    {t(`${k}.custom_title`, { version: custom.version || "?" })}
+                  </p>
+                  <dl className="grid gap-x-4 gap-y-1.5 text-sm sm:grid-cols-[max-content_1fr]">
+                    <dt className="text-muted-foreground">{t(`${k}.custom_runtime`)}</dt>
+                    <dd className="font-mono">{custom.runtime || "python"}</dd>
+                    <dt className="text-muted-foreground">{t(`${k}.custom_command`)}</dt>
+                    <dd className="break-all font-mono">
+                      python -u mcp_servers/custom/{editing.name}/{custom.entrypoint || "server.py"}
+                    </dd>
+                  </dl>
+                  <p className={hintCls}>{t(`${k}.custom_hint`)}</p>
+                  <CustomMcpNetworkPicker
+                    slug={editing.name}
+                    value={Array.isArray(custom.network) ? custom.network : []}
+                    manifest={Array.isArray(custom.network_manifest) ? custom.network_manifest : []}
+                    onSaved={(entries) => setValues({ aion_custom: { ...custom, network: entries, network_source: "admin" } })}
+                  />
+                </div>
+              ) : (
+              <>
               <div className="grid gap-4 sm:grid-cols-2">
                 <label className="flex flex-col gap-1.5">
                   <span className={labelCls}>{t(`${k}.connector`)}</span>
@@ -192,6 +232,8 @@ export function ConfigDialog({ hub }: { hub: Hub }) {
                   </label>
                 </>
               ) : null}
+              </>
+              )}
 
               <label className="flex flex-col gap-1.5">
                 <span className={labelCls}>{t(`${k}.description`)}</span>
@@ -242,6 +284,7 @@ export function ConfigDialog({ hub }: { hub: Hub }) {
             <div className="flex flex-col gap-5" role="tabpanel">
               <fieldset className="flex flex-col gap-2">
                 <legend className={cn(labelCls, "mb-2")}>{t(`${k}.mode`)}</legend>
+                {custom && <p className={cn(hintCls, "-mt-1 mb-1")}>{t(`${k}.custom_mode_locked`)}</p>}
                 <div className="grid gap-2 sm:grid-cols-3">
                   {MODES.map(({ mode, icon: Icon }) => {
                     const selected = editingPolicy.mode === mode;
@@ -250,7 +293,9 @@ export function ConfigDialog({ hub }: { hub: Hub }) {
                         key={mode}
                         type="button"
                         aria-pressed={selected}
+                        disabled={Boolean(custom) && !selected}
                         onClick={() => {
+                          if (custom) return;
                           hub.setEditingPolicy({ ...editingPolicy, mode });
                           void hub.loadPolicyPreview(editing.name, mode);
                           if (mode === "none" && Array.isArray(v.args)) {
@@ -259,7 +304,7 @@ export function ConfigDialog({ hub }: { hub: Hub }) {
                           }
                         }}
                         className={cn(
-                          "focus-ring flex flex-col gap-1 rounded-2xl border p-3.5 text-left transition-colors",
+                          "focus-ring flex flex-col gap-1 rounded-2xl border p-3.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50",
                           selected ? "border-foreground bg-secondary" : "border-border hover:border-foreground/30",
                         )}
                       >
@@ -294,7 +339,22 @@ export function ConfigDialog({ hub }: { hub: Hub }) {
                 />
               )}
 
-              {editingPolicy.mode === "per_user" && (
+              {editingPolicy.mode === "per_user" && custom && (
+                // Fields declared in aion-mcp.yaml: each user fills them in "My integrations".
+                <div className="flex flex-col gap-2 rounded-2xl bg-secondary/60 px-4 py-3.5 text-sm">
+                  <p className="text-muted-foreground">{t(`${k}.custom_per_user_body`)}</p>
+                  <ul className="flex flex-col gap-1">
+                    {editingPolicy.credentialSchema.map((f) => (
+                      <li key={f.key} className="flex flex-wrap items-baseline gap-2">
+                        <code className="font-mono text-xs">{f.key}</code>
+                        <span>{f.label}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {editingPolicy.mode === "per_user" && !custom && (
                 <div className="flex flex-col gap-4">
                   <SchemaSuggestion
                     suggested={editingPolicy.previewSchema}

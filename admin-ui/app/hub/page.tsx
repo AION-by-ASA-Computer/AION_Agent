@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { GitBranch, Globe, LayoutGrid, List, Loader2, Package, Plus, Sparkles } from "lucide-react";
+import { GitBranch, Globe, LayoutGrid, List, Loader2, Package, Plus, Sparkles, Upload } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { PageToast } from "@/components/PageToast";
 import { Dialog } from "@/components/profiles/Dialog";
@@ -13,6 +13,7 @@ import { McpIntegrityBanner } from "@/components/McpIntegrityBanner";
 import { RemoteMcpInstallModal } from "@/components/RemoteMcpInstallModal";
 import { DynamicWizardModal } from "@/components/DynamicWizardModal";
 import { McpToolsManageModal } from "@/components/McpToolsManageModal";
+import { CustomMcpUploadModal } from "@/components/hub/CustomMcpUploadModal";
 import { Catalog } from "@/components/hub/Catalog";
 import { ConfigDialog } from "@/components/hub/ConfigDialog";
 import { ServerList } from "@/components/hub/ServerList";
@@ -69,6 +70,12 @@ export default function HubPage() {
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {hub.customConfig?.enabled && (
+            <button type="button" className={outlineBtn} onClick={() => hub.setCustomUploadOpen(true)}>
+              <Upload className="h-3.5 w-3.5" aria-hidden />
+              {t(`${k}.add_custom`)}
+            </button>
+          )}
           <button type="button" className={outlineBtn} onClick={() => hub.setGithubOpen(true)}>
             <GitBranch className="h-3.5 w-3.5" aria-hidden />
             {t(`${k}.add_github`)}
@@ -123,6 +130,12 @@ export default function HubPage() {
               <h2 className="text-lg font-semibold tracking-[-0.015em]">{t(`${k}.empty.title`)}</h2>
               <p className="mt-1.5 max-w-[46ch] text-sm text-muted-foreground">{t(`${k}.empty.body`)}</p>
               <div className="mt-6 flex flex-wrap justify-center gap-2">
+                {hub.customConfig?.enabled && (
+                  <button type="button" className={outlineBtn} onClick={() => hub.setCustomUploadOpen(true)}>
+                    <Upload className="h-3.5 w-3.5" aria-hidden />
+                    {t(`${k}.add_custom`)}
+                  </button>
+                )}
                 <button type="button" className={solidBtn} onClick={() => hub.setTab("catalog")}>
                   <Plus className="h-4 w-4" aria-hidden />
                   {t(`${k}.add_catalog`)}
@@ -367,6 +380,20 @@ export default function HubPage() {
         open={Boolean(hub.manageToolsSlug)}
         onClose={() => hub.setManageToolsSlug(null)}
         onSaved={hub.refreshAll}
+      />
+
+      <CustomMcpUploadModal
+        open={hub.customUploadOpen}
+        onClose={() => hub.setCustomUploadOpen(false)}
+        config={hub.customConfig}
+        onInstalled={(slug, config) => {
+          hub.refreshAll();
+          hub.setTab("installed");
+          hub.setToast({ message: t(`${k}.custom_upload.installed_toast`, { slug }), variant: "success" });
+          // Standard configuration dialog (credentials, availability): the server is
+          // already registered with its python command, nothing has to be installed.
+          void hub.openConfig(slug, config);
+        }}
       />
 
       <PageToast toast={hub.toast} onDismiss={() => hub.setToast(null)} />

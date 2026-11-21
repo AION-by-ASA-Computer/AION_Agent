@@ -16,3 +16,16 @@
 #       - "8066:80"
 #       - "44366:443"
 #       - "44366:443/udp"
+#
+#   # Per testare i server MCP custom e sandbox in container Docker durante lo sviluppo:
+#   backend:
+#     build:
+#       args:
+#         INSTALL_DOCKER_CLI: "1"
+#     environment:
+#       AION_CONTAINER_RUNTIME: docker
+#       AION_SANDBOX_BACKEND: container
+#       # Host path of data/: also used to locate mcp_servers/custom for custom MCP jails
+#       AION_SANDBOX_HOST_DATA_DIR: /c/Users/.../AION_Agent/data
+#     volumes:
+#       - /var/run/docker.sock:/var/run/docker.sock
