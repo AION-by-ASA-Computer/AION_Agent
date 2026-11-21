@@ -9,7 +9,7 @@
 # Base image: the official Docker CLI image (alpine) already ships the docker
 # CLI with the compose and buildx plugins; install.sh additionally needs bash,
 # python3 (JSON/.env helpers) and curl (GitHub API, raw files).
-FROM docker:27-cli
+FROM docker:28-cli
 
 RUN apk add --no-cache bash python3 curl
 
